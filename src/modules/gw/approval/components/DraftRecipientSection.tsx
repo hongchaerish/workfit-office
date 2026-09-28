@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ApprovalRecipient } from '@/domain/approvalDoc/schema';
 import { X, Folder, User, Send } from 'lucide-react';
+import { isTestAccount, isTestDept } from '../ApprovalLineBuilder';
 
 /* ────────────── ⓘ 툴팁 컴포넌트 ────────────── */
 function InfoTooltip({ text }: { text: string }) {
@@ -45,7 +46,7 @@ export function SelectorDialog({
 
 
   const handleToggleDept = (dept: any) => {
-    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !excludeIds?.has(u.id));
+    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !isTestAccount(u) && !excludeIds?.has(u.id));
     const isDeptSelected = selected.some((s) => s.id === dept.id);
 
     if (isDeptSelected) {
@@ -63,7 +64,7 @@ export function SelectorDialog({
   };
 
   const handleToggleUser = (user: any, dept: any) => {
-    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !excludeIds?.has(u.id));
+    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !isTestAccount(u) && !excludeIds?.has(u.id));
     const isDeptSelected = selected.some((s) => s.id === dept.id);
     const isUserSelected = selected.some((s) => s.id === user.id);
 
@@ -98,9 +99,9 @@ export function SelectorDialog({
   };
 
   // 검색 필터링
-  const filteredDepts = org.depts.filter((d: any) => d.name.includes(search) && !excludeIds?.has(d.id));
+  const filteredDepts = org.depts.filter((d: any) => d.name.includes(search) && !isTestDept(d.name) && !excludeIds?.has(d.id));
   const filteredUsers = org.users.filter(
-    (u: any) => (u.name.includes(search) || u.dept.includes(search) || u.position.includes(search)) && !excludeIds?.has(u.id)
+    (u: any) => (u.name.includes(search) || u.dept.includes(search) || u.position.includes(search)) && !isTestAccount(u) && !excludeIds?.has(u.id)
   );
 
   const isSearching = search.trim().length > 0;
@@ -108,9 +109,11 @@ export function SelectorDialog({
   // 재귀 렌더링 함수
   const renderOrgNode = (node: any, depth: number = 0) => {
     const d = node.dept;
-    const deptUsers = node.members.filter((u: any) => !excludeIds?.has(u.id));
+    if (isTestDept(d.name)) return null;
+    const deptUsers = node.members.filter((u: any) => !isTestAccount(u) && !excludeIds?.has(u.id));
     const hasUsers = deptUsers.length > 0;
-    const hasChildren = node.children && node.children.length > 0;
+    const children = (node.children || []).filter((child: any) => !isTestDept(child.dept?.name));
+    const hasChildren = children.length > 0;
 
     return (
       <div key={d.id} className="space-y-1">
@@ -159,7 +162,7 @@ export function SelectorDialog({
         {/* 하위 부서 노드 재귀 호출 */}
         {hasChildren && (
           <div className="space-y-1">
-            {node.children.map((child: any) => renderOrgNode(child, depth + 1))}
+            {children.map((child: any) => renderOrgNode(child, depth + 1))}
           </div>
         )}
       </div>

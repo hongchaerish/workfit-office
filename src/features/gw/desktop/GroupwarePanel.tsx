@@ -266,10 +266,16 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
                 >
                   <div
                     className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold flex items-center justify-between"
-                    style={{ background: CYAN, color: '#1c2536' }}
+                    style={{ background: enabled ? CYAN : '#e2e8f0', color: enabled ? '#1c2536' : '#64748b' }}
                   >
-                    <span>{a.l}</span>
-                    {isEditing && <Lock size={9} className="opacity-60 shrink-0" />}
+                    <span className="truncate">{a.l}</span>
+                    {!enabled ? (
+                      <span className="shrink-0 rounded bg-slate-300 dark:bg-slate-600 px-1 py-[1px] text-[7.5px] font-bold text-slate-700 dark:text-slate-200">
+                        준비중
+                      </span>
+                    ) : isEditing ? (
+                      <Lock size={9} className="opacity-60 shrink-0" />
+                    ) : null}
                   </div>
                   <div className="grid flex-1 place-items-center pb-0.5">
                     <MenuGlyph glyph={a.icon} size={22} className="text-ink" />
@@ -340,11 +346,21 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
                   } ${isDragged ? 'ring-2 ring-teal ring-offset-1 opacity-50 scale-95' : ''}`}
                 >
                   {/* 상단 라벨 */}
-                  <div className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold text-[#2a3344] flex items-center justify-between">
+                  <div
+                    className="truncate px-1.5 py-[5px] text-left text-[9px] font-bold flex items-center justify-between"
+                    style={{
+                      background: enabled ? undefined : '#f1f5f9',
+                      color: enabled ? '#2a3344' : '#64748b',
+                    }}
+                  >
                     <span className="truncate">{a.l}</span>
-                    {isEditing && (
+                    {!enabled ? (
+                      <span className="shrink-0 rounded bg-slate-200 dark:bg-slate-700 px-1 py-[1px] text-[7.5px] font-bold text-slate-600 dark:text-slate-300">
+                        준비중
+                      </span>
+                    ) : isEditing ? (
                       <GripVertical size={10} className="text-ink3 shrink-0 opacity-60" />
-                    )}
+                    ) : null}
                   </div>
 
                   {/* 중앙 아이콘 */}

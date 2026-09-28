@@ -43,12 +43,11 @@ export const GW_READY_APPS = new Set([
   'community',
   'calendar',
   'resource',
-  'task',
+  // 'task', // 프로젝트 - 준비중 비활성화
   'survey',
   'gallery',
-  // 메일 — Appwrite Function(mail)으로 동작(2026-08-19 이식 완료). Appwrite 설정이
-  // 없으면 화면이 "서버 없음"으로 뜬다 — 타일은 켜져 있다.
-  'mail',
+  // 메일 - 준비중 비활성화
+  // 'mail',
   'employee', // 인명관리 활성화
   'document', // 문서관리 활성화
   /*

@@ -11,6 +11,45 @@ import { KIND_TONE } from '@/modules/gw/_gw';
 import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
 import { fromMyRouteSteps, type MyApprovalRoute } from '@/domain/myApprovalRoute/schema';
 
+/** 결재선 지정 시 테스트 부서 및 테스트 계정 예외처리 */
+export const isTestAccount = (user: { id?: string; name?: string; dept?: string; loginId?: string }) => {
+  const name = (user.name || '').toLowerCase();
+  const dept = (user.dept || '').toLowerCase();
+  const id = (user.id || '').toLowerCase();
+  const loginId = (user.loginId || '').toLowerCase();
+  return (
+    name.includes('테스트') ||
+    name.includes('테스터') ||
+    name.includes('test') ||
+    dept.includes('테스트') ||
+    dept.includes('test') ||
+    id.includes('test') ||
+    loginId.includes('test') ||
+    name.includes('허진욱2') ||
+    name === 'ㅎ테스터' ||
+    name === 'ㅍ테스터'
+  );
+};
+
+export const isTestDept = (deptName?: string) => {
+  if (!deptName) return false;
+  const d = deptName.toLowerCase();
+  return d.includes('테스트') || d.includes('test');
+};
+
+function filterOrgNode(node: import('@/features/gw/useOrgTree').OrgNode): import('@/features/gw/useOrgTree').OrgNode | null {
+  if (isTestDept(node.dept.name)) return null;
+  const filteredMembers = node.members.filter((u) => !isTestAccount(u) && u.status === '사용');
+  const filteredChildren = node.children
+    .map(filterOrgNode)
+    .filter((c): c is import('@/features/gw/useOrgTree').OrgNode => c !== null);
+  return {
+    ...node,
+    members: filteredMembers,
+    children: filteredChildren,
+  };
+}
+
 /**
  * 결재선 빌더(§7.3) — 3방식 병행: ① 자동 상신선(상급자 체인) ② 전결규정 적용
  * ③ 수동(피커로 추가·구분 지정·순서·병렬 묶기). 어느 방식이든 동일 steps[]로 수렴.
@@ -840,7 +879,7 @@ export function ApprovalLineBuilder({
               </button>
             </div>
             <UserPickList
-              users={users.filter((u) => u.status === '사용')}
+              users={users.filter((u) => u.status === '사용' && !isTestAccount(u))}
               org={org}
               onPick={pick}
               isMultiSelect={picker.mode === 'add-ref' || (picker.mode === 'add-to-group' && picker.groupIndex === -1)}
@@ -874,6 +913,12 @@ function UserPickList({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const kw = q.trim().toLowerCase();
   const list = users.filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
+
+  const filteredRoots = useMemo(() => {
+    return org.roots
+      .map(filterOrgNode)
+      .filter((r): r is import('@/features/gw/useOrgTree').OrgNode => r !== null);
+  }, [org.roots]);
 
   const toggleSelect = (id: string) => {
     if (!isMultiSelect) {
@@ -937,10 +982,10 @@ function UserPickList({
         ) : tab === 'org' ? (
           /* 조직도 트리 뷰 */
           <div className="space-y-1">
-            {org.roots.map((root) => (
+            {filteredRoots.map((root) => (
               <OrgTreeNodeItem key={root.dept.id} node={root} onPick={toggleSelect} selectedIds={selectedIds} isMulti={isMultiSelect} />
             ))}
-            {org.roots.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">조직도 정보가 없습니다.</div>}
+            {filteredRoots.length === 0 && <div className="py-8 text-center text-[11.5px] text-ink3">조직도 정보가 없습니다.</div>}
           </div>
         ) : (
           /* 전체 사용자 리스트 뷰 */
