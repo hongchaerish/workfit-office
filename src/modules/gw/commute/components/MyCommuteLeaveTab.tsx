@@ -29,6 +29,7 @@ interface MyCommuteLeaveTabProps {
   holidayMap: Map<string, string>;
   policyStartTime: string;
   policyEndTime: string;
+  hireDate?: string | null;
 }
 
 const pad = (v: number) => String(v).padStart(2, '0');
@@ -53,7 +54,7 @@ const timeOf = (iso: string | null): string => {
 };
 const hourText = (min: number): string => (min === 0 ? '0h 0m' : `${Math.floor(min / 60)}h ${min % 60}m`);
 
-const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors';
+const navButton = 'grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors disabled:opacity-40 disabled:pointer-events-none';
 const toggleShell = 'flex items-center gap-0.5 rounded-lg border border-border bg-panel p-0.5 shadow-2xs';
 
 export function MyCommuteLeaveTab({
@@ -64,6 +65,7 @@ export function MyCommuteLeaveTab({
   holidayMap,
   policyStartTime,
   policyEndTime,
+  hireDate,
 }: MyCommuteLeaveTabProps) {
   const { user } = useAuth();
   const nav = useNavigate();
@@ -72,6 +74,12 @@ export function MyCommuteLeaveTab({
 
   // 개인 연차/휴가 산정 훅
   const bal = useLeave(user?.id);
+
+  // 입사일: prop으로 넘어온 값 우선, 없으면 bal.hireDate 사용
+  const effectiveHireDate = hireDate || bal?.hireDate || null;
+  const minMonth = useMemo(() => {
+    return effectiveHireDate ? effectiveHireDate.slice(0, 7) : null;
+  }, [effectiveHireDate]);
 
   // 달력 / 목록 표 전환 상태
   const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
@@ -96,6 +104,9 @@ export function MyCommuteLeaveTab({
     let totalMin = 0;
 
     for (const r of monthRows) {
+      const isPreHire = Boolean(effectiveHireDate && r.date < effectiveHireDate);
+      if (isPreHire) continue;
+
       if (r.status === 'normal' || r.status === 'holiday_work') workDays++;
       if (r.status === 'leave') leaveDays++;
       if (r.status === 'late') {
@@ -107,7 +118,7 @@ export function MyCommuteLeaveTab({
     }
 
     return { workDays, leaveDays, lateDays, absentDays, totalMin };
-  }, [monthRows]);
+  }, [monthRows, effectiveHireDate]);
 
   // 3. 다가오는 예정 일정
   const upcomingDoc = useMemo(() => {
@@ -349,7 +360,16 @@ export function MyCommuteLeaveTab({
         {/* 달력 헤더 툴바 */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 bg-panel">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setMonth((v) => moveMonth(v, -1))} aria-label="이전 달" className={navButton}>‹</button>
+            <button
+              type="button"
+              disabled={Boolean(minMonth && month <= minMonth)}
+              onClick={() => setMonth((v) => moveMonth(v, -1))}
+              aria-label="이전 달"
+              title={minMonth && month <= minMonth ? `입사월(${minMonth}) 이전으로는 이동할 수 없습니다.` : '이전 달'}
+              className={navButton}
+            >
+              ‹
+            </button>
             <Button size="sm" onClick={() => setMonth(thisMonth())}>이번 달</Button>
             <button type="button" onClick={() => setMonth((v) => moveMonth(v, 1))} aria-label="다음 달" className={navButton}>›</button>
             <h2 className="ml-1 text-[13.5px] font-extrabold text-ink">
@@ -416,11 +436,15 @@ export function MyCommuteLeaveTab({
                 const isSat = isWeekend(row.date) && new Date(row.date).getDay() === 6;
                 const isCurToday = row.date === todayStr;
 
+                const isBeforeHireDay = Boolean(effectiveHireDate && row.date < effectiveHireDate);
+
                 return (
                   <div
                     key={row.date}
                     className={`flex min-h-[86px] flex-col rounded-lg border p-1.5 transition-all ${
-                      isCurToday
+                      isBeforeHireDay
+                        ? 'border-border/40 bg-panel-alt/10 opacity-40'
+                        : isCurToday
                         ? 'border-teal bg-teal/5 shadow-2xs ring-1 ring-teal/50'
                         : holiday || isSun
                         ? 'border-rose-500/20 bg-rose-500/5'
@@ -433,7 +457,7 @@ export function MyCommuteLeaveTab({
                       <div className="flex items-center gap-1">
                         <span
                           className={`text-[12px] font-extrabold ${
-                            holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : 'text-ink'
+                            isBeforeHireDay ? 'text-ink3/50' : holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : 'text-ink'
                           }`}
                         >
                           {dayNum}
@@ -498,7 +522,9 @@ export function MyCommuteLeaveTab({
                       ) : (
                         /* 기록 없음 / 휴무 */
                         <div className="py-1 text-center text-[9px] text-ink3/70">
-                          {holiday || isSun || isSat ? (
+                          {isBeforeHireDay || row.status === 'unknown' ? (
+                            <span className="text-ink3/40 font-mono">—</span>
+                          ) : holiday || isSun || isSat || row.status === 'off' ? (
                             '휴무'
                           ) : row.date >= todayStr ? (
                             <button
@@ -538,21 +564,24 @@ export function MyCommuteLeaveTab({
                   const isSun = isWeekend(row.date) && new Date(row.date).getDay() === 0;
                   const isSat = isWeekend(row.date) && new Date(row.date).getDay() === 6;
                   const holiday = getKoreanHoliday(row.date, holidayMap);
+                  const isBeforeHireDay = Boolean(effectiveHireDate && row.date < effectiveHireDate);
 
                   return (
-                    <tr key={row.date} className="hover:bg-panel-alt/30 transition-colors">
+                    <tr key={row.date} className={`hover:bg-panel-alt/30 transition-colors ${isBeforeHireDay ? 'opacity-40' : ''}`}>
                       <td className="p-2 font-semibold">
-                        <span className={holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : 'text-ink'}>
+                        <span className={isBeforeHireDay ? 'text-ink3/50' : holiday || isSun ? 'text-rose-500' : isSat ? 'text-blue-500' : 'text-ink'}>
                           {row.date.slice(5).replace('-', '/')}
                         </span>
-                        {holiday && <span className="ml-1 text-[9px] text-rose-500 font-bold">({holiday})</span>}
+                        {holiday && !isBeforeHireDay && <span className="ml-1 text-[9px] text-rose-500 font-bold">({holiday})</span>}
                       </td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.inAt)}</td>
                       <td className="p-2 font-medium tabular-nums">{timeOf(row.outAt)}</td>
                       <td className="p-2 text-ink2 font-medium">{hourText(row.totalMin)}</td>
                       <td className="p-2 text-ink2">{row.lateMin > 0 ? `${row.lateMin}분` : '—'}</td>
                       <td className="p-2">
-                        {row.status === 'leave' ? (() => {
+                        {isBeforeHireDay || row.status === 'unknown' ? (
+                          <span className="text-ink3/40 text-[10px]">—</span>
+                        ) : row.status === 'leave' ? (() => {
                           const badge = getLeaveBadgeLabel(row.leaveName);
                           return (
                             <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2" title={badge.tooltip}>
@@ -676,6 +705,7 @@ export function MyCommuteLeaveTab({
                           endDate: d.form?.endDate,
                           rawDays: d.form?.days,
                           title: d.title,
+                          holidays: holidayMap,
                         });
                         return (
                         <tr key={d.id} className="hover:bg-panel-alt/30 transition-colors">

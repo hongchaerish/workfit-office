@@ -2,9 +2,20 @@ import type { Holiday, HolidayType } from '@/domain/holiday/schema';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { safeDocId } from '@/shared/lib/appwrite';
 
+import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
+
 const STORAGE_KEY = 'workfit_holidays_v2';
 
-export const INITIAL_HOLIDAYS: Holiday[] = [];
+export const INITIAL_HOLIDAYS: Holiday[] = (KOREA_STANDARD_HOLIDAYS['2026'] || []).map((item) => ({
+  id: `hol-${item.date.replace(/-/g, '')}`,
+  date: item.date,
+  name: item.name,
+  type: item.type,
+  isPaid: item.isPaid,
+  isRecurring: item.isRecurring ?? false,
+  memo: item.memo,
+  createdAt: '2026-01-01T00:00:00.000Z',
+}));
 
 interface RawHolidayDoc {
   $id?: string;
@@ -55,6 +66,7 @@ const backend = createCrudBackend<Holiday>({
   },
   idOf: (item) => safeDocId(item.id),
   seed: INITIAL_HOLIDAYS,
+  stripFields: ['id', 'isPaid', 'isRecurring', 'type', 'memo', 'createdAt', 'updatedAt'],
 });
 
 export class HolidayRepo {
@@ -173,8 +185,58 @@ export class HolidayRepo {
     await this.list();
   }
 
-  async resetToDefault(): Promise<Holiday[]> {
-    return this.list();
+  async importKoreaHolidays(year: string = '2026'): Promise<{ importedCount: number; updatedCount: number }> {
+    const { getKoreaStandardHolidays } = await import('@/domain/holiday/koreaHolidays');
+    const standardList = getKoreaStandardHolidays(year);
+    const existingList = await backend.loadAll().catch(() => []);
+
+    let importedCount = 0;
+    let updatedCount = 0;
+
+    for (const item of standardList) {
+      const existing = existingList.find((h) => h.date === item.date);
+      if (existing) {
+        // 기존 공휴일 정보 갱신
+        const updated: any = {
+          ...existing,
+          name: item.name,
+          type: item.type,
+          isPaid: item.isPaid,
+          isRecurring: item.isRecurring ?? false,
+          memo: item.memo || existing.memo,
+          recurring: Boolean(item.isRecurring),
+          monthDay: item.date.slice(5),
+          updatedAt: new Date().toISOString(),
+        };
+        await backend.save(updated);
+        updatedCount++;
+      } else {
+        // 신규 공휴일 등록
+        const newDoc: any = {
+          id: `hol-${item.date.replace(/-/g, '')}`,
+          date: item.date,
+          name: item.name,
+          type: item.type,
+          isPaid: item.isPaid,
+          isRecurring: item.isRecurring ?? false,
+          memo: item.memo,
+          recurring: Boolean(item.isRecurring),
+          monthDay: item.date.slice(5),
+          createdAt: new Date().toISOString(),
+        };
+        await backend.save(newDoc);
+        importedCount++;
+      }
+    }
+
+    // 캐시 및 로컬스토리지 동기화
+    await this.list(year);
+    return { importedCount, updatedCount };
+  }
+
+  async resetToDefault(year: string = '2026'): Promise<Holiday[]> {
+    await this.importKoreaHolidays(year);
+    return this.list(year);
   }
 }
 

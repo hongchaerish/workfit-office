@@ -18,6 +18,7 @@ import {
   calculateUserLeaveBalance,
   type SubstituteHolidayDetailItem,
 } from '@/domain/leave/userLeaveBalance';
+import { useHolidays } from '@/features/holiday/useHolidays';
 
 export const FALLBACK_ANNUAL_GRANT = 15;
 
@@ -77,6 +78,8 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     }
   }, []);
 
+  const { data: holidayList = [] } = useHolidays();
+
   return useMemo(() => {
     const allApprovals = q.data ?? [];
     const profiles = profilesQ.data ?? [];
@@ -100,6 +103,7 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       },
       approvalDocs: allApprovals,
       adjustments,
+      holidays: holidayList,
     });
 
     return {
@@ -116,5 +120,5 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       myDocs: balance.myDocs,
       isLoading: q.isLoading || profilesQ.isLoading,
     };
-  }, [q.data, q.isLoading, profilesQ.data, profilesQ.isLoading, userId, subUpdateVer]);
+  }, [q.data, q.isLoading, profilesQ.data, profilesQ.isLoading, userId, subUpdateVer, holidayList]);
 }

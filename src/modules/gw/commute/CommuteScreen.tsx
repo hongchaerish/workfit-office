@@ -478,7 +478,7 @@ export default function CommuteScreen() {
       employeeProfiles,
       approvalsQuery.data ?? [],
       adjustments,
-      { mode: ledgerMode },
+      { mode: ledgerMode, holidays },
     );
   }, [
     canAll,
@@ -490,6 +490,7 @@ export default function CommuteScreen() {
     approvalsQuery.data,
     adjustments,
     ledgerMode,
+    holidays,
   ]);
 
   // 내 근태 한 달치 레코드
@@ -622,7 +623,8 @@ export default function CommuteScreen() {
       const hasValidWork = records.some(
         (r) => r.status === 'normal' || r.status === 'late' || r.status === 'holiday_work' || r.status === 'leave',
       );
-      const isPreHireMonth = records.every((r) => r.status === 'unknown' || r.status === 'off');
+      const hireMonth = hireDate ? hireDate.slice(0, 7) : null;
+      const isPreHireMonth = Boolean(hireMonth && month < hireMonth) || records.every((r) => r.status === 'unknown' || r.status === 'off');
       if (!hasValidWork && isPreHireMonth) {
         continue;
       }
@@ -1216,6 +1218,7 @@ export default function CommuteScreen() {
             holidayMap={holidayMap}
             policyStartTime={policy.workStartTime}
             policyEndTime={policy.workEndTime}
+            hireDate={myHireDate}
           />
         )}
       </div>

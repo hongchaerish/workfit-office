@@ -242,6 +242,63 @@ export interface CalculateLeaveDaysOptions {
   endDate?: string | null;
   rawDays?: number | null;
   title?: string | null;
+  /** 공휴일 목록 — 기간 기반 일수 계산 시 주말과 함께 자동 제외 */
+  holidays?: Array<{ date: string; name?: string }> | Map<string, string>;
+}
+
+/**
+ * 공휴일 날짜 Set 변환 (Holiday[] 또는 Map 모두 수용)
+ */
+function buildHolidaySet(
+  holidays?: Array<{ date: string }> | Map<string, string>,
+): Set<string> {
+  const set = new Set<string>();
+  if (!holidays) return set;
+  if (holidays instanceof Map) {
+    for (const key of holidays.keys()) set.add(key);
+  } else {
+    for (const h of holidays) set.add(h.date);
+  }
+  return set;
+}
+
+/**
+ * 주어진 기간에서 제외되는 공휴일 날짜·명칭 목록 반환 (UI 안내용)
+ * 주말에 해당하는 공휴일은 이미 주말로 제외되므로 별도 표기하지 않습니다.
+ */
+export function getExcludedHolidaysInRange(
+  startDate: string,
+  endDate: string,
+  holidays: Array<{ date: string; name?: string }> | Map<string, string>,
+): Array<{ date: string; name: string; dayOfWeek: string }> {
+  const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+  const result: Array<{ date: string; name: string; dayOfWeek: string }> = [];
+  const s = new Date(startDate.slice(0, 10) + 'T00:00:00');
+  const e = new Date(endDate.slice(0, 10) + 'T00:00:00');
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return result;
+
+  const holidayMap = new Map<string, string>();
+  if (holidays instanceof Map) {
+    holidays.forEach((name, date) => holidayMap.set(date, name));
+  } else {
+    for (const h of holidays) holidayMap.set(h.date, h.name || '공휴일');
+  }
+
+  const cur = new Date(s);
+  while (cur <= e) {
+    const day = cur.getDay();
+    const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+    // 평일인데 공휴일인 날만 표시 (주말은 이미 자동 제외)
+    if (day !== 0 && day !== 6 && holidayMap.has(dateStr)) {
+      result.push({
+        date: dateStr,
+        name: holidayMap.get(dateStr) || '공휴일',
+        dayOfWeek: DAY_NAMES[day],
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
 }
 
 /**
@@ -251,9 +308,10 @@ export interface CalculateLeaveDaysOptions {
  *   반드시 0.5일을 반환하여 왜곡을 원천 차단합니다.
  * - 반반차는 반드시 0.25일을 반환합니다.
  * - 종일 휴가는 기간(영업일) 또는 명시된 수치를 안전하게 반영합니다.
+ * - 기간 기반 계산 시 주말 + 공휴일(holidays)을 자동 제외합니다.
  */
 export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
-  const { leaveType, startDate, endDate, rawDays, title } = options;
+  const { leaveType, startDate, endDate, rawDays, title, holidays } = options;
 
   // 1. 반반차 최우선: 무조건 0.25일
   if (isQuarterDayLeave(leaveType, title)) {
@@ -266,12 +324,14 @@ export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
   }
 
   // 3. 종일/기타 휴가: 명시된 수치가 양수이면 그대로 인정
+  // rawDays는 이미 확정된 값이므로 공휴일 재계산하지 않음 (승인 시점에 확정된 일수 존중)
   if (typeof rawDays === 'number' && !isNaN(rawDays) && rawDays > 0) {
     return rawDays;
   }
 
-  // 4. 기간(시작일, 종료일) 기반 평일(영업일) 일수 계산
+  // 4. 기간(시작일, 종료일) 기반 영업일 일수 계산 (주말 + 공휴일 자동 제외)
   if (startDate) {
+    const holidaySet = buildHolidaySet(holidays);
     const end = endDate || startDate;
     const s = new Date(startDate.slice(0, 10) + 'T00:00:00');
     const e = new Date(end.slice(0, 10) + 'T00:00:00');
@@ -280,12 +340,14 @@ export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
       const cur = new Date(s);
       while (cur <= e) {
         const day = cur.getDay();
-        if (day !== 0 && day !== 6) {
+        const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        // 주말도 아니고 공휴일도 아닌 평일만 차감 대상
+        if (day !== 0 && day !== 6 && !holidaySet.has(dateStr)) {
           count++;
         }
         cur.setDate(cur.getDate() + 1);
       }
-      return Math.max(1, count);
+      return Math.max(0, count);
     }
   }
 
@@ -312,5 +374,3 @@ export function getDefaultTimeWindow(
   }
   return { startTime: '08:30', endTime: '17:30' };
 }
-
-

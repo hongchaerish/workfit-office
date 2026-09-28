@@ -9,7 +9,12 @@ import { TableFieldEditor } from '../formFields/TableFieldEditor';
 import { SelectFieldEditor } from '../formFields/SelectFieldEditor';
 import { cascadeRecalculateAllTables } from '../formFields/formulaEngine';
 import { SelectorDialog } from './DraftRecipientSection';
-import { calculateLeaveDays, isAnnualLeaveDeduction, isPartDayLeave } from '@/domain/leave/policy';
+import {
+  calculateLeaveDays,
+  isAnnualLeaveDeduction,
+  isPartDayLeave,
+  getExcludedHolidaysInRange,
+} from '@/domain/leave/policy';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import logoImg from '@/assets/logo.png';
@@ -90,6 +95,7 @@ export interface ApprovalDraftDocumentSheetProps {
   onFileUpload: (files: File[]) => Promise<void>;
   uploading: boolean;
   leaveBalance?: any;
+  holidays?: Array<{ date: string; name?: string }> | Map<string, string>;
   editDocNo?: string;
   lastSavedAt?: number | null;
   isDesignMode?: boolean;
@@ -136,6 +142,7 @@ export function ApprovalDraftDocumentSheet({
   onFileUpload,
   uploading,
   leaveBalance,
+  holidays,
   editDocNo,
   lastSavedAt,
   isDesignMode = false,
@@ -340,6 +347,16 @@ export function ApprovalDraftDocumentSheet({
 
   // 휴가 구분 관련
   const selectedLeaveType = String(values['leaveType'] || '연차');
+  const periodStart = String(values['period'] || '');
+  const periodEnd = String(values['period__end'] || periodStart);
+
+  // 선택된 기간 내 평일 공휴일 자동 제외 목록 (UI 안내용)
+  const excludedHolidays = useMemo(() => {
+    if (docCode !== '휴가' || !periodStart || !holidays) return [];
+    const isPart = isPartDayLeave(selectedLeaveType);
+    const end = isPart ? periodStart : periodEnd;
+    return getExcludedHolidaysInRange(periodStart, end, holidays);
+  }, [docCode, periodStart, periodEnd, holidays, selectedLeaveType]);
 
   let lastRenderedSection = '';
 
@@ -662,6 +679,7 @@ export function ApprovalDraftDocumentSheet({
                       leaveType: item.type,
                       startDate: curStart,
                       endDate: curEnd,
+                      holidays,
                     });
                     setVals({
                       leaveType: item.type,
@@ -679,6 +697,27 @@ export function ApprovalDraftDocumentSheet({
               );
             })}
           </div>
+
+          {/* 공휴일 자동 제외 안내 배너 */}
+          {excludedHolidays.length > 0 && (
+            <div className="mt-2.5 rounded-md bg-teal/10 border border-teal/30 px-3 py-2 text-[11px] text-[#222]">
+              <div className="flex items-center gap-1.5 font-bold text-teal">
+                <Calendar size={13} className="shrink-0" />
+                <span>공휴일 자동 제외 안내 (신청 일수에서 차감 제외):</span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2 text-[10.5px] text-[#444]">
+                {excludedHolidays.map((h) => (
+                  <span key={h.date} className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 border border-teal/20 font-medium">
+                    <span className="font-semibold text-teal">{h.date.slice(5)} ({h.dayOfWeek})</span>
+                    <span>{h.name}</span>
+                  </span>
+                ))}
+              </div>
+              <div className="mt-1 text-[10px] text-[#666]">
+                ※ 법정 공휴일은 유급휴일이므로 연차 일수에서 자동으로 제외되어 차감되지 않습니다.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -966,6 +1005,7 @@ export function ApprovalDraftDocumentSheet({
                           setVals={setVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
+                          holidays={holidays}
                         />
                       </td>
                       <th
@@ -988,6 +1028,7 @@ export function ApprovalDraftDocumentSheet({
                           setVals={setVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
+                          holidays={holidays}
                         />
                       </td>
                     </tr>
@@ -1016,6 +1057,7 @@ export function ApprovalDraftDocumentSheet({
                           setVals={setVals}
                           org={org}
                           onOpenUserPicker={setActiveUserField}
+                          holidays={holidays}
                         />
                       </td>
                       <th className="w-[80px] shrink-0 border border-[#bbb] bg-[#f2f2f2] px-2 py-1.5 text-left align-middle text-[11px] font-bold text-[#444]"></th>
@@ -1047,6 +1089,7 @@ export function ApprovalDraftDocumentSheet({
                         setVals={setVals}
                         org={org}
                         onOpenUserPicker={setActiveUserField}
+                        holidays={holidays}
                       />
                     </td>
                   </tr>
@@ -1318,12 +1361,14 @@ function InlineFieldEditor({
   setVals,
   org,
   onOpenUserPicker,
+  holidays,
 }: {
   field: FormField;
   values: Record<string, FieldValue>;
   setVals: (patch: Record<string, FieldValue>) => void;
   org: any;
   onOpenUserPicker: (f: FormField) => void;
+  holidays?: Array<{ date: string; name?: string }> | Map<string, string>;
 }) {
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
@@ -1382,6 +1427,7 @@ function InlineFieldEditor({
                 startDate: newStart,
                 endDate: actualEnd,
                 rawDays: isPart ? currentDays : undefined,
+                holidays,
               })
               : 0;
             setVals({
@@ -1414,6 +1460,7 @@ function InlineFieldEditor({
                 leaveType: nextVal,
                 startDate: curStart,
                 endDate: curEnd,
+                holidays,
               });
               patch['period__days'] = nextDays;
               setVals(patch);

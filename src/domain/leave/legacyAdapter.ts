@@ -8,7 +8,7 @@
  */
 
 import type { ApprovalDoc, DocStatus } from '@/domain/approvalDoc/schema';
-import { getDefaultTimeWindow, calculateLeaveDays } from './policy';
+import { getDefaultTimeWindow, calculateLeaveDays, type CalculateLeaveDaysOptions } from './policy';
 
 export interface NormalizedLeaveRecord {
   docId: string;
@@ -62,7 +62,10 @@ function inferHalfDayTimeWindow(title: string = '', body: string = '', defaultFa
 /**
  * 단일 결재 문서를 표준 정규화 레코드로 변환 (Read-Only Adapter)
  */
-export function normalizeLegacyLeaveDoc(doc: ApprovalDoc): NormalizedLeaveRecord | null {
+export function normalizeLegacyLeaveDoc(
+  doc: ApprovalDoc,
+  opts?: { holidays?: CalculateLeaveDaysOptions['holidays'] },
+): NormalizedLeaveRecord | null {
   // 휴가 문서가 아니거나 삭제된 문서 제외
   if (doc.docType !== '휴가') return null;
 
@@ -90,6 +93,7 @@ export function normalizeLegacyLeaveDoc(doc: ApprovalDoc): NormalizedLeaveRecord
     endDate,
     rawDays,
     title: doc.title,
+    holidays: opts?.holidays,
   });
 
   // 시간대 및 신/구버전 판별
@@ -135,8 +139,11 @@ export function normalizeLegacyLeaveDoc(doc: ApprovalDoc): NormalizedLeaveRecord
 /**
  * 결재 문서 목록 전체를 정규화하여 유효한 휴가 레코드 배열로 반환
  */
-export function normalizeLeaveDocs(docs: ApprovalDoc[]): NormalizedLeaveRecord[] {
+export function normalizeLeaveDocs(
+  docs: ApprovalDoc[],
+  opts?: { holidays?: CalculateLeaveDaysOptions['holidays'] },
+): NormalizedLeaveRecord[] {
   return docs
-    .map(normalizeLegacyLeaveDoc)
+    .map((doc) => normalizeLegacyLeaveDoc(doc, opts))
     .filter((d): d is NormalizedLeaveRecord => d !== null);
 }

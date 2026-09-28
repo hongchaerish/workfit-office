@@ -45,7 +45,17 @@ export function useDeleteHoliday() {
 export function useResetHolidays() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => holidayRepo.resetToDefault(),
+    mutationFn: (year?: string) => holidayRepo.resetToDefault(year),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
+    },
+  });
+}
+
+export function useImportKoreaHolidays() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (year: string) => holidayRepo.importKoreaHolidays(year),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: HOLIDAYS_QUERY_KEY });
     },

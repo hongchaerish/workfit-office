@@ -9,6 +9,7 @@ import {
   useUpdateHoliday,
   useDeleteHoliday,
   useResetHolidays,
+  useImportKoreaHolidays,
 } from '@/features/holiday/useHolidays';
 import {
   HOLIDAY_TYPE_LABELS,
@@ -49,6 +50,7 @@ export default function HolidayScreen() {
   const updateHoliday = useUpdateHoliday();
   const deleteHoliday = useDeleteHoliday();
   const resetHolidays = useResetHolidays();
+  const importKoreaHolidays = useImportKoreaHolidays();
 
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -145,12 +147,32 @@ export default function HolidayScreen() {
     }
   };
 
-  const handleReset = async () => {
-    if (!confirm('공휴일 데이터를 대한민국 법정 공휴일 초기 표준 데이터로 복원하시겠습니까?')) {
+  const handleImportKoreaHolidays = async () => {
+    const targetYear = year !== 'all' ? year : '2026';
+    if (
+      !confirm(
+        `[${targetYear}년] 대한민국 법정 공휴일 및 대체 공휴일 목록을 일괄 등록하시겠습니까?\n(이미 등록된 공휴일은 최신 명칭과 규정으로 자동 업데이트됩니다.)`,
+      )
+    ) {
       return;
     }
     try {
-      await resetHolidays.mutateAsync();
+      const res = await importKoreaHolidays.mutateAsync(targetYear);
+      alert(
+        `${targetYear}년도 대한민국 공휴일 등록이 완료되었습니다.\n• 신규 등록: ${res.importedCount}건\n• 기존 갱신: ${res.updatedCount}건`,
+      );
+    } catch (err: any) {
+      alert(`공휴일 불러오기 실패: ${err.message || err}`);
+    }
+  };
+
+  const handleReset = async () => {
+    const targetYear = year !== 'all' ? year : '2026';
+    if (!confirm(`공휴일 데이터를 [${targetYear}년] 대한민국 법정 공휴일 초기 표준 데이터로 복원하시겠습니까?`)) {
+      return;
+    }
+    try {
+      await resetHolidays.mutateAsync(targetYear);
       alert('공휴일 데이터가 초기화되었습니다.');
     } catch (err: any) {
       alert(`초기화 실패: ${err.message || err}`);
@@ -209,6 +231,20 @@ export default function HolidayScreen() {
           <Button size="sm" variant="secondary" onClick={handleExportCsv}>
             <span className="flex items-center gap-1.5"><Download size={14} /> CSV 다운로드</span>
           </Button>
+          {canCreate && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleImportKoreaHolidays}
+              disabled={importKoreaHolidays.isPending}
+              title={`${year !== 'all' ? year : '2026'}년 대한민국 법정공휴일 및 대체공휴일을 DB에 일괄 등록합니다.`}
+            >
+              <span className="flex items-center gap-1.5 text-teal">
+                <Calendar size={14} />
+                {importKoreaHolidays.isPending ? '불러오는 중...' : '대한민국 공휴일 불러오기'}
+              </span>
+            </Button>
+          )}
           {canDelete && (
             <Button size="sm" variant="secondary" onClick={handleReset}>
               <span className="flex items-center gap-1.5"><RotateCcw size={14} /> 기본값 복원</span>

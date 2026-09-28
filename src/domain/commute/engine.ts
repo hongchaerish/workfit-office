@@ -3,99 +3,22 @@ import type { CommuteRecord, CommuteStatus } from '@/domain/commute/schema';
 import { isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 
 /**
- * 대한민국 법정 공휴일 (고정 및 2025~2027 대체공휴일/명절 포함)
- */
-const KOREAN_HOLIDAYS: Record<string, string> = {
-  // ── 2025년 ──
-  '2025-01-01': '신정',
-  '2025-01-28': '설날 연휴',
-  '2025-01-29': '설날',
-  '2025-01-30': '설날 연휴',
-  '2025-03-01': '삼일절',
-  '2025-03-03': '삼일절 대체공휴일',
-  '2025-05-05': '어린이날',
-  '2025-05-06': '부처님오신날',
-  '2025-06-06': '현충일',
-  '2025-08-15': '광복절',
-  '2025-10-03': '개천절',
-  '2025-10-05': '추석 연휴',
-  '2025-10-06': '추석',
-  '2025-10-07': '추석 연휴',
-  '2025-10-08': '추석 대체공휴일',
-  '2025-10-09': '한글날',
-  '2025-12-25': '성탄절',
-
-  // ── 2026년 ──
-  '2026-01-01': '신정',
-  '2026-02-16': '설날 연휴',
-  '2026-02-17': '설날',
-  '2026-02-18': '설날 연휴',
-  '2026-03-01': '삼일절',
-  '2026-03-02': '삼일절 대체공휴일',
-  '2026-05-05': '어린이날',
-  '2026-05-24': '부처님오신날',
-  '2026-05-25': '부처님오신날 대체공휴일',
-  '2026-06-03': '지방선거일',
-  '2026-06-06': '현충일',
-  '2026-08-15': '광복절',
-  '2026-08-17': '광복절 대체공휴일',
-  '2026-09-24': '추석 연휴',
-  '2026-09-25': '추석',
-  '2026-09-26': '추석 연휴',
-  '2026-09-28': '추석 대체공휴일',
-  '2026-10-03': '개천절',
-  '2026-10-05': '개천절 대체공휴일',
-  '2026-10-09': '한글날',
-  '2026-12-25': '성탄절',
-
-  // ── 2027년 ──
-  '2027-01-01': '신정',
-  '2027-02-06': '설날 연휴',
-  '2027-02-07': '설날',
-  '2027-02-08': '설날 연휴',
-  '2027-02-09': '설날 대체공휴일',
-  '2027-03-01': '삼일절',
-  '2027-05-05': '어린이날',
-  '2027-05-13': '부처님오신날',
-  '2027-06-06': '현충일',
-  '2027-06-07': '현충일 대체공휴일',
-  '2027-08-15': '광복절',
-  '2027-08-16': '광복절 대체공휴일',
-  '2027-09-14': '추석 연휴',
-  '2027-09-15': '추석',
-  '2027-09-16': '추석 연휴',
-  '2027-10-03': '개천절',
-  '2027-10-04': '개천절 대체공휴일',
-  '2027-10-09': '한글날',
-  '2027-10-11': '한글날 대체공휴일',
-  '2027-12-25': '성탄절',
-};
-
-/** 고정 매년 양력 공휴일 (월-일) */
-const RECURRING_HOLIDAYS: Record<string, string> = {
-  '01-01': '신정',
-  '03-01': '삼일절',
-  '05-05': '어린이날',
-  '06-06': '현충일',
-  '08-15': '광복절',
-  '10-03': '개천절',
-  '10-09': '한글날',
-  '12-25': '성탄절',
-};
-
-/**
- * 주어진 날짜(YYYY-MM-DD)의 대한민국 공휴일 명칭 반환 (공휴일이 아니면 null)
+ * 주어진 날짜(YYYY-MM-DD)의 공휴일 명칭 반환 (공휴일이 아니면 null)
+ *
+ * 공휴일 데이터는 기준정보 > 공휴일 관리(HolidayScreen)에서 Appwrite DB로 관리하며,
+ * 이 함수는 DB를 단일 소스(SSOT)로 사용합니다.
+ *
  * - 1순위: 주입된 DB 실시간 공휴일 맵 (customMap)
- * - 2순위: 브라우저 캐시 (workfit_holidays_v1)
- * - 3순위: 하드코딩된 법정공휴일/대체공휴일 (KOREAN_HOLIDAYS)
- * - 4순위: 매년 반복 양력 공휴일 (RECURRING_HOLIDAYS)
+ * - 2순위: 브라우저 localStorage 캐시 (workfit_holidays_v2) — DB 로드 전 폴백
  */
 export function getKoreanHoliday(dateStr: string, customMap?: Map<string, string>): string | null {
+  // 1순위: DB에서 주입된 실시간 공휴일 맵
   if (customMap && customMap.has(dateStr)) {
     return customMap.get(dateStr) ?? null;
   }
+  // 2순위: localStorage 캐시 (holiday.repo.ts가 DB 조회 시 자동 미러링)
   try {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('workfit_holidays_v1') : null;
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('workfit_holidays_v2') : null;
     if (saved) {
       const list = JSON.parse(saved);
       const match = list.find((h: any) => h.date === dateStr);
@@ -104,9 +27,7 @@ export function getKoreanHoliday(dateStr: string, customMap?: Map<string, string
   } catch {
     // ignore
   }
-  if (KOREAN_HOLIDAYS[dateStr]) return KOREAN_HOLIDAYS[dateStr];
-  const mmdd = dateStr.slice(5);
-  return RECURRING_HOLIDAYS[mmdd] ?? null;
+  return null;
 }
 
 

@@ -34,6 +34,7 @@ import {
   isHalfDayLeave,
   isQuarterDayLeave,
 } from '@/domain/leave/policy';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, CheckCircle2, ChevronRight, Eye, Trash2 } from 'lucide-react';
 import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
 import type { CellMerge } from './formFields/utils';
@@ -207,6 +208,9 @@ function ApprovalDraftInner({
     }
     return initialVals;
   });
+
+  // DB 공휴일 목록 — 휴가 일수 계산 시 자동 제외
+  const { data: holidayList = [] } = useHolidays();
 
   const setVals = (patch: Record<string, FieldValue>) => setValues((prev) => ({ ...prev, ...patch }));
   const [steps, setSteps] = useState<ApprovalStep[]>(() => {
@@ -1242,6 +1246,7 @@ function ApprovalDraftInner({
         endDate: pEnd,
         rawDays: Number(values['period__days']) || undefined,
         title,
+        holidays: holidayList,
       });
 
       const quarterSlot = isQuarter ? String(values['quarterSlot'] || 'PM2') : undefined;
@@ -1342,6 +1347,7 @@ function ApprovalDraftInner({
         endDate: pEnd as string,
         rawDays: Number(values['period__days']) || undefined,
         title,
+        holidays: holidayList,
       });
 
       // 대체휴무 잔여일수 검증: 선사용 불가 (휴일근무 실적 사전 존재 필수)
@@ -1765,6 +1771,7 @@ function ApprovalDraftInner({
             onFileUpload={handleFilesUpload}
             uploading={uploading}
             leaveBalance={bal}
+            holidays={holidayList}
             editDocNo={editDoc?.docNo}
             lastSavedAt={autosavedAt}
           />

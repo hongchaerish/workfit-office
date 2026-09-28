@@ -68,6 +68,7 @@ export interface LeaveLedgerSummary {
 export interface BuildLedgerOptions {
   referenceDate?: Date; // 기준일 (기본값: 오늘)
   mode?: 'HIRE_DATE' | 'FISCAL_YEAR'; // 산정 방식 (기본값: HIRE_DATE 입사일 기준)
+  holidays?: Array<{ date: string; name?: string }> | Map<string, string>; // 공휴일 목록 (연차 차감 시 공휴일 자동 제외)
 }
 
 const norm = (s?: string | null) => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -129,6 +130,7 @@ export function buildLeaveLedger(
       adjustments,
       referenceDate: refDate,
       mode,
+      holidays: options.holidays,
     });
 
     entries.push({

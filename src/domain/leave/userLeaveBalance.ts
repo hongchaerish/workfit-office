@@ -18,7 +18,7 @@ import {
   type StatutoryLeaveResult,
   type AdvanceOffsetResult,
 } from './accrualEngine';
-import { isAnnualLeaveDeduction } from './policy';
+import { isAnnualLeaveDeduction, type CalculateLeaveDaysOptions } from './policy';
 import { normalizeLegacyLeaveDoc, type NormalizedLeaveRecord } from './legacyAdapter';
 import {
   getSubstituteHolidaysForUser,
@@ -104,6 +104,8 @@ export interface CalculateUserLeaveBalanceOptions {
   adjustments?: LeaveAdjustmentTransaction[];
   referenceDate?: Date;
   mode?: 'HIRE_DATE' | 'FISCAL_YEAR';
+  /** 공휴일 목록 — 기간 기반 연차 일수 계산 시 자동 제외 */
+  holidays?: CalculateLeaveDaysOptions['holidays'];
 }
 
 const norm = (s?: string | null) => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -120,6 +122,7 @@ export function calculateUserLeaveBalance(
     adjustments = [],
     referenceDate = new Date(),
     mode = 'HIRE_DATE',
+    holidays,
   } = options;
 
   const refDateStr = referenceDate.toISOString().slice(0, 10);
@@ -172,7 +175,7 @@ export function calculateUserLeaveBalance(
 
     if (!isMatch) continue;
 
-    const normalized = normalizeLegacyLeaveDoc(doc);
+    const normalized = normalizeLegacyLeaveDoc(doc, { holidays });
     if (!normalized) continue;
 
     matchedDocs.push(doc);
