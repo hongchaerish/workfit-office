@@ -717,83 +717,68 @@ export default function ApprovalScreen() {
               <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
             </div>
 
-            {/* ── 상단 문서 검색 인풋 & 결과 드롭다운 ── */}
-            <div ref={searchContainerRef} className="relative flex-1 max-w-[620px]">
-              <div className="flex items-center gap-1.5">
-                {/* 문서함 종류 필터 셀렉트 */}
-                <select
-                  value={searchBoxFilter}
-                  onChange={(e) => setSearchBoxFilter(e.target.value as any)}
-                  className="h-[32px] rounded-lg border border-border bg-panel-alt/60 hover:bg-panel px-2 text-[11px] font-bold text-ink outline-none focus:border-teal shrink-0 cursor-pointer shadow-2xs transition-colors"
-                >
-                  <option value="all">전체 문서함</option>
-                  <option value="대기">결재 대기함</option>
-                  <option value="상신">기안/상신함</option>
-                  <option value="완료">결재 완료함</option>
-                  <option value="반려">반려함</option>
-                  <option value="참조">참조함</option>
-                  <option value="수신">수신함</option>
-                  <option value="부서">부서 문서함</option>
-                  <option value="임시">임시 저장함</option>
-                </select>
-
-                <div className="relative flex-1">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setIsSearchOpen(true);
+            {/* ── 상단 문서 검색 인풋 & 결과 드롭다운 (가로 너비 유동적 100% 활용) ── */}
+            <div ref={searchContainerRef} className="relative flex-1 min-w-0">
+              <div className="relative w-full">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsSearchOpen(true);
+                  }}
+                  onFocus={() => setIsSearchOpen(true)}
+                  placeholder="결재 문서명, 문서번호, 기안자 검색..."
+                  className="w-full rounded-lg border border-border bg-panel-alt/50 hover:bg-panel pl-8.5 pr-8 py-1.5 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel focus:ring-1 focus:ring-teal/30 transition-all shadow-2xs"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setIsSearchOpen(false);
                     }}
-                    onFocus={() => setIsSearchOpen(true)}
-                    placeholder="결재 문서명, 문서번호, 기안자 검색..."
-                    className="w-full rounded-lg border border-border bg-panel-alt/50 hover:bg-panel pl-8.5 pr-8 py-1.5 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel focus:ring-1 focus:ring-teal/30 transition-all shadow-2xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setIsSearchOpen(false);
-                      }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
 
               {/* 검색 결과 드롭다운 */}
               {isSearchOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[390px] overflow-y-auto rounded-xl border border-border bg-panel shadow-2xl p-1.5 space-y-1 backdrop-blur-md animate-fadeIn">
-                  {/* 드롭다운 상단 문서함 필터 탭 칩 */}
-                  <div className="flex items-center gap-1 overflow-x-auto px-1.5 py-1 border-b border-border/50">
-                    {[
-                      { k: 'all', l: '전체' },
-                      { k: '대기', l: '대기' },
-                      { k: '상신', l: '상신' },
-                      { k: '완료', l: '완료' },
-                      { k: '반려', l: '반려' },
-                      { k: '참조', l: '참조' },
-                      { k: '수신', l: '수신' },
-                      { k: '부서', l: '부서' },
-                      { k: '임시', l: '임시' },
-                    ].map((tab) => (
-                      <button
-                        key={tab.k}
-                        type="button"
-                        onClick={() => setSearchBoxFilter(tab.k as any)}
-                        className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold transition-all shrink-0 cursor-pointer ${
-                          searchBoxFilter === tab.k
-                            ? 'bg-teal text-white shadow-2xs'
-                            : 'bg-panel-alt text-ink3 hover:text-ink hover:bg-border/50'
-                        }`}
-                      >
-                        {tab.l}
-                      </button>
-                    ))}
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[400px] overflow-y-auto rounded-xl border border-border bg-panel shadow-2xl p-1.5 space-y-1 backdrop-blur-md animate-fadeIn">
+                  {/* 드롭다운 내부 상단 문서함 필터 탭 칩 */}
+                  <div className="flex items-center justify-between gap-1 overflow-x-auto px-2 py-1.5 border-b border-border/60 bg-panel-alt/30 rounded-t-lg">
+                    <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
+                      <span className="text-[10.5px] font-bold text-ink3 shrink-0 mr-1">문서함 필터:</span>
+                      {[
+                        { k: 'all', l: '전체' },
+                        { k: '대기', l: '결재대기' },
+                        { k: '상신', l: '기안/상신' },
+                        { k: '완료', l: '결재완료' },
+                        { k: '반려', l: '반려' },
+                        { k: '참조', l: '참조' },
+                        { k: '수신', l: '수신' },
+                        { k: '부서', l: '부서' },
+                        { k: '임시', l: '임시저장' },
+                      ].map((tab) => (
+                        <button
+                          key={tab.k}
+                          type="button"
+                          onClick={() => setSearchBoxFilter(tab.k as any)}
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold transition-all shrink-0 cursor-pointer ${
+                            searchBoxFilter === tab.k
+                              ? 'bg-teal text-white shadow-2xs'
+                              : 'bg-panel border border-border text-ink3 hover:text-ink hover:border-teal/40'
+                          }`}
+                        >
+                          {tab.l}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[9.5px] text-ink3 shrink-0 ml-2">ESC 닫기</span>
                   </div>
 
                   <div className="px-2 py-0.5 text-[10px] font-bold text-ink3 flex items-center justify-between">
@@ -801,7 +786,7 @@ export default function ApprovalScreen() {
                       {searchBoxFilter !== 'all' ? `[${searchBoxFilter}함] ` : ''}
                       {searchQuery.trim() ? `검색 결과 (${searchResults.length}건)` : '최근 문서'}
                     </span>
-                    <span className="text-[9.5px]">ESC 또는 바깥 클릭 시 닫힘</span>
+                    <span className="text-[9.5px] text-ink3">결과를 클릭하면 해당 문서로 이동합니다</span>
                   </div>
 
                   {searchResults.map((d) => (
