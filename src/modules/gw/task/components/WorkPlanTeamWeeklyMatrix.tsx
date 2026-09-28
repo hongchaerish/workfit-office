@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Edit3,
   Plus,
+  CalendarPlus,
   Settings,
 } from 'lucide-react';
 
@@ -64,6 +65,7 @@ interface WorkPlanTeamWeeklyMatrixProps {
   deptId?: string | null;
   onOpenEditor: (date: string, plan?: WorkPlan) => void;
   onOpenDetail: (user: User, plan: WorkPlan) => void;
+  onRequestPlan?: (targetUser: User, date: string) => void;
   onOpenConfig?: () => void;
 }
 
@@ -75,6 +77,7 @@ export function WorkPlanTeamWeeklyMatrix({
   deptId,
   onOpenEditor,
   onOpenDetail,
+  onRequestPlan,
   onOpenConfig,
 }: WorkPlanTeamWeeklyMatrixProps) {
   const [anchorDate, setAnchorDate] = useState(todayStr);
@@ -443,9 +446,15 @@ export function WorkPlanTeamWeeklyMatrix({
                                 <span className="text-[10.5px] font-semibold">+ 계획 작성</span>
                               </button>
                             ) : (
-                              <div className="grid min-h-[64px] place-items-center text-[10.5px] text-ink3/40">
-                                -
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => onRequestPlan?.(member, dayStr)}
+                                className="flex h-full min-h-[64px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-border/50 p-2 text-center text-ink3/40 hover:border-teal/60 hover:bg-teal-soft/15 hover:text-teal transition-all group cursor-pointer"
+                                title={`${member.name}님에게 이 날짜 일정 추가 요청`}
+                              >
+                                <CalendarPlus size={13} className="mb-0.5 text-ink3/40 group-hover:text-teal transition-colors" />
+                                <span className="text-[10px] font-semibold">+ 요청</span>
+                              </button>
                             )
                           ) : (
                             <div className="space-y-1.5 min-h-[64px]">
@@ -549,15 +558,26 @@ export function WorkPlanTeamWeeklyMatrix({
                                     <span>편집</span>
                                   </button>
                                 ) : (
-                                  plan && (
+                                  <div className="ml-auto flex items-center gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => onOpenDetail(member, plan)}
-                                      className="ml-auto rounded px-1 text-ink3 hover:text-ink font-semibold transition-colors cursor-pointer"
+                                      onClick={() => onRequestPlan?.(member, dayStr)}
+                                      className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] text-ink3 hover:text-teal hover:bg-teal-soft/20 font-semibold transition-colors cursor-pointer"
+                                      title={`${member.name}님에게 이 날짜 일정 추가 요청`}
                                     >
-                                      상세
+                                      <CalendarPlus size={10} />
+                                      <span>요청</span>
                                     </button>
-                                  )
+                                    {plan && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenDetail(member, plan)}
+                                        className="rounded px-1.5 py-0.5 text-[9.5px] text-ink3 hover:text-ink hover:bg-panel-alt font-semibold transition-colors cursor-pointer"
+                                      >
+                                        상세
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>

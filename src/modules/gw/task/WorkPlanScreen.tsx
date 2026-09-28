@@ -18,9 +18,12 @@ import { syncWorkPlanToCalendar, cleanupWorkPlanCalendarEvents } from '@/domain/
 import { WorkPlanEditorModal } from './components/WorkPlanEditorModal';
 import { WorkPlanTeamWeeklyMatrix } from './components/WorkPlanTeamWeeklyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
+import { WorkPlanRequestModal } from './components/WorkPlanRequestModal';
+import { WorkPlanRequestInboxWidget } from './components/WorkPlanRequestInboxWidget';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
+import { CalendarPlus } from 'lucide-react';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
@@ -35,7 +38,8 @@ function dayTitle(date: string): string {
 }
 
 /**
- * 로스터 제외 대상 — 대표(대표이사) 및 일반 운영 모드에서의 테스트 계정 처리.
+ * 로스터 제외 대상 — 일반 운영 모드에서의 테스트 계정 처리.
+ * - 대표이사 포함 모든 정규 임직원이 표시됩니다.
  * - 본인 계정은 테스터라도 항상 표시됩니다.
  * - 테스트 계정/부서로 로그인하여 시연 중일 때는 테스트 부서 인원들이 정상 표시됩니다.
  */
@@ -58,7 +62,7 @@ const isExcludedFromRoster = (user: User, actor?: User | null) => {
   );
 
   if (isActorTest && isUserTest) return false;
-  return user.position.includes('대표') || isUserTest;
+  return isUserTest;
 };
 
 export default function WorkPlanScreen() {
@@ -92,6 +96,7 @@ export default function WorkPlanScreen() {
 
   const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan } | null>(null);
   const [viewingDetail, setViewingDetail] = useState<{ user: User; plan: WorkPlan } | null>(null);
+  const [requestTarget, setRequestTarget] = useState<{ user: User; date: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
@@ -373,25 +378,30 @@ export default function WorkPlanScreen() {
           </div>
         </div>
 
-        {/* 이름 또는 부서 실시간 검색창 */}
-        <div className="relative min-w-[180px] flex-1 sm:max-w-[240px]">
-          <input
-            type="text"
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            placeholder="이름 또는 부서 검색..."
-            className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
-          />
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
-          {searchKeyword && (
-            <button
-              type="button"
-              onClick={() => setSearchKeyword('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
-            >
-              ✕
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          {/* 이름 또는 부서 실시간 검색창 */}
+          <div className="relative min-w-[160px] flex-1 sm:max-w-[220px]">
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              placeholder="이름 또는 부서 검색..."
+              className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
+            />
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
+            {searchKeyword && (
+              <button
+                type="button"
+                onClick={() => setSearchKeyword('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* 일정 요청함 버튼/위젯 */}
+          <WorkPlanRequestInboxWidget actor={actor} />
         </div>
       </div>
 
@@ -404,6 +414,7 @@ export default function WorkPlanScreen() {
         deptId={deptId}
         onOpenEditor={(date, plan) => setEditingTarget({ date, plan })}
         onOpenDetail={(user, plan) => setViewingDetail({ user, plan })}
+        onRequestPlan={(user, date) => setRequestTarget({ user, date })}
         onOpenConfig={() => setIsConfigOpen(true)}
       />
 
@@ -442,7 +453,27 @@ export default function WorkPlanScreen() {
         open={viewingDetail !== null}
         onClose={() => setViewingDetail(null)}
         title={viewingDetail ? `${viewingDetail.user.name} (${viewingDetail.user.position || '팀원'}) · ${viewingDetail.plan.date} 계획` : ''}
-        footer={<Button size="sm" onClick={() => setViewingDetail(null)}>닫기</Button>}
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                if (!viewingDetail) return;
+                const { user, plan } = viewingDetail;
+                setViewingDetail(null);
+                setRequestTarget({ user, date: plan.date });
+              }}
+            >
+              <span className="flex items-center gap-1.5 text-teal">
+                <CalendarPlus size={14} /> 이 날짜에 일정 추가 요청
+              </span>
+            </Button>
+            <Button size="sm" onClick={() => setViewingDetail(null)}>
+              닫기
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-3">
           <div className="text-[11px] text-ink3">
@@ -453,6 +484,17 @@ export default function WorkPlanScreen() {
           </p>
         </div>
       </Modal>
+
+      {/* 동료 일정 추가 요청 모달 */}
+      {requestTarget && (
+        <WorkPlanRequestModal
+          isOpen={Boolean(requestTarget)}
+          onClose={() => setRequestTarget(null)}
+          actor={actor}
+          targetUser={requestTarget.user}
+          initialDate={requestTarget.date}
+        />
+      )}
     </div>
   );
 }
