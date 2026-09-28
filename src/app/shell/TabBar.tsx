@@ -14,7 +14,7 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeUrl, onSelect, onClose, menuOpen, setMenuOpen }: TabBarProps) {
   return (
-    <div className="relative flex h-9 shrink-0 items-end border-b border-border-hi bg-bg-deep pl-2.5">
+    <div className="relative flex h-9 shrink-0 items-end border-b border-border-hi bg-bg-deep pl-2.5 w-full min-w-full">
       <div className="flex min-w-0 flex-1 items-end gap-[3px] overflow-hidden">
         {tabs.map((t) => {
           const a = t.url === activeUrl;

@@ -141,7 +141,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
   return (
     <header
       style={{ backgroundColor: 'var(--color-header-bg)', color: 'var(--color-header-text)' }}
-      className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 px-3.5 w-full max-w-full min-w-0"
+      className="relative z-50 flex h-[58px] shrink-0 items-center gap-2.5 px-3.5 w-full min-w-full"
     >
       <div className="flex shrink-0 items-center gap-7">
         <Brand logoUrl={logoUrl} onLogoClick={() => navigate('/exec')} />

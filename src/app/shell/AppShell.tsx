@@ -165,7 +165,7 @@ export default function AppShell() {
     setFavs((f) => (f.includes(name) ? f.filter((x) => x !== name) : [...f, name]));
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-bg w-full max-w-full min-w-0 overflow-x-clip">
+    <div className="relative flex min-h-screen flex-col bg-bg w-full min-w-fit">
       <Topbar
         activeModuleId={activeModuleId}
         activeUrl={activeUrl}
@@ -181,7 +181,7 @@ export default function AppShell() {
       {/* 모듈 드롭다운 딤 */}
       {openModule && <div onClick={() => setOpenModule(null)} className="absolute inset-x-0 bottom-0 top-[58px] z-40 bg-navy-deep/30" />}
 
-      <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 w-full min-w-0' : 'flex min-h-0 flex-1 w-full'}>
+      <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 w-full min-w-fit' : 'flex min-h-0 flex-1 w-full'}>
         {/* /gw 하위 라우트(:조직도, 전자결재 등)에서는 좌측 사이드바 숨김 */}
         {!activeUrl.startsWith('/gw') && (
           <Sidebar
@@ -199,7 +199,7 @@ export default function AppShell() {
           />
         )}
 
-        <div className="flex flex-1 flex-col min-w-0 w-full">
+        <div className="flex flex-1 flex-col min-w-fit w-full">
           <TabBar
             tabs={tabs}
             activeUrl={activeUrl}
@@ -208,7 +208,7 @@ export default function AppShell() {
             menuOpen={tabMenuOpen}
             setMenuOpen={setTabMenuOpen}
           />
-          <main className={activeUrl.startsWith('/gw') ? 'flex-1 bg-bg min-w-0' : 'flex-1 bg-bg min-h-0 overflow-y-auto'}>
+          <main className={activeUrl.startsWith('/gw') ? 'flex-1 bg-bg min-w-fit' : 'flex-1 bg-bg min-h-0 overflow-y-auto'}>
             {tabs.length === 0 ? (
               <NoTab />
             ) : (
@@ -228,7 +228,7 @@ export default function AppShell() {
       {/* 하단 푸터 */}
       <footer
         style={{ backgroundColor: 'var(--color-header-bg)', color: 'var(--color-header-text)' }}
-        className="shrink-0 flex items-center justify-center gap-2 px-4 py-1.5 text-[10px] opacity-70 w-full"
+        className="shrink-0 flex items-center justify-center gap-2 px-4 py-1.5 text-[10px] opacity-70 w-full min-w-full"
       >
         <span>© {new Date().getFullYear()} WorkFit</span>
         <span>·</span>

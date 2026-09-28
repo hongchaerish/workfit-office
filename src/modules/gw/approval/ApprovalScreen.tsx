@@ -444,7 +444,7 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className="w-full min-w-[1080px] px-6 pt-2 pb-6">
+    <div className={`w-full px-6 pt-2 pb-6 ${isListCollapsed ? 'min-w-[920px]' : 'min-w-[1240px]'}`}>
       <div className="flex gap-4 items-start w-full">
         {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
         <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
@@ -874,7 +874,7 @@ export default function ApprovalScreen() {
             )}
 
             {/* 우: 상세 */}
-            <div className="rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
+            <div className="rounded-xl border border-border bg-panel flex-1 min-w-[680px] shadow-sm">
               {selDoc ? (
                 <DocDetail
                   key={selDoc.id}

@@ -479,7 +479,7 @@ export function ApprovalDocumentView({
         </div>
       )}
 
-      <div className="approval-print mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-xs box-border">
+      <div className="approval-print mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-[620px] shadow-xs box-border">
 
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
           <div className="flex items-center gap-2 h-full">
