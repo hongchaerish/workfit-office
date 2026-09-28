@@ -13,15 +13,29 @@ import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { Pill } from '@/shared/ui/Pill';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { useQuickDockConfig, REQUIRED_MODULE_KEYS } from './useQuickDockConfig';
+import { useBoardPosts } from '@/features/board/useBoardPosts';
 
 /** 도크 패널 공용 카드(흰 배경 + 틸 액센트 바). */
-export function DockCard({ title, count, children }: { title: string; count?: string; children: ReactNode }) {
+export function DockCard({
+  title,
+  count,
+  action,
+  children,
+}: {
+  title: string;
+  count?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="rounded-xl border border-border bg-panel px-3.5 py-3">
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="h-3.5 w-1 rounded-sm bg-teal" />
-        <span className="text-[12.5px] font-bold text-ink">{title}</span>
-        {count && <span className="rounded-full bg-danger/10 px-[7px] py-px text-[10px] font-extrabold text-danger">{count}</span>}
+      <div className="mb-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="h-3.5 w-1 rounded-sm bg-teal" />
+          <span className="text-[12.5px] font-bold text-ink">{title}</span>
+          {count && <span className="rounded-full bg-danger/10 px-[7px] py-px text-[10px] font-extrabold text-danger">{count}</span>}
+        </div>
+        {action}
       </div>
       {children}
     </div>
@@ -101,11 +115,17 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
       .filter((a): a is AppItem => a !== undefined && canAccess('/gw/' + a.to));
   }, [normalOrder, rawApps, canAccess]);
 
-  const notices: [string, string][] = [
-    ['[필독] 2분기 안전점검 일정 안내', '06.18'],
-    ['하계 휴가 신청 마감 안내', '06.16'],
-    ['사내 동호회 지원금 신청', '06.12'],
-  ];
+  const { data: allBoardPosts = [] } = useBoardPosts();
+  const noticePosts = useMemo(() => {
+    return allBoardPosts
+      .filter((p) => p.boardId === 'notice')
+      .sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      })
+      .slice(0, 4);
+  }, [allBoardPosts]);
 
   return (
     <div className="flex h-full flex-col bg-[#f2faf3]">
@@ -430,16 +450,52 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
           )}
         </DockCard>
 
-        <DockCard title="공지사항">
-          {notices.map((n, i) => (
-            <div
-              key={i}
-              className={`flex w-full justify-between gap-2 py-[9px] text-left ${i < notices.length - 1 ? 'border-b border-border' : ''} opacity-60`}
+        <DockCard
+          title="공지사항"
+          count={noticePosts.length ? String(noticePosts.length) : undefined}
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                nav('/gw/board?board=notice');
+                onClose();
+              }}
+              className="text-[10.5px] font-bold text-teal hover:underline cursor-pointer"
             >
-              <span className="truncate text-[11.5px] font-medium text-ink2">{n[0]}</span>
-              <span className="shrink-0 text-[10px] tabular-nums text-ink3">{n[1]}</span>
-            </div>
+              더보기 &gt;
+            </button>
+          }
+        >
+          {noticePosts.map((p, i, arr) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                nav(`/gw/board?board=notice&postId=${p.id}`);
+                onClose();
+              }}
+              className={`flex w-full items-center justify-between gap-2 py-[9px] text-left transition-colors cursor-pointer group ${
+                i < arr.length - 1 ? 'border-b border-border' : ''
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                {p.isPinned && (
+                  <span className="shrink-0 rounded bg-teal-soft/80 border border-teal/20 px-1 py-0.2 text-[8.5px] font-extrabold text-teal">
+                    중요
+                  </span>
+                )}
+                <span className="truncate text-[11.5px] font-medium text-ink2 group-hover:text-teal group-hover:font-semibold transition-colors">
+                  {p.title}
+                </span>
+              </div>
+              <span className="shrink-0 text-[10px] tabular-nums text-ink3">
+                {p.date ? p.date.slice(5).replace('-', '.') : ''}
+              </span>
+            </button>
           ))}
+          {noticePosts.length === 0 && (
+            <div className="py-4 text-center text-[11px] text-ink3">등록된 공지사항이 없습니다.</div>
+          )}
         </DockCard>
       </div>
     </div>

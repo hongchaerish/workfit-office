@@ -14,10 +14,11 @@ import {
   ArrowLeft,
   Lightbulb,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { boardRepo } from '@/data/board/board.repo';
+import { useBoardPosts } from '@/features/board/useBoardPosts';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
 import { fileStorage } from '@/shared/lib/storage';
@@ -43,22 +44,26 @@ function getBoardIcon(boardId: string, size = 16, className = '') {
 
 export default function BoardScreen() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const boardParam = searchParams.get('board');
+  const postIdParam = searchParams.get('postId');
+
   const { user } = useAuth();
   const { canAction } = usePermission();
   const canCreate = canAction('S_GW_BOARD', 'create');
   const canDelete = canAction('S_GW_BOARD', 'delete');
   const canUpdate = canAction('S_GW_BOARD', 'update');
   
+  const { data: postsData = [], isLoading } = useBoardPosts();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeBoard, setActiveBoard] = useState<string>('notice');
+  const [activeBoard, setActiveBoard] = useState<string>(boardParam || 'notice');
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write' | 'edit'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(postIdParam);
 
   // 기존 첨부파일 목록 (수정 시 사용)
   const [existingAttachments, setExistingAttachments] = useState<{ name: string; size: string; url?: string }[]>([]);
-  
+
   // 선택된 실제 파일 객체 목록 상태
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
@@ -78,29 +83,34 @@ export default function BoardScreen() {
     isPinned: false,
   });
 
-  // 게시글 비동기 로드
+  // TanStack Query 데이터 동기화
   useEffect(() => {
-    let isMounted = true;
-    const fetchPosts = async () => {
-      try {
-        setIsLoading(true);
-        const data = await boardRepo.list();
-        if (isMounted) {
-          setPosts(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch posts:', error);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+    setPosts(postsData);
+  }, [postsData]);
+
+  // URL 파라미터 변경 감지 (도크 공지사항 클릭 등으로 진입 시)
+  useEffect(() => {
+    if (boardParam && BOARDS.some((b) => b.id === boardParam)) {
+      setActiveBoard(boardParam);
+    }
+  }, [boardParam]);
+
+  useEffect(() => {
+    if (postIdParam && posts.length > 0) {
+      const found = posts.find((p) => String(p.id) === String(postIdParam));
+      if (found) {
+        setActiveBoard(found.boardId);
+        setSelectedPostId(String(found.id));
+        setViewMode('detail');
       }
-    };
-    fetchPosts();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    }
+  }, [postIdParam, posts]);
+
+  const handleBackToList = () => {
+    setSearchParams({ board: activeBoard });
+    setSelectedPostId(null);
+    setViewMode('list');
+  };
 
   const activeBoardMeta = useMemo(() => {
     return BOARDS.find((b) => b.id === activeBoard) || BOARDS[0];
@@ -487,7 +497,7 @@ export default function BoardScreen() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <button
-                onClick={() => setViewMode('list')}
+                onClick={handleBackToList}
                 className="flex items-center gap-1.5 text-teal font-bold hover:underline"
               >
                 <ArrowLeft size={14} /> <span>목록으로</span>
