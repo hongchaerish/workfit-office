@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw } from 'lucide-react';
+import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -126,6 +126,98 @@ export default function ApprovalScreen() {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set('doc', targetDocId);
     window.history.replaceState(null, '', nextUrl.toString());
+  };
+
+  // ── 상단 문서 검색 상태 및 드롭다운 연동 ──
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchBoxFilter, setSearchBoxFilter] = useState<'all' | ApprovalBox>('all');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // 접근 가능한 전체 고유 문서 풀 (현재 사용자가 조회 가능한 모든 함의 문서)
+  const searchableDocs = useMemo(() => {
+    const docMap = new Map<string, ApprovalDoc>();
+    Object.values(byBox).forEach((list) => {
+      list.forEach((d) => docMap.set(d.id, d));
+    });
+    // allDocs 중에서도 본인이 기안자/결재자/참조자인 문서 포함
+    allDocs.forEach((d) => {
+      if (
+        d.drafterId === me ||
+        d.steps.some((s) => s.approverId === me) ||
+        d.recipients?.some((r) => r.id === me)
+      ) {
+        docMap.set(d.id, d);
+      }
+    });
+    return Array.from(docMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  }, [byBox, allDocs, me]);
+
+  // 선택된 문서함 풀
+  const targetDocsPool = useMemo(() => {
+    if (searchBoxFilter === 'all') {
+      return searchableDocs;
+    }
+    return byBox[searchBoxFilter] ?? [];
+  }, [searchBoxFilter, searchableDocs, byBox]);
+
+  // 검색어에 따른 필터링 결과
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const baseList = targetDocsPool;
+    if (!q) {
+      return baseList.slice(0, 6);
+    }
+    return baseList
+      .filter((d) => {
+        const title = (d.title || '').toLowerCase();
+        const docNo = (d.docNo || '').toLowerCase();
+        const drafter = (d.drafterName || '').toLowerCase();
+        const docType = (d.docType || '').toLowerCase();
+        const dept = (d.drafterDept || '').toLowerCase();
+        return (
+          title.includes(q) ||
+          docNo.includes(q) ||
+          drafter.includes(q) ||
+          docType.includes(q) ||
+          dept.includes(q)
+        );
+      })
+      .slice(0, 10);
+  }, [searchQuery, targetDocsPool]);
+
+  // 검색 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 검색 결과 문서 클릭 시 이동 핸들러
+  const handleSelectSearchedDoc = (d: ApprovalDoc) => {
+    let targetBox: ApprovalBox = searchBoxFilter !== 'all' ? searchBoxFilter : '상신';
+    if (searchBoxFilter === 'all') {
+      if (d.status === '임시저장') targetBox = '임시';
+      else if (d.status === '반려') targetBox = '반려';
+      else if (d.status === '회수') targetBox = '상신';
+      else if (d.status === '진행중') {
+        const myStep = activeSteps(d).find((s) => s.approverId === me);
+        targetBox = myStep ? '대기' : '상신';
+      } else if (d.status === '완료') {
+        targetBox = '완료';
+      }
+    }
+
+    setBox(targetBox);
+    handleSelectDoc(d);
+    setIsSearchOpen(false);
+    setSearchQuery('');
   };
 
   // 반려함 문서 읽음(열람) 관리
@@ -619,16 +711,142 @@ export default function ApprovalScreen() {
         {/* 우측 영역: 타이틀 바 + (목록 & 상세) */}
         <div className="flex-1 flex flex-col gap-3">
           {/* 상단 고정 통합 타이틀 바 ( GwHead 잘림 제거 대안 ) */}
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-4 border-b border-border pb-2.5">
+            <div className="flex items-center gap-2 shrink-0">
               <PenLine size={20} className="text-teal" />
               <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
+            </div>
+
+            {/* ── 상단 문서 검색 인풋 & 결과 드롭다운 ── */}
+            <div ref={searchContainerRef} className="relative flex-1 max-w-[620px]">
+              <div className="flex items-center gap-1.5">
+                {/* 문서함 종류 필터 셀렉트 */}
+                <select
+                  value={searchBoxFilter}
+                  onChange={(e) => setSearchBoxFilter(e.target.value as any)}
+                  className="h-[32px] rounded-lg border border-border bg-panel-alt/60 hover:bg-panel px-2 text-[11px] font-bold text-ink outline-none focus:border-teal shrink-0 cursor-pointer shadow-2xs transition-colors"
+                >
+                  <option value="all">전체 문서함</option>
+                  <option value="대기">결재 대기함</option>
+                  <option value="상신">기안/상신함</option>
+                  <option value="완료">결재 완료함</option>
+                  <option value="반려">반려함</option>
+                  <option value="참조">참조함</option>
+                  <option value="수신">수신함</option>
+                  <option value="부서">부서 문서함</option>
+                  <option value="임시">임시 저장함</option>
+                </select>
+
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsSearchOpen(true);
+                    }}
+                    onFocus={() => setIsSearchOpen(true)}
+                    placeholder="결재 문서명, 문서번호, 기안자 검색..."
+                    className="w-full rounded-lg border border-border bg-panel-alt/50 hover:bg-panel pl-8.5 pr-8 py-1.5 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel focus:ring-1 focus:ring-teal/30 transition-all shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setIsSearchOpen(false);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 검색 결과 드롭다운 */}
+              {isSearchOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[390px] overflow-y-auto rounded-xl border border-border bg-panel shadow-2xl p-1.5 space-y-1 backdrop-blur-md animate-fadeIn">
+                  {/* 드롭다운 상단 문서함 필터 탭 칩 */}
+                  <div className="flex items-center gap-1 overflow-x-auto px-1.5 py-1 border-b border-border/50">
+                    {[
+                      { k: 'all', l: '전체' },
+                      { k: '대기', l: '대기' },
+                      { k: '상신', l: '상신' },
+                      { k: '완료', l: '완료' },
+                      { k: '반려', l: '반려' },
+                      { k: '참조', l: '참조' },
+                      { k: '수신', l: '수신' },
+                      { k: '부서', l: '부서' },
+                      { k: '임시', l: '임시' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.k}
+                        type="button"
+                        onClick={() => setSearchBoxFilter(tab.k as any)}
+                        className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold transition-all shrink-0 cursor-pointer ${
+                          searchBoxFilter === tab.k
+                            ? 'bg-teal text-white shadow-2xs'
+                            : 'bg-panel-alt text-ink3 hover:text-ink hover:bg-border/50'
+                        }`}
+                      >
+                        {tab.l}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="px-2 py-0.5 text-[10px] font-bold text-ink3 flex items-center justify-between">
+                    <span>
+                      {searchBoxFilter !== 'all' ? `[${searchBoxFilter}함] ` : ''}
+                      {searchQuery.trim() ? `검색 결과 (${searchResults.length}건)` : '최근 문서'}
+                    </span>
+                    <span className="text-[9.5px]">ESC 또는 바깥 클릭 시 닫힘</span>
+                  </div>
+
+                  {searchResults.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handleSelectSearchedDoc(d)}
+                      className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors cursor-pointer hover:bg-teal-soft/40 ${
+                        selId === d.id ? 'bg-teal-soft/60 border border-teal/20' : ''
+                      }`}
+                    >
+                      <div className="pt-0.5 shrink-0">
+                        <DocTypeIcon type={d.docType} size={15} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <DocStatusBadge doc={d} me={me} />
+                          <span className="truncate text-[11.5px] font-bold text-ink hover:text-teal transition-colors">
+                            {d.title}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-ink3 truncate">
+                          <span className="font-mono text-ink2">{d.docNo || '임시문서'}</span>
+                          <span>·</span>
+                          <span>{d.drafterName} ({d.drafterDept || d.docType})</span>
+                          <span>·</span>
+                          <span>{d.createdAt ? d.createdAt.slice(0, 10) : ''}</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+
+                  {searchResults.length === 0 && (
+                    <div className="py-6 text-center text-[11.5px] text-ink3">
+                      선택된 문서함에 검색 조건과 일치하는 결재 문서가 없습니다.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <button
               type="button"
               onClick={() => setIsListCollapsed(!isListCollapsed)}
-              className="rounded-lg border border-teal/30 bg-white dark:bg-panel px-3 py-1.5 text-[11.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/20 transition-all shadow-2xs hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer"
+              className="rounded-lg border border-teal/30 bg-white dark:bg-panel px-3 py-1.5 text-[11.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/20 transition-all shadow-2xs hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer shrink-0"
             >
               <span>{isListCollapsed ? '▶' : '◀'}</span>
               <span>{isListCollapsed ? '목록 펼치기' : '목록 접기'}</span>
