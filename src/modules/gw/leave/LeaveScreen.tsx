@@ -13,11 +13,11 @@ import { resolveCommuteScope } from '@/features/auth/scopeHelper';
  */
 export default function LeaveScreen() {
   const { user } = useAuth();
-  const { userRoles, isAdmin } = usePermission();
+  const { userRoles } = usePermission();
   const org = useOrgTree();
 
   const commuteScope = resolveCommuteScope(user, userRoles, org);
-  const canAll = isAdmin || commuteScope === 'ALL';
+  const canAll = commuteScope === 'ALL';
 
   if (canAll) {
     return <Navigate to="/gw/commute?tab=team&adminTab=leave_ledger" replace />;

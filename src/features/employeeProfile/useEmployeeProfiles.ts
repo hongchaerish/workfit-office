@@ -32,6 +32,7 @@ export function useUpsertEmployeeProfile() {
         position: values.position || existing?.position || '사원',
         jobTitle: values.jobTitle || existing?.jobTitle || '팀원',
         status: values.status || existing?.status || 'ACTIVE',
+        isAttendanceTarget: values.isAttendanceTarget !== undefined ? values.isAttendanceTarget : (existing?.isAttendanceTarget ?? true),
         phone: values.phone !== undefined ? values.phone : (existing?.phone || ''),
         hireDate: values.hireDate !== undefined ? values.hireDate : (existing?.hireDate || ''),
         rrn: values.rrn !== undefined ? values.rrn : (existing?.rrn || ''),

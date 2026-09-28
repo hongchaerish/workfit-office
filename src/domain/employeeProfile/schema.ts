@@ -26,6 +26,8 @@ export const employeeProfileSchema = z.object({
   jobTitle: z.string().default('팀원'),
   /** 재직 상태 */
   status: z.enum(EMPLOYMENT_STATUS).default('ACTIVE'),
+  /** 근태 관리 대상 여부 (true: 대상[기본], false: 전사관리 제외[비상근/대표이사/부위원장 등]) */
+  isAttendanceTarget: z.preprocess((v) => (v == null ? true : typeof v === 'boolean' ? v : String(v) !== 'false'), z.boolean().default(true)),
   /** 업무/개인 연락처 */
   phone: nullableString,
   /** 입사일 (YYYY-MM-DD) */

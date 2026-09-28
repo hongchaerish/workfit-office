@@ -47,6 +47,7 @@ export default function EmployeeScreen() {
   const [deptFilter, setDeptFilter] = useState('all');
   const [posFilter, setPosFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('ACTIVE'); // 기본 재직자만 보기
+  const [attendanceTargetFilter, setAttendanceTargetFilter] = useState<'all' | 'target' | 'excluded'>('all'); // 근태관리 대상 필터
 
   // 상세 보기 및 편집 대상
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function EmployeeScreen() {
   const [newEmpPersonalEmail, setNewEmpPersonalEmail] = useState('');
   const [newEmpEmergencyPhone, setNewEmpEmergencyPhone] = useState('');
   const [newEmpEducation, setNewEmpEducation] = useState('');
+  const [newEmpIsAttendanceTarget, setNewEmpIsAttendanceTarget] = useState(true);
 
   // 발령 대상 계정 선택 핸들러
   const handleSelectCreateUser = (userId: string) => {
@@ -84,6 +86,7 @@ export default function EmployeeScreen() {
       setNewEmpNo('');
       setNewEmpName('');
       setNewEmpEmail('');
+      setNewEmpIsAttendanceTarget(true);
       return;
     }
     const targetDeptName = u.dept && u.dept !== '미지정' ? u.dept : departments[0]?.name || '인사지원팀';
@@ -103,6 +106,7 @@ export default function EmployeeScreen() {
     setNewEmpPersonalEmail((u as any).personalEmail || '');
     setNewEmpEmergencyPhone((u as any).emergencyPhone || '');
     setNewEmpEducation((u as any).education || '');
+    setNewEmpIsAttendanceTarget(true);
   };
 
   // 정보 수정 폼 상태
@@ -115,6 +119,7 @@ export default function EmployeeScreen() {
   const [editEmpPhone, setEditEmpPhone] = useState('');
   const [editEmpHireDate, setEditEmpHireDate] = useState('');
   const [editEmpStatus, setEditEmpStatus] = useState<EmploymentStatus>('ACTIVE');
+  const [editEmpIsAttendanceTarget, setEditEmpIsAttendanceTarget] = useState(true);
   const [editEmpRrn, setEditEmpRrn] = useState('');
   const [editEmpBirthDate, setEditEmpBirthDate] = useState('');
   const [editEmpGender, setEditEmpGender] = useState('');
@@ -142,6 +147,9 @@ export default function EmployeeScreen() {
         ? 'RETIRED'
         : p?.status || (u.status === '사용' ? 'ACTIVE' : u.status === '잠금' ? 'LEAVE' : 'RETIRED');
 
+      // 근태 관리 대상 여부 판정 (프로필 설정값 반영, 기본값: true)
+      const isAttendanceTarget = p?.isAttendanceTarget !== undefined ? Boolean(p.isAttendanceTarget) : true;
+
       return {
         id: p?.id || u.id,
         employeeNo: p?.empNo || u.empNo || u.id,
@@ -156,6 +164,7 @@ export default function EmployeeScreen() {
         hireDate: p?.hireDate || (u as any).hireDate || '',
         employmentStatus,
         isPending,
+        isAttendanceTarget,
         rrn: p?.rrn || (u as any).rrn || '',
         address: p?.address || (u as any).address || '',
         personalEmail: p?.personalEmail || (u as any).personalEmail || '',
@@ -241,6 +250,19 @@ export default function EmployeeScreen() {
     return { total, active, retired, pending, leave };
   }, [employees]);
 
+  // 근태관리 대상 여부별 카운트 계산
+  const attendanceCounts = useMemo(() => {
+    let target = 0;
+    let excluded = 0;
+
+    for (const e of employees) {
+      if (e.isAttendanceTarget) target++;
+      else excluded++;
+    }
+
+    return { total: employees.length, target, excluded };
+  }, [employees]);
+
   // 필터링된 임직원 리스트
   const filteredEmployees = useMemo(() => {
     return employees.filter((e) => {
@@ -260,6 +282,13 @@ export default function EmployeeScreen() {
         matchStatus = true;
       }
 
+      let matchAttendance = true;
+      if (attendanceTargetFilter === 'target') {
+        matchAttendance = Boolean(e.isAttendanceTarget);
+      } else if (attendanceTargetFilter === 'excluded') {
+        matchAttendance = !e.isAttendanceTarget;
+      }
+
       const q = searchQuery.trim().toLowerCase();
       const matchQuery =
         !q ||
@@ -267,9 +296,9 @@ export default function EmployeeScreen() {
         e.employeeNo.toLowerCase().includes(q) ||
         (e.email && e.email.toLowerCase().includes(q));
 
-      return matchDept && matchPos && matchStatus && matchQuery;
+      return matchDept && matchPos && matchStatus && matchAttendance && matchQuery;
     });
-  }, [employees, deptFilter, posFilter, statusFilter, searchQuery]);
+  }, [employees, deptFilter, posFilter, statusFilter, attendanceTargetFilter, searchQuery]);
 
   // 실시간 부서 트리 생성
   const orgTree: OrgNode[] = useMemo(() => {
@@ -363,6 +392,7 @@ export default function EmployeeScreen() {
           position: newEmpPos || positions[0]?.name || '사원',
           jobTitle: finalDuty,
           status: 'ACTIVE',
+          isAttendanceTarget: newEmpIsAttendanceTarget,
           phone: newEmpPhone.trim(),
           hireDate: newEmpHireDate,
           rrn: newEmpRrn.trim(),
@@ -398,6 +428,7 @@ export default function EmployeeScreen() {
       setNewEmpPersonalEmail('');
       setNewEmpEmergencyPhone('');
       setNewEmpEducation('');
+      setNewEmpIsAttendanceTarget(true);
       setIsCreateModalOpen(false);
       alert('임직원 인사 발령이 성공적으로 완료되었습니다.');
     } catch (err: any) {
@@ -416,6 +447,7 @@ export default function EmployeeScreen() {
     setEditEmpPhone(emp.phone || '');
     setEditEmpHireDate(emp.hireDate || '');
     setEditEmpStatus(emp.employmentStatus);
+    setEditEmpIsAttendanceTarget(emp.isAttendanceTarget);
     setEditEmpRrn(emp.rrn || '');
     setEditEmpBirthDate(emp.birthDate || '');
     setEditEmpGender(emp.gender || '');
@@ -458,6 +490,7 @@ export default function EmployeeScreen() {
           position: editEmpPos || '사원',
           jobTitle: finalDuty,
           status: editEmpStatus,
+          isAttendanceTarget: editEmpIsAttendanceTarget,
           phone: editEmpPhone.trim(),
           hireDate: editEmpHireDate,
           rrn: editEmpRrn.trim(),
@@ -637,33 +670,91 @@ export default function EmployeeScreen() {
 
             {/* 필터 툴바 */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-panel-alt/30 p-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[
-                  { key: 'all', label: '전체', count: statusCounts.total },
-                  { key: 'ACTIVE', label: '재직', count: statusCounts.active },
-                  { key: 'PENDING', label: '발령대기', count: statusCounts.pending },
-                  { key: 'RETIRED', label: '퇴사자', count: statusCounts.retired },
-                  { key: 'LEAVE', label: '휴직', count: statusCounts.leave },
-                ].map((st) => (
-                  <button
-                    key={st.key}
-                    onClick={() => setStatusFilter(st.key)}
-                    className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold transition-all ${
-                      statusFilter === st.key
-                        ? 'bg-teal text-white shadow-2xs'
-                        : 'border border-border/60 bg-panel text-ink2 hover:border-teal/50 hover:text-ink'
-                    }`}
-                  >
-                    <span>{st.label}</span>
-                    <span
-                      className={`rounded-full px-1.5 py-0.2 text-[9.5px] ${
-                        statusFilter === st.key ? 'bg-white/25 text-white' : 'bg-panel-alt text-ink3'
+              <div className="flex flex-wrap items-center gap-3">
+                {/* 재직 상태 필터 */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { key: 'all', label: '전체', count: statusCounts.total },
+                    { key: 'ACTIVE', label: '재직', count: statusCounts.active },
+                    { key: 'PENDING', label: '발령대기', count: statusCounts.pending },
+                    { key: 'RETIRED', label: '퇴사자', count: statusCounts.retired },
+                    { key: 'LEAVE', label: '휴직', count: statusCounts.leave },
+                  ].map((st) => (
+                    <button
+                      key={st.key}
+                      onClick={() => setStatusFilter(st.key)}
+                      className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold transition-all ${
+                        statusFilter === st.key
+                          ? 'bg-teal text-white shadow-2xs'
+                          : 'border border-border/60 bg-panel text-ink2 hover:border-teal/50 hover:text-ink'
                       }`}
                     >
-                      {st.count}
+                      <span>{st.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.2 text-[9.5px] ${
+                          statusFilter === st.key ? 'bg-white/25 text-white' : 'bg-panel-alt text-ink3'
+                        }`}
+                      >
+                        {st.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* 구분선 */}
+                <div className="hidden sm:block h-4 w-px bg-border/80" />
+
+                {/* 근태관리 대상 필터 버튼 그룹 */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-ink2 mr-0.5">근태관리:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceTargetFilter('all')}
+                    className={`rounded-md px-2 py-1 text-[11px] font-bold transition-all ${
+                      attendanceTargetFilter === 'all'
+                        ? 'bg-slate-700 dark:bg-slate-300 text-white dark:text-slate-900 shadow-2xs'
+                        : 'border border-border/60 bg-panel text-ink2 hover:border-border hover:text-ink'
+                    }`}
+                  >
+                    전체
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceTargetFilter('target')}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold transition-all ${
+                      attendanceTargetFilter === 'target'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'border border-border/60 bg-panel text-emerald-700 dark:text-emerald-400 hover:border-emerald-500/50'
+                    }`}
+                  >
+                    <span>✓ 대상</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[9.5px] ${
+                        attendanceTargetFilter === 'target' ? 'bg-white/25 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                      }`}
+                    >
+                      {attendanceCounts.target}
                     </span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceTargetFilter('excluded')}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold transition-all ${
+                      attendanceTargetFilter === 'excluded'
+                        ? 'bg-rose-600 text-white shadow-2xs'
+                        : 'border border-border/60 bg-panel text-rose-700 dark:text-rose-400 hover:border-rose-500/50'
+                    }`}
+                  >
+                    <span>✕ 제외</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[9.5px] ${
+                        attendanceTargetFilter === 'excluded' ? 'bg-white/25 text-white' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      }`}
+                    >
+                      {attendanceCounts.excluded}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -715,6 +806,7 @@ export default function EmployeeScreen() {
                     <th className="py-2.5 px-3">이메일</th>
                     <th className="py-2.5 px-3 w-36">연락처</th>
                     <th className="py-2.5 px-3 text-center w-20">재직상태</th>
+                    <th className="py-2.5 px-3 text-center w-24">근태관리</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -783,12 +875,23 @@ export default function EmployeeScreen() {
                                 : '재직'}
                             </span>
                           </td>
+                          <td className="py-2 px-3 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9.5px] font-bold ${
+                                e.isAttendanceTarget
+                                  ? 'border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                  : 'border-rose-500/30 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-400'
+                              }`}
+                            >
+                              {e.isAttendanceTarget ? '✓ 대상' : '✕ 제외'}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center text-ink3 text-[11.5px]">
+                      <td colSpan={10} className="p-12 text-center text-ink3 text-[11.5px]">
                         {isUsersLoading ? '임직원 목록을 불러오는 중...' : '검색 조건에 일치하는 임직원이 없습니다.'}
                       </td>
                     </tr>
@@ -997,6 +1100,19 @@ export default function EmployeeScreen() {
                           }`}
                         >
                           {selectedEmp.employmentStatus === 'ACTIVE' ? '재직 중' : selectedEmp.employmentStatus === 'LEAVE' ? '휴직' : '퇴직자'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="block text-[11px] text-ink3">근태 관리</span>
+                        <span
+                          className={`mt-1 inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                            selectedEmp.isAttendanceTarget
+                              ? 'border-teal/20 bg-teal-soft/20 text-teal'
+                              : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {selectedEmp.isAttendanceTarget ? '대상 (ON)' : '제외 (OFF)'}
                         </span>
                       </div>
 
@@ -1351,6 +1467,27 @@ export default function EmployeeScreen() {
                 </div>
               </div>
 
+              {/* 근태 관리 대상 여부 설정 */}
+              <div className="flex items-center justify-between rounded-lg border border-border bg-panel-alt/30 p-2.5">
+                <div>
+                  <span className="text-[11.5px] font-bold text-ink">근태 관리 대상</span>
+                  <p className="text-[10px] text-ink3">
+                    OFF 시 전사 근태/휴가 관리 및 연차 원장에서 제외됩니다 (비상근·대표이사 등).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewEmpIsAttendanceTarget(!newEmpIsAttendanceTarget)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
+                    newEmpIsAttendanceTarget
+                      ? 'border-teal bg-teal text-white shadow-xs'
+                      : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  <span>{newEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-ink2">개인 이메일</label>
@@ -1585,6 +1722,27 @@ export default function EmployeeScreen() {
                         className="h-9 w-full rounded-lg border border-border bg-panel px-3 font-mono text-[12px] outline-none focus:border-teal"
                       />
                     </div>
+                  </div>
+
+                  {/* 근태 관리 대상 여부 설정 */}
+                  <div className="flex items-center justify-between rounded-lg border border-border bg-panel-alt/30 p-2.5">
+                    <div>
+                      <span className="text-[11.5px] font-bold text-ink">근태 관리 대상</span>
+                      <p className="text-[10px] text-ink3">
+                        OFF 시 전사 근태/휴가 관리 및 연차 원장에서 제외됩니다 (비상근·대표이사 등).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditEmpIsAttendanceTarget(!editEmpIsAttendanceTarget)}
+                      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition-all cursor-pointer ${
+                        editEmpIsAttendanceTarget
+                          ? 'border-teal bg-teal text-white shadow-xs'
+                          : 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}
+                    >
+                      <span>{editEmpIsAttendanceTarget ? '✓ 대상 (ON)' : '✕ 제외 (OFF)'}</span>
+                    </button>
                   </div>
 
                   {/* 겸직 부서 관리 섹션 */}

@@ -98,41 +98,12 @@ export const commutePolicy = {
 
   /**
    * 근태 관리 제외 대상 여부 판정
-   * - 위원회 부서(경영기술전략위원회 등)
-   * - 상무이사 이상 임원진 (상무, 전무, 부사장, 사장, 대표이사, 위원장 등)
+   * - 인명관리의 [근태 관리 대상 ON/OFF] 스위치에 의해 결정 (isAttendanceTarget === false 인 경우 제외)
    */
   isNonAttendanceTarget(info?: {
-    name?: string | null;
-    dept?: string | null;
-    position?: string | null;
-    jobTitle?: string | null;
+    isAttendanceTarget?: boolean | null;
   } | null): boolean {
     if (!info) return false;
-    const dept = (info.dept || '').trim();
-    const position = (info.position || '').trim();
-    const jobTitle = (info.jobTitle || '').trim();
-
-    if (
-      dept.includes('경영기술전략위원회') ||
-      dept.includes('기술경영전략위원회') ||
-      dept.includes('전략위원회')
-    ) {
-      return true;
-    }
-
-    const executiveKeywords = [
-      '상무',
-      '전무',
-      '부사장',
-      '사장',
-      '대표이사',
-      '위원장',
-      '부위원장',
-      '회장',
-    ];
-
-    return executiveKeywords.some(
-      (kw) => position.includes(kw) || jobTitle.includes(kw)
-    );
+    return info.isAttendanceTarget === false;
   },
 };

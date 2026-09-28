@@ -63,59 +63,6 @@ import {
 const ME_TAB = 'me';
 const TEAM_TAB = 'team';
 
-/**
- * 근태 관리 제외 대상 여부 판정
- * 1. 부서: 경영기술전략위원회 / 기술경영전략위원회 등 위원회 소속
- * 2. 직급/직책: 상무이사 이상 (상무, 상무이사, 전무, 부사장, 사장, 대표이사, 위원장, 부위원장 등)
- */
-function isNonAttendanceTarget(info?: {
-  name?: string | null;
-  dept?: string | null;
-  position?: string | null;
-  jobTitle?: string | null;
-} | null): boolean {
-  if (!info) return false;
-  const dept = (info.dept || '').trim();
-  const position = (info.position || '').trim();
-  const jobTitle = (info.jobTitle || '').trim();
-  const name = (info.name || '').trim();
-
-  // 1. 위원회 부서 제외
-  if (
-    dept.includes('경영기술전략위원회') ||
-    dept.includes('기술경영전략위원회') ||
-    dept.includes('전략위원회')
-  ) {
-    return true;
-  }
-
-  // 2. 상무이사 이상 임원진 (상무, 전무, 부사장, 사장, 대표이사, 위원장, 부위원장, 회장 등)
-  const executiveKeywords = [
-    '상무',
-    '전무',
-    '부사장',
-    '사장',
-    '대표이사',
-    '위원장',
-    '부위원장',
-    '회장',
-    '부회장',
-  ];
-
-  const fullText = `${position} ${jobTitle} ${name}`;
-  if (executiveKeywords.some((keyword) => fullText.includes(keyword))) {
-    return true;
-  }
-
-  if (name.includes('대표이사') || name === '대표') {
-    return true;
-  }
-
-  return false;
-}
-
-const NON_ATTENDANCE_NAMES = new Set(['위원장님', '부위원장님', '대표이사']);
-
 const pad = (value: number) => String(value).padStart(2, '0');
 
 const thisMonth = () => {
@@ -185,8 +132,9 @@ export default function CommuteScreen() {
   }, [holidays]);
 
   const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
-  const canAll = isAdmin || commuteScope === 'ALL';
-  const canManagePolicy = canAll;
+  // 보안 지침 준수: 비임원/비팀장 사원은 ADMIN 권한이 있더라도 전사 근태 관제 센터에 접근할 수 없으며, 오직 ALL 스코프 보유자만 canAll 부여
+  const canAll = commuteScope === 'ALL';
+  const canManagePolicy = isAdmin || canAll;
 
   const viewerQuery = useCommuteViewer();
   const viewer = viewerQuery.data;
@@ -202,12 +150,81 @@ export default function CommuteScreen() {
   const employeesQuery = useCommuteEmployees();
   const allEmployees = useMemo(() => employeesQuery.data ?? [], [employeesQuery.data]);
 
-  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (퇴사자 완전 배제)
+  // 사용자 검색 맵 (이름, 사번, ID 기준 빠른 매핑)
+  const userByEmpMap = useMemo(() => {
+    const map = new Map<string, typeof allUsers[0]>();
+    for (const u of allUsers) {
+      if (u.empNo) map.set(u.empNo.trim(), u);
+      if (u.name) {
+        map.set(u.name.trim(), u);
+        map.set(normName(u.name), u);
+      }
+      if (u.id) map.set(u.id.trim(), u);
+    }
+    return map;
+  }, [allUsers, normName]);
+
+  const { data: employeeProfiles = [] } = useEmployeeProfiles();
+  const profileByEmpMap = useMemo(() => {
+    const map = new Map<string, typeof employeeProfiles[0]>();
+    for (const p of employeeProfiles) {
+      if (p.empNo) map.set(p.empNo.trim(), p);
+      if (p.name) {
+        map.set(p.name.trim(), p);
+        map.set(normName(p.name), p);
+      }
+      if (p.userId) map.set(p.userId.trim(), p);
+    }
+    return map;
+  }, [employeeProfiles, normName]);
+
+  // 근태 관리 제외 대상 여부 단일 판정 헬퍼 (인명관리의 [근태 관리 대상] ON/OFF 스위치에 의해서만 결정)
+  const isExcludedAttendance = useCallback(
+    (
+      u?: {
+        id?: string;
+        name?: string | null;
+        empNo?: string | null;
+        dept?: string | null;
+        position?: string | null;
+        jobTitle?: string | null;
+      } | null,
+      rowName?: string,
+    ) => {
+      const name = (u?.name || rowName || '').trim();
+      const nName = normName(name);
+
+      // 프로필에 근태 관리 대상 여부가 설정되어 있는 경우 반영 (기본값: true / 관리자가 OFF한 경우: false)
+      const profile =
+        (u?.id ? profileByEmpMap.get(u.id) : undefined) ??
+        (u?.empNo ? profileByEmpMap.get(u.empNo) : undefined) ??
+        (name ? profileByEmpMap.get(name) ?? profileByEmpMap.get(nName) : undefined);
+
+      if (profile?.isAttendanceTarget === false) return true;
+      return false;
+    },
+    [profileByEmpMap, normName],
+  );
+
+  // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (임직원 DB 미등록자 및 근태관리 OFF 대상자 100% 원천 배제)
   const employees = useMemo(() => {
     const list = [
       ...allEmployees
         .filter((row) => row.active !== false && !row.retireDate)
-        .filter((row) => !NON_ATTENDANCE_NAMES.has(row.name.trim()) && !isNonAttendanceTarget({ name: row.name })),
+        .filter((row) => {
+          const n = row.name.trim();
+          const norm = normName(n);
+
+          // [규칙 1] 임직원 데이터베이스(users/allUsers)와 비교: 매칭되는 등록 임직원이 없으면 100% 배제
+          const matchedUser = userByEmpMap.get(n) ?? userByEmpMap.get(norm) ?? userByEmpMap.get(String(row.empId));
+          if (!matchedUser) return false;
+
+          // [규칙 2] 퇴사자(미사용, resignedAt 기록자) 100% 배제
+          if (matchedUser.status === '미사용' || Boolean(matchedUser.resignedAt)) return false;
+
+          // [규칙 3] 인명관리에서 근태관리 대상 OFF로 지정된 경우 배제
+          return !isExcludedAttendance(matchedUser, row.name);
+        }),
     ];
     const existingNormNames = new Set(list.map((e) => normName(e.name)));
     const existingEmpIds = new Set(list.map((e) => e.empId));
@@ -220,7 +237,7 @@ export default function CommuteScreen() {
 
       const name = (u.name || '').trim();
       const nName = normName(name);
-      if (!name || !nName || existingNormNames.has(nName) || NON_ATTENDANCE_NAMES.has(name) || NON_ATTENDANCE_NAMES.has(nName) || isNonAttendanceTarget(u)) continue;
+      if (!name || !nName || existingNormNames.has(nName) || isExcludedAttendance(u, name)) continue;
 
       const isUserTester = (u.dept ?? '').includes('테스트') || name.toLowerCase().includes('test');
       if (isUserTester && !isViewerTester) continue;
@@ -249,44 +266,7 @@ export default function CommuteScreen() {
     }
 
     return list;
-  }, [allEmployees, allUsers, user?.dept, user?.name, normName]);
-
-  const userByEmpMap = useMemo(() => {
-    const map = new Map<string, typeof allUsers[0]>();
-    for (const u of allUsers) {
-      if (u.empNo) map.set(u.empNo.trim(), u);
-      if (u.name) {
-        map.set(u.name.trim(), u);
-        map.set(normName(u.name), u);
-      }
-      if (u.id) map.set(u.id.trim(), u);
-    }
-    for (const emp of employees) {
-      const matched = allUsers.find(
-        (u) => normName(u.name) === normName(emp.name) || u.empNo?.trim() === String(emp.empId),
-      );
-      if (matched) {
-        map.set(String(emp.empId), matched);
-        map.set(emp.name.trim(), matched);
-        map.set(normName(emp.name), matched);
-      }
-    }
-    return map;
-  }, [allUsers, employees, normName]);
-
-  const { data: employeeProfiles = [] } = useEmployeeProfiles();
-  const profileByEmpMap = useMemo(() => {
-    const map = new Map<string, typeof employeeProfiles[0]>();
-    for (const p of employeeProfiles) {
-      if (p.empNo) map.set(p.empNo.trim(), p);
-      if (p.name) {
-        map.set(p.name.trim(), p);
-        map.set(normName(p.name), p);
-      }
-      if (p.userId) map.set(p.userId.trim(), p);
-    }
-    return map;
-  }, [employeeProfiles, normName]);
+  }, [allEmployees, allUsers, userByEmpMap, user?.dept, user?.name, normName, isExcludedAttendance]);
 
   const getHireDateForEmp = useCallback(
     (empName?: string | null, empId?: number | null) => {
@@ -372,9 +352,15 @@ export default function CommuteScreen() {
 
   const myEmpId = useMemo(() => {
     if (viewer?.empId) return viewer.empId;
-    const found = employees.find((e) => e.name.trim() === (user?.name ?? '').trim());
-    return found?.empId ?? (user ? 99999 : null);
-  }, [viewer?.empId, employees, user]);
+    const uName = (user?.name ?? '').trim();
+    const uEmpNo = user?.empNo ? Number(user.empNo) : null;
+    const foundInCaps = allEmployees.find(
+      (e) => (uName && normName(e.name) === normName(uName)) || (uEmpNo && e.empId === uEmpNo)
+    );
+    if (foundInCaps?.empId) return foundInCaps.empId;
+    const foundInEmps = employees.find((e) => e.name.trim() === uName);
+    return foundInEmps?.empId ?? uEmpNo ?? (user ? 99999 : null);
+  }, [viewer?.empId, allEmployees, employees, user, normName]);
 
   // 내 근태 쿼리
   const myMonthQuery = useCommuteMonth(myEmpId, month);
@@ -461,12 +447,20 @@ export default function CommuteScreen() {
       };
     }
 
-    const empInput = employees.map((e) => {
-      const u =
-        userByEmpMap.get(e.name.trim()) ??
-        userByEmpMap.get(normName(e.name)) ??
-        userByEmpMap.get(String(e.empId));
-      const hire = getHireDateForEmp(e.name, e.empId);
+    const empInput = employees
+      .filter((e) => {
+        const u =
+          userByEmpMap.get(e.name.trim()) ??
+          userByEmpMap.get(normName(e.name)) ??
+          userByEmpMap.get(String(e.empId));
+        return !isExcludedAttendance(u, e.name);
+      })
+      .map((e) => {
+        const u =
+          userByEmpMap.get(e.name.trim()) ??
+          userByEmpMap.get(normName(e.name)) ??
+          userByEmpMap.get(String(e.empId));
+        const hire = getHireDateForEmp(e.name, e.empId);
       const isRetired = !e.active || u?.status === '미사용' || Boolean(u?.resignedAt);
       return {
         empId: e.empId,
@@ -542,8 +536,8 @@ export default function CommuteScreen() {
         return false;
       }
 
-      // 경영기술전략위원회 및 상무이사 이상 임원은 근태 관리 대상에서 제외
-      if (isNonAttendanceTarget(matchedUser) || isNonAttendanceTarget({ name: emp.name })) {
+      // 경영기술전략위원회, 상무이사 이상 임원 및 인명관리 [근태 관리 대상 OFF] 직원 제외
+      if (isExcludedAttendance(matchedUser, emp.name)) {
         return false;
       }
 
@@ -566,7 +560,7 @@ export default function CommuteScreen() {
 
       return false;
     });
-  }, [employees, commuteScope, user?.dept, userByEmpMap, normName, excludeTestDept]);
+  }, [employees, commuteScope, user?.dept, userByEmpMap, normName, excludeTestDept, isExcludedAttendance]);
 
   // 부서 목록 추출
   const deptList = useMemo(() => {
