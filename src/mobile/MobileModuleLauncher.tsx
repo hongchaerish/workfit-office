@@ -126,13 +126,13 @@ export default function MobileModuleLauncher() {
       {
         id: 'mail',
         name: '사내메일',
-        desc: '비즈니스 송수신 메일',
+        desc: '비즈니스 송수신 메일 (준비 중)',
         path: '/m/mail',
         icon: Mail,
-        badge: mailUnseen > 0 ? `${mailUnseen > 99 ? '99+' : mailUnseen}건` : undefined,
-        badgeColor: 'bg-sky-500 text-white',
-        iconBg: 'bg-sky-500/10 dark:bg-sky-500/20',
-        iconColor: 'text-sky-600 dark:text-sky-400',
+        badge: '준비 중',
+        badgeColor: 'bg-amber-500 text-white',
+        iconBg: 'bg-slate-500/10 dark:bg-slate-500/20',
+        iconColor: 'text-slate-600 dark:text-slate-400',
       },
       {
         id: 'task',
@@ -153,7 +153,7 @@ export default function MobileModuleLauncher() {
         iconColor: 'text-teal dark:text-teal-300',
       },
     ],
-    [pendingApprovals, mailUnseen]
+    [pendingApprovals]
   );
 
   // ── [2단] 웹 버전 일반 8종 협업 & 편의 모듈 ──
@@ -190,9 +190,10 @@ export default function MobileModuleLauncher() {
       {
         id: 'project',
         name: '프로젝트',
-        desc: '회사 단위 협업 및 진행 관리',
+        desc: '전사 협업 관리 (준비 중)',
         path: '/m/project',
         icon: FolderGit2,
+        badge: '준비 중',
       },
       {
         id: 'resource',
@@ -452,9 +453,16 @@ export default function MobileModuleLauncher() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-[12.5px] font-bold text-ink group-hover:text-teal transition-colors truncate">
-                      {item.name}
-                    </h4>
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-[12.5px] font-bold text-ink group-hover:text-teal transition-colors truncate">
+                        {item.name}
+                      </h4>
+                      {item.badge && (
+                        <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1 py-0.2 text-[8.5px] font-extrabold text-amber-600 dark:text-amber-400 shrink-0">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-ink3 truncate mt-0.2">
                       {item.desc}
                     </p>

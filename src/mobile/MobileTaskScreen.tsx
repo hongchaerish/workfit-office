@@ -25,6 +25,7 @@ import {
   calculatePlanProgress,
   toggleWorkPlanItem,
   removeWorkPlanItem,
+  addWorkPlanItem,
   getWorkPlanTagMeta,
 } from '@/domain/workPlan/engine';
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
@@ -148,9 +149,7 @@ export default function MobileTaskScreen() {
     const text = newTodoText.trim();
     if (!text) return;
 
-    const tagPart = selectedTag ? `[${selectedTag}] ` : '';
-    const newLine = `- [ ] ${tagPart}${text}`;
-    const nextContent = myRawContent.trim() ? `${myRawContent.trim()}\n${newLine}` : newLine;
+    const nextContent = addWorkPlanItem(myRawContent, text, selectedTag || undefined);
 
     if (myTodayPlan) {
       await updatePlan.mutateAsync({
@@ -183,18 +182,6 @@ export default function MobileTaskScreen() {
     return teamMembers.filter((m) => m.dept === deptFilter);
   }, [teamMembers, deptFilter]);
 
-  // ── 팀원 업무 To-Do 완료 토글 ──
-  const handleToggleTeamTodo = async (member: (typeof teamMembers)[0], idx: number) => {
-    const plan = teamPlansMap.get(member.id);
-    if (!plan) return;
-    const nextContent = toggleWorkPlanItem(plan.content, idx);
-    await updatePlan.mutateAsync({
-      actor: workActor,
-      id: plan.id,
-      draft: { date: plan.date, content: nextContent },
-    });
-  };
-
   // ── 팀원 업무 To-Do 삭제 ──
   const handleRemoveTeamTodo = async (member: (typeof teamMembers)[0], idx: number) => {
     const plan = teamPlansMap.get(member.id);
@@ -214,8 +201,7 @@ export default function MobileTaskScreen() {
 
     const plan = teamPlansMap.get(member.id);
     const currentContent = plan?.content ?? '';
-    const newLine = `- [ ] ${text}`;
-    const nextContent = currentContent.trim() ? `${currentContent.trim()}\n${newLine}` : newLine;
+    const nextContent = addWorkPlanItem(currentContent, text);
 
     if (plan) {
       await updatePlan.mutateAsync({
@@ -314,7 +300,7 @@ export default function MobileTaskScreen() {
 
             {myProgress && myProgress.total > 0 && (
               <span className="text-[11px] font-extrabold text-teal">
-                {myProgress.completed}/{myProgress.total}건 ({myProgress.percent}%)
+                {myProgress.completed}/{myProgress.total}건
               </span>
             )}
           </div>
@@ -509,7 +495,7 @@ export default function MobileTaskScreen() {
 
                     {progress && progress.total > 0 ? (
                       <span className="text-[10.5px] font-extrabold text-indigo-600">
-                        {progress.completed}/{progress.total}건 ({progress.percent}%)
+                        {progress.completed}/{progress.total}건
                       </span>
                     ) : (
                       <span className="text-[10px] text-ink3 font-medium">To-Do 없음</span>
@@ -526,7 +512,7 @@ export default function MobileTaskScreen() {
                     </div>
                   )}
 
-                  {/* 팀원의 To-Do 항목 목록 (클릭하여 체크 토글 및 삭제 가능) */}
+                  {/* 팀원의 To-Do 항목 목록 (타인 업무는 체크 토글 불가 — 작성 및 삭제만 가능) */}
                   <div className="space-y-1">
                     {items.length === 0 ? (
                       <div className="py-2 text-center text-[11px] text-ink3 italic">
@@ -540,18 +526,16 @@ export default function MobileTaskScreen() {
                             key={idx}
                             className="flex items-center justify-between gap-1.5 py-1 px-1 rounded-lg hover:bg-slate-50 transition-colors"
                           >
-                            <div
-                              onClick={() => handleToggleTeamTodo(member, idx)}
-                              className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
-                            >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
                               <button
                                 type="button"
-                                className={`grid h-4.5 w-4.5 shrink-0 place-items-center rounded border transition-all ${
+                                disabled
+                                className={`grid h-4.5 w-4.5 shrink-0 place-items-center rounded border opacity-90 cursor-default ${
                                   it.completed
                                     ? 'border-indigo-600 bg-indigo-600 text-white shadow-2xs'
-                                    : 'border-slate-300 bg-white hover:border-indigo-500'
+                                    : 'border-slate-300 bg-white'
                                 }`}
-                                title={it.completed ? '완료 취소' : '완료 처리'}
+                                title="다른 사람의 진행도는 변경할 수 없습니다."
                               >
                                 {it.completed ? (
                                   <CheckSquare size={12} strokeWidth={2.5} />
@@ -570,7 +554,7 @@ export default function MobileTaskScreen() {
 
                               <span
                                 className={`text-[11.5px] truncate font-medium ${
-                                  it.completed ? 'line-through text-ink3' : 'text-slate-800'
+                                  it.completed ? 'line-through text-ink3 opacity-70' : 'text-slate-800'
                                 }`}
                               >
                                 {it.text}

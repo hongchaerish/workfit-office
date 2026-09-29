@@ -16,12 +16,11 @@ import MobileTaskScreen from './MobileTaskScreen';
 import MobileWorkPlanAdminScreen from './MobileWorkPlanAdminScreen';
 import MobileContactScreen from './MobileContactScreen';
 import MobileBoardScreen from './MobileBoardScreen';
-import MobileMailScreen from './MobileMailScreen';
 import MobileResourceScreen from './MobileResourceScreen';
 import MobileSurveyScreen from './MobileSurveyScreen';
 import MobileGalleryScreen from './MobileGalleryScreen';
-import MobileProjectScreen from './MobileProjectScreen';
 import MobileOrgChartScreen from './MobileOrgChartScreen';
+import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
 
 /**
@@ -107,10 +106,10 @@ export default function MobileApp() {
             {/* 전사 모듈 모바일 전용 화면 라우트 */}
             <Route path="board" element={<MobileBoardScreen />} />
             <Route path="resource" element={<MobileResourceScreen />} />
-            <Route path="mail" element={<MobileMailScreen />} />
+            <Route path="mail" element={<MobileComingSoon title="사내메일" icon="✉️" desc="사내·외부 비즈니스 소통을 주고받는 메일 시스템으로, 현재 모바일 최적화 개발 중입니다." />} />
             <Route path="survey" element={<MobileSurveyScreen />} />
             <Route path="gallery" element={<MobileGalleryScreen />} />
-            <Route path="project" element={<MobileProjectScreen />} />
+            <Route path="project" element={<MobileComingSoon title="프로젝트" icon="📗" desc="전사 프로젝트 협업 및 진행 관리 기능으로, 개발 로드맵에 따라 순차 오픈 예정입니다." />} />
             <Route path="orgchart" element={<MobileOrgChartScreen />} />
 
             <Route path="*" element={<Navigate to="/m" replace />} />
