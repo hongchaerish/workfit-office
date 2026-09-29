@@ -103,6 +103,8 @@ function LocalCalendarScreen() {
   const [teamDeptSel, setTeamDeptSel] = useState(ALL_DEPTS);
   const usersQuery = useUsers();
   const users = (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
+  const activeUserIdSet = useMemo(() => new Set(users.map((u) => u.id)), [users]);
+  const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const actor = authenticatedUser
     ?? users.find((user) => user.id === demoUserId)
     ?? users.find((user) => user.status === '사용')
@@ -267,6 +269,9 @@ function LocalCalendarScreen() {
     const list: CalendarEvent[] = [];
     const schedules = extractApprovedSchedules(approvalsQuery.data ?? []);
     for (const s of schedules) {
+      // 퇴사 처리된 직원의 일정은 캘린더에 노출되지 않도록 필터링
+      if (s.drafterId && !activeUserIdSet.has(s.drafterId)) continue;
+
       let curr = new Date(s.startDate + 'T00:00:00');
       const last = new Date(s.endDate + 'T00:00:00');
       if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
@@ -274,14 +279,14 @@ function LocalCalendarScreen() {
       const isLeave = s.category === 'LEAVE';
       const isTrip = s.category === 'TRIP';
       const eventType: CalendarEventType = isLeave ? 'VACATION' : 'OUTSIDE';
-      const typeLabel = isLeave
-        ? (s.leaveType || '휴가')
-        : (s.subType || (isTrip ? '출장' : '외근'));
-      const drafter = s.drafterName || '';
+      const drafterUser = userMap.get(s.drafterId);
+      const drafter = s.drafterName || drafterUser?.name || '';
+      const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
 
-      // 이모지 없이 간결하고 명확한 제목
+      // [연차 프라이버시 원칙]: 구체적 사유/유형 대신 "부재(Unavailable) 및 시간" 중심 표기
+      // 사용자 요청: 휴가 표시 시 이름과 직급까지 함께 표시
       const title = isLeave
-        ? `[휴가] ${drafter} (${typeLabel})`
+        ? `[휴가] ${drafterWithPos}`
         : isTrip
         ? `[출장] ${drafter}${s.destination ? ` (${s.destination})` : ''}`
         : `[외근] ${drafter}${s.destination ? ` (${s.destination})` : ''}`;
@@ -302,7 +307,8 @@ function LocalCalendarScreen() {
           allDay: isAllDay,
           startTime: isAllDay ? null : s.startTime!,
           endTime: isAllDay ? null : s.endTime!,
-          memo: s.body ? `사유: ${s.body}` : '',
+          // 휴가 건은 개인 프라이버시 보호를 위해 사유를 철저히 비공개(빈 문자열) 처리
+          memo: isLeave ? '' : (s.body ? `업무: ${s.body}` : ''),
           visibility: 'COMPANY',
           eventType,
           attendeeUserIds: [],
@@ -317,14 +323,23 @@ function LocalCalendarScreen() {
       }
     }
     return list;
-  }, [approvalsQuery.data]);
+  }, [approvalsQuery.data, activeUserIdSet, userMap]);
 
   const events = eventsQuery.data ?? [];
-  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (회의·미팅 및 전자결재 승인 건 중심 공인 일정만 노출) */
+  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (회의·미팅 및 전자결재 승인 건 중심 공인 일정만 노출, 퇴사자 일정 원천 배제) */
   const rawEvents = useMemo(() => {
     const base = isTeam ? (teamQuery.data ?? []) : events;
-    return [...base, ...scheduleEvents].filter(isOfficialCalendarEvent);
-  }, [isTeam, teamQuery.data, events, scheduleEvents]);
+    return [...base, ...scheduleEvents]
+      .filter(isOfficialCalendarEvent)
+      .filter((event) => {
+        // 전사 사내행사는 게시자 퇴사 여부와 무관하게 전사 공유 유지
+        if (event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY') {
+          return true;
+        }
+        // 그 외 개인/팀/회의 등은 퇴사자 소유인 경우 배제
+        return activeUserIdSet.has(event.ownerUserId);
+      });
+  }, [isTeam, teamQuery.data, events, scheduleEvents, activeUserIdSet]);
 
   /** 현재 사용자 기준 관련 일정 필터링 적용 */
   const visibleEvents = useMemo(() => {

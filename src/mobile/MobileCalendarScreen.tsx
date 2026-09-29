@@ -14,6 +14,7 @@ import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import MobileCommonHeader from './MobileCommonHeader';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
+import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 
@@ -46,6 +47,11 @@ export default function MobileCalendarScreen() {
   const baseEvents = eventsQuery.data ?? [];
 
   // 2. 전자결재 승인 일정 (외근/출장/휴가)
+  const usersQuery = useUsers();
+  const users = (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
+  const activeUserIdSet = useMemo(() => new Set(users.map((u) => u.id)), [users]);
+  const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+
   const approvalsQuery = useAllApprovals();
   const allApprovalDocs = approvalsQuery.data ?? [];
 
@@ -56,14 +62,23 @@ export default function MobileCalendarScreen() {
   const approvalSyntheticEvents = useMemo<CalendarEvent[]>(() => {
     const list: CalendarEvent[] = [];
     for (const s of approvedSchedules) {
+      // 퇴사 처리된 직원의 일정은 필터링
+      if (s.drafterId && !activeUserIdSet.has(s.drafterId)) continue;
+
       let curr = new Date(s.startDate + 'T00:00:00');
       const last = new Date(s.endDate + 'T00:00:00');
       if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
 
-      const eventType: CalendarEvent['eventType'] = s.category === 'LEAVE' ? 'VACATION' : 'OUTSIDE';
-      const typeLabel = s.category === 'LEAVE' ? (s.leaveType || '휴가') : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
-      const prefix = s.category === 'LEAVE' ? '[휴가]' : s.category === 'OUTSIDE' ? '[외근]' : '[출장]';
-      const title = `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${s.drafterName || ''}`;
+      const isLeave = s.category === 'LEAVE';
+      const eventType: CalendarEvent['eventType'] = isLeave ? 'VACATION' : 'OUTSIDE';
+      const typeLabel = isLeave ? '휴가' : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
+      const prefix = isLeave ? '[휴가]' : s.category === 'OUTSIDE' ? '[외근]' : '[출장]';
+      const drafterUser = userMap.get(s.drafterId);
+      const drafter = s.drafterName || drafterUser?.name || '';
+      const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
+
+      // 연차 프라이버시: 사유는 비공개, '부재 여부와 시간' 중심 표기 (이름과 직급 표시)
+      const title = isLeave ? `[휴가] ${drafterWithPos}` : `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${drafter}`;
 
       while (curr <= last) {
         const yyyy = curr.getFullYear();
@@ -81,7 +96,8 @@ export default function MobileCalendarScreen() {
           allDay: isAllDay,
           startTime: isAllDay ? null : s.startTime!,
           endTime: isAllDay ? null : s.endTime!,
-          memo: `전자결재 문서: ${s.docNo}\n${s.docTitle}`,
+          // 휴가 건은 개인 프라이버시 보호를 위해 사유 비공개
+          memo: isLeave ? '' : `전자결재 문서: ${s.docNo}\n${s.docTitle}`,
           visibility: 'COMPANY',
           eventType,
           attendeeUserIds: [],
@@ -96,11 +112,16 @@ export default function MobileCalendarScreen() {
       }
     }
     return list;
-  }, [approvedSchedules]);
+  }, [approvedSchedules, activeUserIdSet, userMap]);
 
   const allEvents = useMemo(() => {
-    return [...baseEvents, ...approvalSyntheticEvents].filter(isOfficialCalendarEvent);
-  }, [baseEvents, approvalSyntheticEvents]);
+    return [...baseEvents, ...approvalSyntheticEvents]
+      .filter(isOfficialCalendarEvent)
+      .filter((event) => {
+        if (event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY') return true;
+        return activeUserIdSet.has(event.ownerUserId);
+      });
+  }, [baseEvents, approvalSyntheticEvents, activeUserIdSet]);
 
   // 날짜별 이벤트 맵 (캘린더 셀 Dot 표기용)
   const eventsByDate = useMemo(() => {

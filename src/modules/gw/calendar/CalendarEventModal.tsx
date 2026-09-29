@@ -239,7 +239,7 @@ export default function CalendarEventModal({
           <div className="mb-4 rounded-lg border border-teal/30 bg-teal-soft/10 px-3.5 py-2.5 text-[11px] leading-relaxed text-ink2">
             <strong className="font-bold text-teal">전자결재 승인 연동 일정</strong>
             <p className="text-[10.5px] text-ink3 mt-0.5">
-              이 일정은 전자결재(외근·출장·휴가)로 승인되어 자동 등록되었습니다. 일정 취소 및 변경은 전자결재 문서(취소 기안 등)를 통해 진행해주세요.
+              이 일정은 전자결재(외근·출장·휴가)로 승인되어 자동 등록되었습니다.{eventType === 'VACATION' ? ' 개인 프라이버시 보호를 위해 연차 사유는 비공개 처리되며,' : ''} 일정 취소 및 변경은 전자결재 문서(취소 기안 등)를 통해 진행해주세요.
             </p>
           </div>
         ) : !canEdit && (
@@ -501,18 +501,24 @@ export default function CalendarEventModal({
             </Field>
           )}
 
-          {/* 6. 메모 */}
-          <Field label="메모 및 안건">
-            <textarea
-              aria-label="일정 메모"
-              value={memo}
-              onChange={(input) => setMemo(input.target.value)}
-              maxLength={2000}
-              rows={4}
-              className="w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal font-sans"
-              placeholder="회의 안건, 장소, 준비 사항 등을 자유롭게 기록하세요."
-            />
-          </Field>
+          {/* 6. 메모 (휴가 일정은 개인 프라이버시 보호를 위해 사유 비공개) */}
+          {eventType !== 'VACATION' ? (
+            <Field label="메모 및 안건">
+              <textarea
+                aria-label="일정 메모"
+                value={memo}
+                onChange={(input) => setMemo(input.target.value)}
+                maxLength={2000}
+                rows={4}
+                className="w-full resize-y rounded-md border border-border-hi bg-panel px-3 py-2 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal font-sans"
+                placeholder="회의 안건, 장소, 준비 사항 등을 자유롭게 기록하세요."
+              />
+            </Field>
+          ) : (
+            <div className="rounded-lg border border-border/80 bg-panel-alt/40 px-3 py-2 text-[10.5px] leading-relaxed text-ink3">
+              🔒 <strong>프라이버시 보호</strong>: 근로기준법 및 사내 규정에 따라 휴가(연차)의 구체적인 사유는 공개되지 않으며 부재 여부만 표시됩니다.
+            </div>
+          )}
 
           {error && (
             <div role="alert" className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-[10.5px] font-semibold text-danger">
