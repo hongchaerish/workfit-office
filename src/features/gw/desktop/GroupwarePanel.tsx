@@ -42,7 +42,7 @@ export function DockCard({
   );
 }
 
-export function GroupwarePanel({ onClose }: { onClose: () => void }) {
+export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; onNavigate?: (url: string) => void }) {
   const CYAN = '#a2d8a0';
   const nav = useNavigate();
   const { user } = useAuth();
@@ -72,10 +72,19 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
     [mailUnseenQuery.data],
   );
 
+  const navigateTo = (url: string) => {
+    if (onNavigate) {
+      onNavigate(url);
+    } else {
+      nav(url);
+      onClose();
+    }
+  };
+
   // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
-  const go = (to: string) => { nav(`/gw/${to}`); onClose(); };
+  const go = (to: string) => { navigateTo(`/gw/${to}`); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
-  const goDoc = (id: string) => { nav(`/gw/approval?doc=${id}`); onClose(); };
+  const goDoc = (id: string) => { navigateTo(`/gw/approval?doc=${id}`); };
 
   // 전체 모듈 정의: 필수 모듈 4종은 hot: true (상단 초록색 강조), 일반 모듈 8종은 hot: false
   const rawApps = useMemo(
@@ -456,10 +465,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
           action={
             <button
               type="button"
-              onClick={() => {
-                nav('/gw/board?board=notice');
-                onClose();
-              }}
+              onClick={() => navigateTo('/gw/board?board=notice')}
               className="text-[10.5px] font-bold text-teal hover:underline cursor-pointer"
             >
               더보기 &gt;
@@ -470,10 +476,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
             <button
               key={p.id}
               type="button"
-              onClick={() => {
-                nav(`/gw/board?board=notice&postId=${p.id}`);
-                onClose();
-              }}
+              onClick={() => navigateTo(`/gw/board?board=notice&postId=${p.id}`)}
               className={`flex w-full items-center justify-between gap-2 py-[9px] text-left transition-colors cursor-pointer group ${
                 i < arr.length - 1 ? 'border-b border-border' : ''
               }`}

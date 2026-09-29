@@ -88,16 +88,26 @@ export default function AppShell() {
     return () => navigator.serviceWorker.removeEventListener('message', onMsg);
   }, []);
 
-  // 콜드 클릭(데스크톱): SW 가 /?openChat=<roomId> 로 새 창을 열면 도크를 그 방으로 연다.
+  // 콜드 클릭(데스크톱) 및 외부 연동(MES): view=groupware, view=messenger 또는 ?openChat=<roomId> 로 도크를 연다.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const view = params.get('view');
     const roomId = params.get('openChat');
-    if (!roomId) return;
-    setDockOpen('msg');
-    requestOpenChatRoom(roomId);
-    params.delete('openChat');
-    const qs = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+
+    if (view === 'groupware' || view === 'gw') {
+      setDockOpen('gw');
+    } else if (view === 'messenger' || view === 'msg' || roomId) {
+      setDockOpen('msg');
+      if (roomId) {
+        requestOpenChatRoom(roomId);
+      }
+    }
+
+    if (roomId) {
+      params.delete('openChat');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
   }, []);
 
 

@@ -4,6 +4,7 @@ import { userRepo } from '@/data/user/user.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
 import { mintWiddyToken, clearWiddyToken } from '@/data/widdyChat/widdyAuth';
 import type { User } from '@/domain/user/schema';
+import { verifyAndAuthenticateMesSso } from '@/features/auth/mesSso';
 
 /**
  * 인증 컨텍스트 — 자체 로그인(users 컬렉션 대조) 세션.
@@ -41,11 +42,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 초기 마운트 시 저장된 세션(사용자 id) 복원.
+  // 초기 마운트 시 저장된 세션 복원 또는 MES SSO 자동 로그인
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
+        // 1. URL에 MES SSO 파라미터가 있는 경우 서명 검증 및 자동 로그인 우선 시도
+        const ssoUser = await verifyAndAuthenticateMesSso();
+        if (!alive) return;
+        if (ssoUser) {
+          setUser(ssoUser);
+          return;
+        }
+
+        // 2. 기존 로컬 세션 복원
         const uid = localStorage.getItem(SESSION_KEY);
         if (uid) {
           const users = await userRepo.list();

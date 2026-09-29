@@ -78,6 +78,7 @@ const GwGallery = lazy(() => import('@/modules/gw/gallery/GalleryScreen'));
 const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
+const StandaloneDockScreen = lazy(() => import('@/modules/dock/StandaloneDockScreen'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
@@ -186,20 +187,24 @@ export default function App() {
   }, [isMobilePwa, user?.id]);
 
   // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동.
-  // 단, 모바일 PWA(/m)는 자체 흐름을 쓰므로 이 데스크톱 리다이렉트를 건너뛴다.
+  // 단, 모바일 PWA(/m) 및 외부 슬라이드 도크(/dock)는 자체 흐름을 쓰므로 이 데스크톱 리다이렉트를 건너뛴다.
+  const isDock = location.pathname.startsWith('/dock');
   useEffect(() => {
-    if (isMobilePwa) return;
+    if (isMobilePwa || isDock) return;
     const defaultHash = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
     if (user && (user.password === 'mes1234' || user.password === defaultHash)) {
       window.alert('보안을 위해 초기 비밀번호(mes1234)를 반드시 변경해 주세요.');
       navigate('/profile');
     }
-  }, [user, navigate, isMobilePwa]);
+  }, [user, navigate, isMobilePwa, isDock]);
 
   return (
     <Routes>
       {/* 모바일 메신저 PWA — 데스크톱 셸 밖의 전체화면 라우트 */}
       <Route path="/m/*" element={<MobileApp />} />
+      {/* 타 MES 시스템 슬라이드/iframe 전용 독립 도크 라우트 */}
+      <Route path="/dock" element={<StandaloneDockScreen />} />
+      <Route path="/dock/*" element={<StandaloneDockScreen />} />
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={HOME} replace />} />
         {SCREENS.map((screen) => {
