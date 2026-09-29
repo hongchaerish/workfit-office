@@ -646,6 +646,8 @@ const COLLECTIONS: CollectionDef[] = [
         실제로 걸리지 않는다. 한 번 보내면 true로 바꿔 같은 일정을 다시 보내지 않는다.
       */
       BOOL('reminded', false),
+      S('eventType', 32),
+      SA('attendeeUserIds', 64),
     ],
     /*
       공유 조회는 소유자 외에 부서·프로젝트로도 찾는다. 지금 repo는 전건을 읽어 거르지만

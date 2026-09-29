@@ -3,6 +3,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import {
   useWorkPlanConfig,
+  stripMarkdownAndTags,
   TAG_COLOR_PRESETS,
   type WorkPlanCustomTag,
 } from '@/features/workPlan/useWorkPlanConfig';
@@ -101,22 +102,14 @@ export function WorkPlanConfigModal({
 
   const handleAddTodoItem = () => {
     if (!newTodoText.trim()) return;
-    const tagPart = newTodoTag ? `[${newTodoTag}] ` : '';
-    const newLine = `- [ ] ${tagPart}${newTodoText.trim()}`;
+    const newLine = newTodoText.trim();
     setTplContent((prev) => (prev.trim() ? `${prev.trim()}\n${newLine}` : newLine));
     setNewTodoText('');
   };
 
   const handleRemoveTodoItem = (indexToRemove: number) => {
-    const items = parseWorkPlanItems(tplContent);
-    const filtered = items.filter((_, idx) => idx !== indexToRemove);
-    const newContent = filtered
-      .map((item) => {
-        const tagPart = item.tag ? `[${item.tag}] ` : '';
-        return `- [ ] ${tagPart}${item.text}`;
-      })
-      .join('\n');
-    setTplContent(newContent);
+    const lines = tplContent.split('\n').filter((_, idx) => idx !== indexToRemove);
+    setTplContent(lines.join('\n'));
   };
 
   const cancelTplForm = () => {
@@ -128,19 +121,20 @@ export function WorkPlanConfigModal({
 
   const saveTemplateForm = () => {
     if (!tplName.trim() || !tplContent.trim()) return;
+    const cleanContent = stripMarkdownAndTags(tplContent.trim());
     if (editingTplId) {
       updateTemplate(editingTplId, {
         name: tplName.trim(),
         desc: tplDesc.trim(),
         icon: tplIcon,
-        content: tplContent.trim(),
+        content: cleanContent,
       });
     } else {
       addTemplate({
         name: tplName.trim(),
         desc: tplDesc.trim(),
         icon: tplIcon,
-        content: tplContent.trim(),
+        content: cleanContent,
       });
     }
     cancelTplForm();

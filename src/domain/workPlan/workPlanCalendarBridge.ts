@@ -25,9 +25,9 @@ export function isWorkPlanDerivedEvent(event: CalendarEvent): boolean {
 }
 
 /**
- * 캘린더 공유 대상이 되는 대표적인 업무 태그 목록 (외근·출장·휴가는 전자결재 전용이므로 제외)
+ * 캘린더 공유 대상이 되는 대표적인 업무 태그 목록 (오직 회의 및 미팅만 캘린더 공유)
  */
-export const SHAREABLE_TAGS = ['회의', '미팅', '보고', '프로젝트', '마감', '행사'];
+export const SHAREABLE_TAGS = ['회의', '미팅'];
 
 export function isShareableTag(tag?: string): boolean {
   if (!tag) return false;
@@ -97,16 +97,17 @@ export function buildShareableCalendarDrafts(
 
   items.forEach((item, idx) => {
     const { startTime, endTime, cleanText } = extractTimeFromText(item.text);
-    const hasTime = Boolean(startTime);
 
-    // 텍스트가 없거나, 공유 대상 태그도 아니고 시간 지정도 없는 일반 To-Do는 스킵
-    const isExplicitShare = item.tag === '공유' || item.text.includes('[공유]');
-    if (!isShareableTag(item.tag) && !isExplicitShare && !hasTime) return;
+    // 캘린더에는 무조건 회의나 미팅만 연동 (자잘한 개인업무나 일반 To-Do는 연동하지 않음)
+    const isMeeting = isShareableTag(item.tag) || item.text.includes('회의') || item.text.includes('미팅');
+    if (!isMeeting) return;
 
     const isAllDay = !startTime || !endTime || startTime >= endTime;
     const eventType = mapWorkPlanTagToCalendarEventType(item.tag);
+    const cleanItemText = cleanText || item.text;
+    const textWithoutTag = cleanItemText.replace(/^\[(회의|미팅)\]\s*/, '').trim();
     const tagPrefix = item.tag ? `[${item.tag}] ` : '';
-    const title = `${tagPrefix}${cleanText || item.text}`.slice(0, 100);
+    const title = `${tagPrefix}${textWithoutTag}`.slice(0, 100);
 
     const syncTag = makeWpSyncTag(plan.id, idx);
     const memo = `업무계획 연동 일정\n${syncTag}`;
@@ -267,7 +268,7 @@ export function importCalendarEventsToWorkPlanContent(
       ? `(${ev.startTime})`
       : '';
 
-    const newFormattedLine = `- [ ] [${tag}] ${timeStr ? `${timeStr} ` : ''}${rawTitle}`.trim();
+    const newFormattedLine = `[${tag}] ${timeStr ? `${timeStr} ` : ''}${rawTitle}`.trim();
     const newNorm = cleanBase(rawTitle);
 
     // 3. 멱등성 검사: 기존 항목 중 제목 핵심 단어가 매칭되는지 확인

@@ -96,29 +96,30 @@ export default function MonthCalendar({
                 <span className="mt-1 block space-y-0.5">
                   {rows.slice(0, 2).map((event) => {
                     const owner = ownerNameOf?.(event) ?? null;
-                    const label = owner ? `${owner} · ${eventLabel(event)}` : eventLabel(event);
+                    const isAppr = event.id.startsWith('CAL-APPR-');
+                    const shouldPrependOwner = owner && !isAppr && !event.title.includes(owner);
+                    const label = shouldPrependOwner ? `${owner} · ${eventLabel(event)}` : eventLabel(event);
                     const muted = isMutedChip?.(event) ?? false;
-                    const isCompany = event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
-                    const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
-                    const isOutside = event.eventType === 'OUTSIDE';
+
+                    const isCompany = event.eventType === 'COMPANY_EVENT';
                     const isVacation = event.eventType === 'VACATION';
+                    const isTrip = event.title.includes('[출장]');
+                    const isOutside = event.eventType === 'OUTSIDE' && !isTrip;
+                    const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
 
                     let chipStyle = 'bg-blue/10 text-blue';
-                    let iconPrefix = '';
                     if (muted) {
                       chipStyle = 'bg-ink3/10 text-ink3';
                     } else if (isCompany) {
-                      chipStyle = 'bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30';
-                      iconPrefix = '🎉 ';
-                    } else if (isMeeting) {
-                      chipStyle = 'bg-purple-500/15 text-purple-600 dark:text-purple-400 font-semibold border border-purple-500/30';
-                      iconPrefix = '👥 ';
-                    } else if (isOutside) {
-                      chipStyle = 'bg-blue-500/15 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/30';
-                      iconPrefix = '🔵 ';
+                      chipStyle = 'bg-teal-500/15 text-teal-700 dark:text-teal-400 font-bold border border-teal-500/30';
                     } else if (isVacation) {
-                      chipStyle = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold border border-amber-500/30';
-                      iconPrefix = '🏖️ ';
+                      chipStyle = 'bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30';
+                    } else if (isTrip) {
+                      chipStyle = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-semibold border border-indigo-500/30';
+                    } else if (isOutside) {
+                      chipStyle = 'bg-blue-500/15 text-blue-700 dark:text-blue-400 font-semibold border border-blue-500/30';
+                    } else if (isMeeting) {
+                      chipStyle = 'bg-purple-500/15 text-purple-700 dark:text-purple-400 font-semibold border border-purple-500/30';
                     } else if (event.allDay) {
                       chipStyle = 'bg-teal-soft/75 text-teal';
                     }
@@ -130,9 +131,9 @@ export default function MonthCalendar({
                         key={event.id}
                         onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }}
                         title={`${label}${event.attendeeUserIds?.length ? ` (참여자 ${event.attendeeUserIds.length}명)` : ''}`}
-                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-[8px] leading-tight focus:outline-none focus:ring-1 focus:ring-teal/40 ${chipStyle}`}
+                        className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[9px] leading-tight focus:outline-none focus:ring-1 focus:ring-teal/40 ${chipStyle}`}
                       >
-                        {iconPrefix}{label}
+                        {label}
                       </button>
                     );
                   })}

@@ -69,9 +69,40 @@ export const isOwnEvent = (actor: CalendarAccessContext, event: CalendarEvent): 
 export const isAttendeeEvent = (actor: CalendarAccessContext, event: CalendarEvent): boolean =>
   Boolean(event.attendeeUserIds && event.attendeeUserIds.includes(actor.userId) && event.ownerUserId !== actor.userId);
 
-/** 사내행사 일정인가 */
+/** 사내행사 일정인가 (휴가·외근·출장은 사내행사가 아님) */
 export const isCompanyEvent = (event: CalendarEvent): boolean =>
-  event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
+  event.eventType === 'COMPANY_EVENT' || (event.visibility === 'COMPANY' && event.eventType !== 'VACATION' && event.eventType !== 'OUTSIDE');
+
+/**
+ * 캘린더 노출 대상 일정 판정:
+ * "일정 관리에 뜨는 일정은 무조건 회의나 미팅, 또는 전자결재를 통해 완료된 출장/외근/연차 등의 내용만 나와야해. 그밖의 자잘한 개인업무는 뜰 필요 없어."
+ *
+ * 1. 전자결재 승인 건 (출장·외근·휴가/연차 등): CAL-APPR- 또는 approval- 접두사, 또는 OUTSIDE/VACATION 유형
+ * 2. 회의·미팅: eventType === 'MEETING' 또는 제목에 '회의'·'미팅' 포함
+ * 3. 사내행사: eventType === 'COMPANY_EVENT'
+ *
+ * 그 밖의 자잘한 개인 업무(GENERAL)나 단순 To-Do는 캘린더 노출에서 제외합니다.
+ */
+export function isOfficialCalendarEvent(event: CalendarEvent): boolean {
+  // 1. 전자결재 승인 일정 (외근/출장/휴가 등)
+  if (
+    event.id.startsWith('CAL-APPR-') ||
+    event.id.startsWith('approval-') ||
+    event.eventType === 'OUTSIDE' ||
+    event.eventType === 'VACATION'
+  ) {
+    return true;
+  }
+  // 2. 회의 및 미팅
+  if (event.eventType === 'MEETING' || event.title.includes('회의') || event.title.includes('미팅')) {
+    return true;
+  }
+  // 3. 사내행사
+  if (event.eventType === 'COMPANY_EVENT') {
+    return true;
+  }
+  return false;
+}
 
 /* ------------------------------------------------------------- 관리자 종합 조회 */
 

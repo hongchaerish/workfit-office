@@ -9,8 +9,6 @@ import {
   Trash2,
   Users,
   User as UserIcon,
-  CheckCircle2,
-  Clock,
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -52,6 +50,8 @@ export default function MobileTaskScreen() {
 
   const [newTodoText, setNewTodoText] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
+  const [teamInputText, setTeamInputText] = useState<Record<string, string>>({});
+  const [deptFilter, setDeptFilter] = useState<string>('all');
 
   const workActor = useMemo(
     () => ({ userId: user?.id ?? '__anonymous__', active: user?.status === '사용' }),
@@ -166,6 +166,71 @@ export default function MobileTaskScreen() {
     }
 
     setNewTodoText('');
+  };
+
+  // 고유 부서 목록
+  const deptList = useMemo(() => {
+    const s = new Set<string>();
+    teamMembers.forEach((m) => {
+      if (m.dept && !m.dept.includes('테스트')) s.add(m.dept);
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [teamMembers]);
+
+  // 부서 필터가 적용된 대상 멤버 목록
+  const displayedMembers = useMemo(() => {
+    if (deptFilter === 'all') return teamMembers;
+    return teamMembers.filter((m) => m.dept === deptFilter);
+  }, [teamMembers, deptFilter]);
+
+  // ── 팀원 업무 To-Do 완료 토글 ──
+  const handleToggleTeamTodo = async (member: (typeof teamMembers)[0], idx: number) => {
+    const plan = teamPlansMap.get(member.id);
+    if (!plan) return;
+    const nextContent = toggleWorkPlanItem(plan.content, idx);
+    await updatePlan.mutateAsync({
+      actor: workActor,
+      id: plan.id,
+      draft: { date: plan.date, content: nextContent },
+    });
+  };
+
+  // ── 팀원 업무 To-Do 삭제 ──
+  const handleRemoveTeamTodo = async (member: (typeof teamMembers)[0], idx: number) => {
+    const plan = teamPlansMap.get(member.id);
+    if (!plan) return;
+    const nextContent = removeWorkPlanItem(plan.content, idx);
+    await updatePlan.mutateAsync({
+      actor: workActor,
+      id: plan.id,
+      draft: { date: plan.date, content: nextContent },
+    });
+  };
+
+  // ── 팀원 업무 신규 To-Do 추가 ──
+  const handleAddTeamTodo = async (member: (typeof teamMembers)[0]) => {
+    const text = (teamInputText[member.id] || '').trim();
+    if (!text) return;
+
+    const plan = teamPlansMap.get(member.id);
+    const currentContent = plan?.content ?? '';
+    const newLine = `- [ ] ${text}`;
+    const nextContent = currentContent.trim() ? `${currentContent.trim()}\n${newLine}` : newLine;
+
+    if (plan) {
+      await updatePlan.mutateAsync({
+        actor: workActor,
+        id: plan.id,
+        draft: { date: plan.date, content: nextContent },
+      });
+    } else {
+      await createPlan.mutateAsync({
+        actor: workActor,
+        draft: { date: selectedDateStr, content: nextContent, ownerUserId: member.id },
+      });
+    }
+
+    setTeamInputText((prev) => ({ ...prev, [member.id]: '' }));
   };
 
   // ── 날짜 이동 핸들러 ──
@@ -375,7 +440,7 @@ export default function MobileTaskScreen() {
           </div>
         </div>
 
-        {/* ── [섹션 2: 우리 팀원들의 업무 계획 (To-Do 현황)] ── */}
+        {/* ── [섹션 2: 팀원들의 업무 계획 (To-Do 현황 & 자유 편집)] ── */}
         <div className="space-y-3">
           {/* 팀 섹션 헤더 */}
           <div className="flex items-center justify-between px-0.5">
@@ -383,25 +448,36 @@ export default function MobileTaskScreen() {
               <span className="grid h-6 w-6 place-items-center rounded-lg bg-indigo-500/10 text-indigo-600">
                 <Users size={14} />
               </span>
-              <span className="text-[13px] font-black text-ink">우리 팀 업무 현황</span>
+              <span className="text-[13px] font-black text-ink">팀 업무 현황</span>
               <span className="rounded-full bg-slate-200 px-2 py-0.2 text-[10px] font-bold text-slate-700">
-                {teamMembers.length}명
+                {displayedMembers.length}명
               </span>
             </div>
 
-            <span className="text-[10.5px] text-ink3 font-medium">
-              {user?.dept}
-            </span>
+            {deptList.length > 1 && (
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="rounded-lg border border-border bg-white px-2 py-1 text-[11px] font-bold text-ink outline-none shadow-2xs"
+              >
+                <option value="all">전체 부서 ({teamMembers.length}명)</option>
+                {deptList.map((d) => (
+                  <option key={d} value={d}>
+                    {d} ({teamMembers.filter((m) => m.dept === d).length}명)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {/* 팀원 카드 목록 (전체보기 고정) */}
-          {teamMembers.length === 0 ? (
+          {/* 팀원 카드 목록 */}
+          {displayedMembers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 bg-white/70 p-8 text-center text-ink3">
               <UserIcon size={24} className="mx-auto mb-1 text-ink3/40" />
-              <p className="text-[12px] font-bold text-ink">소속 팀원이 없습니다.</p>
+              <p className="text-[12px] font-bold text-ink">표시할 팀원이 없습니다.</p>
             </div>
           ) : (
-            teamMembers.map((member) => {
+            displayedMembers.map((member) => {
               const plan = teamPlansMap.get(member.id);
               const raw = plan?.content ?? '';
               const items = parseWorkPlanItems(raw);
@@ -450,11 +526,11 @@ export default function MobileTaskScreen() {
                     </div>
                   )}
 
-                  {/* 팀원의 To-Do 항목 목록 */}
+                  {/* 팀원의 To-Do 항목 목록 (클릭하여 체크 토글 및 삭제 가능) */}
                   <div className="space-y-1">
                     {items.length === 0 ? (
                       <div className="py-2 text-center text-[11px] text-ink3 italic">
-                        오늘 등록된 업무 계획이 없습니다.
+                        등록된 업무 계획이 없습니다. 아래에서 할 일을 추가해보세요.
                       </div>
                     ) : (
                       items.map((it, idx) => {
@@ -462,35 +538,85 @@ export default function MobileTaskScreen() {
                         return (
                           <div
                             key={idx}
-                            className="flex items-center gap-2 py-0.5 text-[11.5px]"
+                            className="flex items-center justify-between gap-1.5 py-1 px-1 rounded-lg hover:bg-slate-50 transition-colors"
                           >
-                            <span className="shrink-0 text-slate-400">
-                              {it.completed ? (
-                                <CheckCircle2 size={13} className="text-emerald-500" />
-                              ) : (
-                                <Clock size={13} className="text-slate-300" />
-                              )}
-                            </span>
-
-                            {tagMeta && (
-                              <span
-                                className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${tagMeta.badgeClass}`}
-                              >
-                                {it.tag}
-                              </span>
-                            )}
-
-                            <span
-                              className={`truncate ${
-                                it.completed ? 'line-through text-ink3' : 'text-slate-800 font-medium'
-                              }`}
+                            <div
+                              onClick={() => handleToggleTeamTodo(member, idx)}
+                              className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
                             >
-                              {it.text}
-                            </span>
+                              <button
+                                type="button"
+                                className={`grid h-4.5 w-4.5 shrink-0 place-items-center rounded border transition-all ${
+                                  it.completed
+                                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-2xs'
+                                    : 'border-slate-300 bg-white hover:border-indigo-500'
+                                }`}
+                                title={it.completed ? '완료 취소' : '완료 처리'}
+                              >
+                                {it.completed ? (
+                                  <CheckSquare size={12} strokeWidth={2.5} />
+                                ) : (
+                                  <Square size={12} className="text-slate-200" />
+                                )}
+                              </button>
+
+                              {tagMeta && (
+                                <span
+                                  className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${tagMeta.badgeClass}`}
+                                >
+                                  {it.tag}
+                                </span>
+                              )}
+
+                              <span
+                                className={`text-[11.5px] truncate font-medium ${
+                                  it.completed ? 'line-through text-ink3' : 'text-slate-800'
+                                }`}
+                              >
+                                {it.text}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTeamTodo(member, idx)}
+                              className="p-1 text-ink3/60 hover:text-rose-500 transition-colors shrink-0"
+                              title="삭제"
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         );
                       })
                     )}
+                  </div>
+
+                  {/* 팀원 업무 신규 To-Do 추가 인라인 폼 */}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-border/40">
+                    <input
+                      type="text"
+                      value={teamInputText[member.id] || ''}
+                      onChange={(e) =>
+                        setTeamInputText((prev) => ({ ...prev, [member.id]: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddTeamTodo(member);
+                        }
+                      }}
+                      placeholder={`${member.name}님에게 할 일 추가 (Enter 또는 +)`}
+                      className="flex-1 rounded-lg border border-border/70 bg-slate-50/80 px-2.5 py-1.5 text-[11px] text-ink outline-none focus:border-indigo-500 focus:bg-white placeholder:text-ink3 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddTeamTodo(member)}
+                      disabled={!teamInputText[member.id]?.trim()}
+                      className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-600 text-white shadow-2xs hover:opacity-90 disabled:opacity-30 active:scale-95 transition-all shrink-0"
+                      title="할 일 추가"
+                    >
+                      <Plus size={14} strokeWidth={2.5} />
+                    </button>
                   </div>
                 </div>
               );

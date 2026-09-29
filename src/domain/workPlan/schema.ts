@@ -22,4 +22,4 @@ export const workPlanSchema = z.object({
 });
 
 export type WorkPlan = z.infer<typeof workPlanSchema>;
-export type WorkPlanDraft = Omit<WorkPlan, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt'>;
+export type WorkPlanDraft = Omit<WorkPlan, 'id' | 'createdAt' | 'updatedAt' | 'ownerUserId'> & { ownerUserId?: string };

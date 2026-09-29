@@ -13,17 +13,13 @@ import {
   useRemoveWorkPlan,
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
-import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { syncWorkPlanToCalendar, cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
-import { WorkPlanEditorModal } from './components/WorkPlanEditorModal';
-import { WorkPlanTeamWeeklyMatrix } from './components/WorkPlanTeamWeeklyMatrix';
+import { toggleWorkPlanItem } from '@/domain/workPlan/engine';
+import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
+import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
-import { WorkPlanRequestModal } from './components/WorkPlanRequestModal';
-import { WorkPlanRequestInboxWidget } from './components/WorkPlanRequestInboxWidget';
 import { GwHead } from '@/modules/gw/_gw';
-import { Button } from '@/shared/ui/Button';
-import { Modal } from '@/shared/ui/Modal';
-import { CalendarPlus } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
@@ -81,7 +77,6 @@ export default function WorkPlanScreen() {
     ?? null;
 
   const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
-  const presences = useAllUserPresences();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const today = calendarToday();
@@ -94,9 +89,11 @@ export default function WorkPlanScreen() {
     }
   }, [searchParams, setSearchParams]);
 
-  const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan } | null>(null);
-  const [viewingDetail, setViewingDetail] = useState<{ user: User; plan: WorkPlan } | null>(null);
-  const [requestTarget, setRequestTarget] = useState<{ user: User; date: string } | null>(null);
+  const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan; targetUser?: User } | null>(null);
+  const [editingContent, setEditingContent] = useState<string>('');
+  const [shareToCalendar, setShareToCalendar] = useState<boolean>(true);
+  const [isSavingPlan, setIsSavingPlan] = useState<boolean>(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
@@ -267,16 +264,40 @@ export default function WorkPlanScreen() {
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor]);
 
   const savePlan = useCallback(
-    async (date: string, content: string, existingPlanId?: string, shareToCalendar = true) => {
+    async (
+      date: string,
+      content: string,
+      existingPlanId?: string,
+      shareToCalendar = true,
+      targetUser?: User,
+      expectedUpdatedAt?: string,
+    ) => {
       if (!actor) return;
       const actorParam = { userId: actor.id, active: actor.status === '사용' };
+      const ownerId = targetUser?.id || actor.id;
+
+      if (!content.trim()) {
+        if (existingPlanId) {
+          await removePlan(existingPlanId, date, ownerId);
+        }
+        return;
+      }
+
       const saved = existingPlanId
-        ? await update.mutateAsync({ actor: actorParam, id: existingPlanId, draft: { date, content } })
-        : await create.mutateAsync({ actor: actorParam, draft: { date, content } });
+        ? await update.mutateAsync({
+            actor: actorParam,
+            id: existingPlanId,
+            draft: { date, content },
+            expectedUpdatedAt,
+          })
+        : await create.mutateAsync({
+            actor: actorParam,
+            draft: { date, content, ownerUserId: ownerId },
+          });
 
       if (saved) {
         await syncWorkPlanToCalendar(
-          { userId: actor.id, active: actor.status === '사용', deptId },
+          { userId: ownerId, active: true, deptId },
           saved,
           shareToCalendar,
         );
@@ -287,10 +308,11 @@ export default function WorkPlanScreen() {
   );
 
   const removePlan = useCallback(
-    async (planId: string, date?: string) => {
+    async (planId: string, date?: string, targetUserId?: string) => {
       if (!actor) return;
+      const ownerId = targetUserId || actor.id;
       await cleanupWorkPlanCalendarEvents(
-        { userId: actor.id, active: actor.status === '사용', deptId },
+        { userId: ownerId, active: true, deptId },
         planId,
         date,
       );
@@ -298,6 +320,17 @@ export default function WorkPlanScreen() {
       setNotice('업무계획을 삭제했습니다.');
     },
     [actor, remove, deptId],
+  );
+
+  const handleToggleItem = useCallback(
+    async (plan: WorkPlan, itemIdx: number) => {
+      // 진행도 체크는 오직 본인의 업무계획만 가능
+      if (!actor || plan.ownerUserId !== actor.id) return;
+      const nextContent = toggleWorkPlanItem(plan.content, itemIdx);
+      const targetUser = users.find((u) => u.id === plan.ownerUserId);
+      await savePlan(plan.date, nextContent, plan.id, true, targetUser, plan.updatedAt);
+    },
+    [actor?.id, users, savePlan],
   );
 
   const loading = usersQuery.isLoading;
@@ -379,8 +412,14 @@ export default function WorkPlanScreen() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 월간 종합 계획표 배지 */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-teal/20 bg-teal-soft/10 px-3 py-1.5 text-[11px] font-bold text-teal shadow-2xs">
+            <Calendar size={13} />
+            <span>월간 계획표</span>
+          </div>
+
           {/* 이름 또는 부서 실시간 검색창 */}
-          <div className="relative min-w-[160px] flex-1 sm:max-w-[220px]">
+          <div className="relative min-w-[150px] flex-1 sm:max-w-[200px]">
             <input
               type="text"
               value={searchKeyword}
@@ -399,102 +438,163 @@ export default function WorkPlanScreen() {
               </button>
             )}
           </div>
-
-          {/* 일정 요청함 버튼/위젯 */}
-          <WorkPlanRequestInboxWidget actor={actor} />
         </div>
       </div>
 
-      {/* ── 메인: 팀 주간 종합표 (WorkPlanTeamWeeklyMatrix) ── */}
-      <WorkPlanTeamWeeklyMatrix
-        actor={actor}
-        todayStr={initialDate ?? today}
-        members={scopedMembers}
-        presences={presences}
-        deptId={deptId}
-        onOpenEditor={(date, plan) => setEditingTarget({ date, plan })}
-        onOpenDetail={(user, plan) => setViewingDetail({ user, plan })}
-        onRequestPlan={(user, date) => setRequestTarget({ user, date })}
-        onOpenConfig={() => setIsConfigOpen(true)}
-      />
-
-      {/* 스마트 에디터 모달 */}
+      {/* ── 엑셀/스프레드시트 상단 오피스 리본 메뉴 툴바 ── */}
       {editingTarget && (
-        <WorkPlanEditorModal
-          isOpen={Boolean(editingTarget)}
-          onClose={() => setEditingTarget(null)}
-          date={editingTarget.date}
-          dateTitle={dayTitle(editingTarget.date)}
-          initialContent={editingTarget.plan?.content ?? ''}
+        <WorkPlanOfficeRibbonToolbar
+          dateTitle={
+            editingTarget.targetUser && editingTarget.targetUser.id !== actor.id
+              ? `${editingTarget.targetUser.name}(${editingTarget.targetUser.position || '팀원'}) · ${dayTitle(editingTarget.date)}`
+              : dayTitle(editingTarget.date)
+          }
+          targetUser={editingTarget.targetUser}
+          actor={actor}
+          content={editingContent}
+          onContentChange={setEditingContent}
+          shareToCalendar={shareToCalendar}
+          onShareToCalendarChange={setShareToCalendar}
           todayEvents={editingDateEvents}
-          onSave={async (content, shareToCal) => {
-            await savePlan(editingTarget.date, content, editingTarget.plan?.id, shareToCal);
-            setEditingTarget(null);
+          isSaving={isSavingPlan}
+          conflictError={conflictError}
+          onSave={async (forceOverwrite) => {
+            if (!editingTarget) return;
+            setIsSavingPlan(true);
+            setConflictError(null);
+            try {
+              if (!editingContent.trim()) {
+                if (editingTarget.plan) {
+                  await removePlan(editingTarget.plan.id, editingTarget.date, editingTarget.targetUser?.id);
+                } else {
+                  await savePlan(
+                    editingTarget.date,
+                    '',
+                    undefined,
+                    shareToCalendar,
+                    editingTarget.targetUser,
+                    undefined,
+                  );
+                }
+              } else {
+                await savePlan(
+                  editingTarget.date,
+                  editingContent.trim(),
+                  editingTarget.plan?.id,
+                  shareToCalendar,
+                  editingTarget.targetUser,
+                  forceOverwrite ? undefined : editingTarget.plan?.updatedAt,
+                );
+              }
+              setEditingTarget(null);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : '';
+              if (
+                msg.includes('먼저 수정') ||
+                msg.includes('먼저 등록') ||
+                (err as { code?: string })?.code === 'CONFLICT'
+              ) {
+                setConflictError(
+                  msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
+                );
+              } else {
+                alert(msg || '저장 중 오류가 발생했습니다.');
+              }
+            } finally {
+              setIsSavingPlan(false);
+            }
           }}
           onDelete={
             editingTarget.plan
               ? async () => {
-                  await removePlan(editingTarget.plan!.id, editingTarget.date);
-                  setEditingTarget(null);
+                  if (!window.confirm('이 날짜의 업무계획을 삭제하시겠습니까? (연동된 캘린더 일정도 함께 정리됩니다)')) return;
+                  setIsSavingPlan(true);
+                  try {
+                    await removePlan(editingTarget.plan!.id, editingTarget.date, editingTarget.targetUser?.id);
+                    setEditingTarget(null);
+                  } finally {
+                    setIsSavingPlan(false);
+                  }
                 }
               : undefined
           }
+          onClose={() => setEditingTarget(null)}
         />
       )}
+
+      {/* ── 메인 뷰: 월간 종합 뷰 (엑셀 셀 직접 입력 지원) ── */}
+      <WorkPlanTeamMonthlyMatrix
+        actor={actor}
+        todayStr={initialDate ?? today}
+        members={scopedMembers}
+        deptId={deptId}
+        activeEditing={
+          editingTarget
+            ? { date: editingTarget.date, userId: editingTarget.targetUser?.id ?? actor.id }
+            : null
+        }
+        editingContent={editingContent}
+        onEditingContentChange={setEditingContent}
+        onSaveEditing={async () => {
+          if (!editingTarget) return;
+          const currentTarget = editingTarget;
+          const contentToSave = editingContent;
+          setIsSavingPlan(true);
+          setConflictError(null);
+          try {
+            if (!contentToSave.trim()) {
+              if (currentTarget.plan) {
+                await removePlan(currentTarget.plan.id, currentTarget.date, currentTarget.targetUser?.id);
+              }
+            } else {
+              await savePlan(
+                currentTarget.date,
+                contentToSave.trim(),
+                currentTarget.plan?.id,
+                shareToCalendar,
+                currentTarget.targetUser,
+                currentTarget.plan?.updatedAt,
+              );
+            }
+            // 저장 완료 후, 사용자가 다른 셀을 이미 클릭해 편집 대상이 변경되었으면 닫지 않음
+            setEditingTarget((prev) =>
+              prev?.date === currentTarget.date && prev?.targetUser?.id === currentTarget.targetUser?.id
+                ? null
+                : prev,
+            );
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : '';
+            if (
+              msg.includes('먼저 수정') ||
+              msg.includes('먼저 등록') ||
+              (err as { code?: string })?.code === 'CONFLICT'
+            ) {
+              setConflictError(
+                msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
+              );
+            } else {
+              alert(msg || '저장 중 오류가 발생했습니다.');
+            }
+          } finally {
+            setIsSavingPlan(false);
+          }
+        }}
+        onCancelEditing={() => setEditingTarget(null)}
+        onOpenEditor={(date, plan, member) => {
+          setEditingTarget({ date, plan, targetUser: member });
+          setEditingContent(plan?.content ?? '');
+          setShareToCalendar(true);
+          setConflictError(null);
+        }}
+        onOpenConfig={() => setIsConfigOpen(true)}
+        onToggleItem={handleToggleItem}
+      />
 
       {/* 루틴 템플릿 및 태그 관리 모달 */}
       <WorkPlanConfigModal
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}
       />
-
-      {/* 타인 계획 상세 열람 모달 */}
-      <Modal
-        open={viewingDetail !== null}
-        onClose={() => setViewingDetail(null)}
-        title={viewingDetail ? `${viewingDetail.user.name} (${viewingDetail.user.position || '팀원'}) · ${viewingDetail.plan.date} 계획` : ''}
-        footer={
-          <div className="flex items-center justify-between w-full">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                if (!viewingDetail) return;
-                const { user, plan } = viewingDetail;
-                setViewingDetail(null);
-                setRequestTarget({ user, date: plan.date });
-              }}
-            >
-              <span className="flex items-center gap-1.5 text-teal">
-                <CalendarPlus size={14} /> 이 날짜에 일정 추가 요청
-              </span>
-            </Button>
-            <Button size="sm" onClick={() => setViewingDetail(null)}>
-              닫기
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          <div className="text-[11px] text-ink3">
-            부서: <span className="font-semibold text-ink">{viewingDetail?.user.dept}</span>
-          </div>
-          <p className="whitespace-pre-wrap rounded-lg bg-panel-alt/50 p-3 text-[12px] text-ink border border-border">
-            {viewingDetail?.plan.content}
-          </p>
-        </div>
-      </Modal>
-
-      {/* 동료 일정 추가 요청 모달 */}
-      {requestTarget && (
-        <WorkPlanRequestModal
-          isOpen={Boolean(requestTarget)}
-          onClose={() => setRequestTarget(null)}
-          actor={actor}
-          targetUser={requestTarget.user}
-          initialDate={requestTarget.date}
-        />
-      )}
     </div>
   );
 }

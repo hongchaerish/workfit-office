@@ -129,12 +129,33 @@ const DEFAULT_CUSTOM_TAGS: WorkPlanCustomTag[] = [
   },
 ];
 
+/**
+ * 템플릿 본문에서 마크다운 체크박스(- [ ]) 및 대괄호 태그([태그])를 제거하여 순수 기본 텍스트로 정제합니다.
+ */
+export function stripMarkdownAndTags(content: string): string {
+  if (!content) return '';
+  return content
+    .split('\n')
+    .map((line) => {
+      // 1. 체크박스 문법 제거: - [ ] / - [x] / [ ] / [x]
+      let clean = line.replace(/^([-*]\s*)?\[[ xX]\]\s*/, '');
+      // 2. 태그 문법 제거: [보고] / [회의] / [집중] / [마감] 등 (시간 패턴 예: (09:00~10:00)은 보존)
+      clean = clean.replace(/^\[([^\]]+)\]\s*/, '');
+      return clean;
+    })
+    .join('\n');
+}
+
 function readTemplates(userId: string): WorkPlanTemplate[] {
   try {
     const raw = localStorage.getItem(getTemplatesKey(userId)) ?? localStorage.getItem(BASE_TEMPLATES_KEY);
-    if (!raw) return WORK_PLAN_TEMPLATES;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    const source = raw ? JSON.parse(raw) : WORK_PLAN_TEMPLATES;
+    if (Array.isArray(source) && source.length > 0) {
+      return source.map((tpl: WorkPlanTemplate) => ({
+        ...tpl,
+        content: stripMarkdownAndTags(tpl.content),
+      }));
+    }
     return WORK_PLAN_TEMPLATES;
   } catch {
     return WORK_PLAN_TEMPLATES;

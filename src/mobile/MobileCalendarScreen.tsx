@@ -10,6 +10,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { useProjects } from '@/features/project/useProjects';
 import { CALENDAR_EVENT_TYPE_LABELS, type CalendarEvent } from '@/domain/calendarEvent/schema';
+import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import MobileCommonHeader from './MobileCommonHeader';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
@@ -61,7 +62,7 @@ export default function MobileCalendarScreen() {
 
       const eventType: CalendarEvent['eventType'] = s.category === 'LEAVE' ? 'VACATION' : 'OUTSIDE';
       const typeLabel = s.category === 'LEAVE' ? (s.leaveType || '휴가') : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
-      const prefix = s.category === 'LEAVE' ? '🏖️ [휴가]' : s.category === 'OUTSIDE' ? '🏃 [외근]' : '🚗 [출장]';
+      const prefix = s.category === 'LEAVE' ? '[휴가]' : s.category === 'OUTSIDE' ? '[외근]' : '[출장]';
       const title = `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${s.drafterName || ''}`;
 
       while (curr <= last) {
@@ -98,7 +99,7 @@ export default function MobileCalendarScreen() {
   }, [approvedSchedules]);
 
   const allEvents = useMemo(() => {
-    return [...baseEvents, ...approvalSyntheticEvents];
+    return [...baseEvents, ...approvalSyntheticEvents].filter(isOfficialCalendarEvent);
   }, [baseEvents, approvalSyntheticEvents]);
 
   // 날짜별 이벤트 맵 (캘린더 셀 Dot 표기용)

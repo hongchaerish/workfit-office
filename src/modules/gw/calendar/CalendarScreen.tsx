@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { buildCalendarMonth, calendarToday, isValidCalendarDate, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent, CalendarEventType } from '@/domain/calendarEvent/schema';
-import { isMaskedForSupervisor, isCompanyEvent, isAttendeeEvent } from '@/domain/calendarEvent/engine';
+import { isMaskedForSupervisor, isCompanyEvent, isAttendeeEvent, isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import { resolveDeptId } from '@/domain/department/engine';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import type { CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
@@ -271,10 +271,20 @@ function LocalCalendarScreen() {
       const last = new Date(s.endDate + 'T00:00:00');
       if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
 
-      const eventType: CalendarEventType = s.category === 'LEAVE' ? 'VACATION' : 'OUTSIDE';
-      const typeLabel = s.category === 'LEAVE' ? (s.leaveType || '휴가') : (s.subType || (s.category === 'OUTSIDE' ? '외근' : '출장'));
-      const prefix = s.category === 'LEAVE' ? '🏖️ [휴가]' : s.category === 'OUTSIDE' ? '🏃 [외근]' : '🚗 [출장]';
-      const title = `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${s.drafterName || ''}`;
+      const isLeave = s.category === 'LEAVE';
+      const isTrip = s.category === 'TRIP';
+      const eventType: CalendarEventType = isLeave ? 'VACATION' : 'OUTSIDE';
+      const typeLabel = isLeave
+        ? (s.leaveType || '휴가')
+        : (s.subType || (isTrip ? '출장' : '외근'));
+      const drafter = s.drafterName || '';
+
+      // 이모지 없이 간결하고 명확한 제목
+      const title = isLeave
+        ? `[휴가] ${drafter} (${typeLabel})`
+        : isTrip
+        ? `[출장] ${drafter}${s.destination ? ` (${s.destination})` : ''}`
+        : `[외근] ${drafter}${s.destination ? ` (${s.destination})` : ''}`;
 
       while (curr <= last) {
         const yyyy = curr.getFullYear();
@@ -292,7 +302,7 @@ function LocalCalendarScreen() {
           allDay: isAllDay,
           startTime: isAllDay ? null : s.startTime!,
           endTime: isAllDay ? null : s.endTime!,
-          memo: `전자결재 승인 건: ${s.docTitle}\n사유: ${s.body || '—'}`,
+          memo: s.body ? `사유: ${s.body}` : '',
           visibility: 'COMPANY',
           eventType,
           attendeeUserIds: [],
@@ -310,10 +320,10 @@ function LocalCalendarScreen() {
   }, [approvalsQuery.data]);
 
   const events = eventsQuery.data ?? [];
-  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (전자결재 승인 일정 자동 합성) */
+  /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (회의·미팅 및 전자결재 승인 건 중심 공인 일정만 노출) */
   const rawEvents = useMemo(() => {
     const base = isTeam ? (teamQuery.data ?? []) : events;
-    return [...base, ...scheduleEvents];
+    return [...base, ...scheduleEvents].filter(isOfficialCalendarEvent);
   }, [isTeam, teamQuery.data, events, scheduleEvents]);
 
   /** 현재 사용자 기준 관련 일정 필터링 적용 */
@@ -540,20 +550,24 @@ function LocalCalendarScreen() {
                 {selectedDayEvents.map((event) => {
                   const owner = isTeam ? teamLabelOf(event) : ownerNameOf(event);
                   const masked = isTeam && isMaskedForSupervisor(actor.id, event);
-                  const isCompany = event.eventType === 'COMPANY_EVENT' || event.visibility === 'COMPANY';
+                  const isAppr = event.id.startsWith('CAL-APPR-');
+                  const isCompany = event.eventType === 'COMPANY_EVENT';
                   const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
-                  const isOutside = event.eventType === 'OUTSIDE';
                   const isVacation = event.eventType === 'VACATION';
+                  const isTrip = event.title.includes('[출장]');
+                  const isOutside = event.eventType === 'OUTSIDE' && !isTrip;
 
                   let badge = <span className="rounded bg-panel-alt px-1.5 py-0.5 text-[9px] font-bold text-ink3">일반</span>;
                   if (isCompany) {
-                    badge = <span className="rounded bg-teal-500/15 border border-teal-500/30 px-1.5 py-0.5 text-[9px] font-bold text-teal">🎉 사내행사</span>;
-                  } else if (isMeeting) {
-                    badge = <span className="rounded bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 text-[9px] font-bold text-purple-600 dark:text-purple-400">👥 회의</span>;
-                  } else if (isOutside) {
-                    badge = <span className="rounded bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 text-[9px] font-bold text-blue">🔵 외근</span>;
+                    badge = <span className="rounded bg-teal-500/15 border border-teal-500/30 px-1.5 py-0.5 text-[9px] font-bold text-teal">사내행사</span>;
                   } else if (isVacation) {
-                    badge = <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">🏖️ 휴가</span>;
+                    badge = <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">휴가</span>;
+                  } else if (isTrip) {
+                    badge = <span className="rounded bg-indigo-500/15 border border-indigo-500/30 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">출장</span>;
+                  } else if (isOutside) {
+                    badge = <span className="rounded bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 text-[9px] font-bold text-blue">외근</span>;
+                  } else if (isMeeting) {
+                    badge = <span className="rounded bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 text-[9px] font-bold text-purple-600 dark:text-purple-400">회의</span>;
                   }
 
                   const body = (
@@ -570,8 +584,9 @@ function LocalCalendarScreen() {
                         </span>
                       </div>
 
+                      {/* 전자결재 건은 제목에 이미 이름이 포함되어 있으므로 불필요한 공유 라벨 생략 */}
                       <div className="flex flex-wrap items-center gap-2 text-[10px] text-ink3">
-                        {owner && <span>{isTeam ? owner : `공유 · ${owner}`}</span>}
+                        {!isAppr && owner && <span>{isTeam ? owner : `공유 · ${owner}`}</span>}
                         {event.attendeeUserIds && event.attendeeUserIds.length > 0 && (
                           <span className="font-semibold text-purple-600 dark:text-purple-400">
                             참여자 {event.attendeeUserIds.length}명
@@ -739,10 +754,10 @@ function LocalCalendarScreen() {
               <div className="ml-2 flex flex-wrap items-center gap-1 border-l border-border pl-2">
                 {([
                   ['all', '전체 관련 일정', ''],
-                  ['mine', '내 일정', '📝'],
-                  ['attendee', '참여 회의·일정', '👥'],
-                  ['company', '사내행사', '🎉'],
-                  ['team', '부서·프로젝트', '🏢'],
+                  ['mine', '내 일정', ''],
+                  ['attendee', '참여 회의·일정', ''],
+                  ['company', '사내행사', ''],
+                  ['team', '부서·프로젝트', ''],
                 ] as const).map(([key, label, icon]) => (
                   <button
                     key={key}

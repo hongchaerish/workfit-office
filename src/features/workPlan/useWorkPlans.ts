@@ -40,9 +40,9 @@ export function useCreateWorkPlan() {
 
 export function useUpdateWorkPlan() {
   return useWorkPlanMutation<
-    { actor: WorkPlanActor; id: string; draft: WorkPlanDraft },
+    { actor: WorkPlanActor; id: string; draft: WorkPlanDraft; expectedUpdatedAt?: string },
     WorkPlan
-  >(({ actor, id, draft }) => workPlanRepo.update(actor, id, draft));
+  >(({ actor, id, draft, expectedUpdatedAt }) => workPlanRepo.update(actor, id, draft, expectedUpdatedAt));
 }
 
 export function useRemoveWorkPlan() {

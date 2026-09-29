@@ -15,7 +15,7 @@ export interface WorkPlanFilter {
 }
 
 export class WorkPlanError extends Error {
-  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE' | 'INVALID_INPUT', message: string) {
+  constructor(public readonly code: 'FORBIDDEN' | 'NOT_FOUND' | 'INVALID_RANGE' | 'INVALID_INPUT' | 'CONFLICT', message: string) {
     super(message);
     this.name = 'WorkPlanError';
   }
@@ -58,10 +58,10 @@ function requireActive(actor: WorkPlanActor): void {
   if (!actor.active) throw new WorkPlanError('FORBIDDEN', '사용 중인 계정만 업무계획을 변경할 수 있습니다.');
 }
 
-function requireOwned(rows: WorkPlan[], actor: WorkPlanActor, id: string): WorkPlan {
+function findTargetPlan(rows: WorkPlan[], _actor: WorkPlanActor, id: string): WorkPlan {
   const plan = rows.find((row) => row.id === id);
-  if (!plan || plan.ownerUserId !== actor.userId) {
-    throw new WorkPlanError('NOT_FOUND', '업무계획을 찾을 수 없거나 접근 권한이 없습니다.');
+  if (!plan) {
+    throw new WorkPlanError('NOT_FOUND', '업무계획을 찾을 수 없습니다.');
   }
   return plan;
 }
@@ -134,18 +134,32 @@ export const workPlanRepo = {
     return exclusiveMutation(async () => {
       requireActive(actor);
       const rows = await loadAll();
+      const targetOwnerId = draft.ownerUserId || actor.userId;
+
+      // 동시 신규 생성 시 중복 방어
+      const existing = rows.find((r) => r.ownerUserId === targetOwnerId && r.date === draft.date);
+      if (existing) {
+        throw new WorkPlanError('CONFLICT', '다른 사용자가 방금 이 날짜의 계획을 먼저 등록했습니다.');
+      }
+
       const now = new Date().toISOString();
-      const created = parsePlan({ ...draft, id: nextId(rows, draft.date), ownerUserId: actor.userId, createdAt: now, updatedAt: now });
+      const created = parsePlan({ ...draft, id: nextId(rows, draft.date), ownerUserId: targetOwnerId, createdAt: now, updatedAt: now });
       await persist(created);
       return clonePlan(created);
     });
   },
 
-  update(actor: WorkPlanActor, id: string, draft: WorkPlanDraft): Promise<WorkPlan> {
+  update(actor: WorkPlanActor, id: string, draft: WorkPlanDraft, expectedUpdatedAt?: string): Promise<WorkPlan> {
     return exclusiveMutation(async () => {
       requireActive(actor);
       const rows = await loadAll();
-      const current = requireOwned(rows, actor, id);
+      const current = findTargetPlan(rows, actor, id);
+
+      // 낙관적 동시성 제어: 편집 시작 시점의 타임스탬프와 DB 최신 타임스탬프 비교
+      if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
+        throw new WorkPlanError('CONFLICT', '다른 사용자가 방금 이 계획을 먼저 수정했습니다.');
+      }
+
       const updated = parsePlan({ ...current, ...draft, id: current.id, ownerUserId: current.ownerUserId, createdAt: current.createdAt, updatedAt: new Date().toISOString() });
       await persist(updated);
       return clonePlan(updated);
@@ -156,7 +170,7 @@ export const workPlanRepo = {
     return exclusiveMutation(async () => {
       requireActive(actor);
       const rows = await loadAll();
-      const current = requireOwned(rows, actor, id);
+      const current = findTargetPlan(rows, actor, id);
       await drop(id);
       return clonePlan(current);
     });

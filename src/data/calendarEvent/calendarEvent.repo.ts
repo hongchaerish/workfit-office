@@ -2,7 +2,86 @@ import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { canViewEvent, maskEventForSupervisor, isCompanyEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
-import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft } from '@/domain/calendarEvent/schema';
+import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft, type CalendarEventType } from '@/domain/calendarEvent/schema';
+
+/**
+ * Appwrite calendarEvents 컬렉션 스키마에 정의되지 않은 속성(eventType, attendeeUserIds)을
+ * memo 필드 내 [CAL_META:...] 태그로 안전하게 인코딩/디코딩합니다.
+ * 이를 통해 Appwrite "Unknown attribute" 에러를 원천 차단하면서도 클라이언트의
+ * 일정 유형(회의·사내행사 등)과 참여자 정보를 영속적으로 유지합니다.
+ */
+const CAL_META_REGEX = /\[CAL_META:(\{.*?\})\]/;
+
+interface CalMeta {
+  eventType?: CalendarEventType;
+  attendeeUserIds?: string[];
+}
+
+function encodeEventForStorage(event: CalendarEvent): CalendarEvent {
+  const meta: CalMeta = {};
+  if (event.eventType && event.eventType !== 'GENERAL') {
+    meta.eventType = event.eventType;
+  }
+  if (event.attendeeUserIds && event.attendeeUserIds.length > 0) {
+    meta.attendeeUserIds = event.attendeeUserIds;
+  }
+
+  // 기존 메모에서 혹시 남아있는 CAL_META 태그 제거
+  let cleanMemo = (event.memo || '').replace(CAL_META_REGEX, '').trim();
+
+  // 메타 정보가 있는 경우에만 태그 추가 (길이 1800자 초과 방지)
+  if (Object.keys(meta).length > 0) {
+    cleanMemo = cleanMemo.slice(0, 1800);
+    const metaStr = `[CAL_META:${JSON.stringify(meta)}]`;
+    cleanMemo = cleanMemo ? `${cleanMemo}\n${metaStr}` : metaStr;
+  }
+
+  return {
+    ...event,
+    memo: cleanMemo,
+  };
+}
+
+function decodeEventFromStorage(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const obj = { ...(raw as Record<string, unknown>) };
+
+  let eventType = obj.eventType as CalendarEventType | undefined;
+  let attendeeUserIds = Array.isArray(obj.attendeeUserIds) ? (obj.attendeeUserIds as string[]) : undefined;
+  let memo = typeof obj.memo === 'string' ? obj.memo : '';
+
+  const metaMatch = memo.match(CAL_META_REGEX);
+  if (metaMatch) {
+    try {
+      const parsedMeta = JSON.parse(metaMatch[1]) as CalMeta;
+      if (parsedMeta.eventType) eventType = parsedMeta.eventType;
+      if (parsedMeta.attendeeUserIds) attendeeUserIds = parsedMeta.attendeeUserIds;
+    } catch {
+      // JSON 파싱 실패 시 무시
+    }
+    memo = memo.replace(CAL_META_REGEX, '').trim();
+    obj.memo = memo;
+  }
+
+  // 메타 태그에도 없고 DB 필드에도 없는 경우: 제목/가시성으로부터 스마트 복원
+  if (!eventType) {
+    const title = typeof obj.title === 'string' ? obj.title : '';
+    if (title.includes('[회의]') || title.includes('[미팅]')) {
+      eventType = 'MEETING';
+    } else if (title.includes('[사내행사]') || title.includes('[행사]')) {
+      eventType = 'COMPANY_EVENT';
+    } else if (obj.visibility === 'COMPANY') {
+      eventType = 'COMPANY_EVENT';
+    } else {
+      eventType = 'GENERAL';
+    }
+  }
+
+  obj.eventType = eventType;
+  obj.attendeeUserIds = attendeeUserIds ?? [];
+
+  return obj;
+}
 
 /**
  * 일정 조회·변경 주체.
@@ -43,7 +122,8 @@ export class CalendarEventError extends Error {
  * 고치게 하는 편이 여러 줄을 한꺼번에 보여 주는 것보다 낫다.
  */
 function parseEvent(input: unknown): CalendarEvent {
-  const parsed = calendarEventSchema.safeParse(input);
+  const decoded = decodeEventFromStorage(input);
+  const parsed = calendarEventSchema.safeParse(decoded);
   if (parsed.success) return parsed.data;
   const first = parsed.error.issues[0];
   throw new CalendarEventError('INVALID_INPUT', first?.message || '입력값을 확인하세요.');
@@ -73,15 +153,17 @@ function exclusiveMutation<T>(work: () => Promise<T>): Promise<T> {
 const backend = createCrudBackend<CalendarEvent>({
   coll: 'calendarEvents',
   parse: (raw) => {
-    const parsed = calendarEventSchema.safeParse(raw);
+    const decoded = decodeEventFromStorage(raw);
+    const parsed = calendarEventSchema.safeParse(decoded);
     return parsed.success ? parsed.data : null;
   },
   idOf: (row) => row.id,
   seed: CALENDAR_EVENT_SEED.map(cloneEvent),
+  stripFields: ['eventType', 'attendeeUserIds'],
 });
 
 const loadAll = (): Promise<CalendarEvent[]> => backend.loadAll();
-const persist = (row: CalendarEvent): Promise<void> => backend.save(row);
+const persist = (row: CalendarEvent): Promise<void> => backend.save(encodeEventForStorage(row));
 const drop = (id: string): Promise<void> => backend.remove(id);
 
 function requireActive(actor: CalendarEventActor): void {

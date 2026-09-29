@@ -201,15 +201,15 @@ export function removeWorkPlanItem(content: string, targetIdx: number): string {
 export function addWorkPlanItem(content: string, text: string, tag?: string): string {
   const trimmed = content.trim();
   const tagPrefix = tag ? `[${tag}] ` : '';
-  const newLine = `- [ ] ${tagPrefix}${text.trim()}`;
+  const newLine = `${tagPrefix}${text.trim()}`;
   return trimmed ? `${trimmed}\n${newLine}` : newLine;
 }
 
 /**
- * To-Do 체크리스트 진행률을 계산합니다.
+ * To-Do 체크리스트 진행률을 계산합니다 (모든 업무 항목 대상).
  */
 export function calculatePlanProgress(content: string): WorkPlanProgress | null {
-  const items = parseWorkPlanItems(content).filter((i) => i.isChecklist && (i.text || i.tag));
+  const items = parseWorkPlanItems(content).filter((i) => i.text || i.tag);
   if (items.length === 0) return null;
 
   const total = items.length;
@@ -236,27 +236,27 @@ export const WORK_PLAN_TEMPLATES: WorkPlanTemplate[] = [
     name: '고객사 미팅 및 협의',
     desc: '고객사 미팅 및 협의 사항 정리',
     icon: '🔵',
-    content: '- [ ] [미팅] 고객사 온·오프라인 미팅 및 요구사항 청취\n- [ ] [보고] 미팅 결과 정리 및 피드백 공유',
+    content: '고객사 온·오프라인 미팅 및 요구사항 청취\n미팅 결과 정리 및 피드백 공유',
   },
   {
     id: 'tpl-meeting',
     name: '주간 정기 회의',
     desc: '부서 정기 미팅 및 안건 논의',
     icon: '🟣',
-    content: '- [ ] [회의] 주간 부서 정기 미팅 참석\n- [ ] [보고] 금주 진행 현황 및 차주 계획 공유',
+    content: '주간 부서 정기 미팅 참석\n금주 진행 현황 및 차주 계획 공유',
   },
   {
     id: 'tpl-focus',
     name: '프로젝트 집중 업무',
     desc: '집중 몰입 업무 및 태스크 완료',
     icon: '🟠',
-    content: '- [ ] [집중] 핵심 모듈 개발 및 설계 검토\n- [ ] [집중] 단위 테스트 및 코드 리뷰 반영',
+    content: '핵심 모듈 개발 및 설계 검토\n단위 테스트 및 코드 리뷰 반영',
   },
   {
     id: 'tpl-closing',
     name: '월마감 및 정산',
     desc: '마감 실적 취합 및 결재',
     icon: '📋',
-    content: '- [ ] [마감] 당월 실적 및 지표 데이터 취합\n- [ ] [보고] 결산 보고서 작성 및 전자결재 상신',
+    content: '당월 실적 및 지표 데이터 취합\n결산 보고서 작성 및 전자결재 상신',
   },
 ];

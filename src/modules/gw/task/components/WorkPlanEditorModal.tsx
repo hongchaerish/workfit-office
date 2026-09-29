@@ -5,7 +5,6 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import {
   parseWorkPlanItems,
   calculatePlanProgress,
-  getWorkPlanTagMeta,
   toggleWorkPlanItem,
   removeWorkPlanItem,
 } from '@/domain/workPlan/engine';
@@ -27,6 +26,8 @@ import {
   Plus,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
+  Copy,
   ChevronDown,
   Settings,
 } from 'lucide-react';
@@ -45,8 +46,9 @@ interface WorkPlanEditorModalProps {
   date?: string;
   dateTitle: string;
   initialContent: string;
+  loadedUpdatedAt?: string;
   todayEvents?: CalendarEvent[];
-  onSave: (content: string, shareToCalendar?: boolean) => Promise<void>;
+  onSave: (content: string, shareToCalendar?: boolean, forceOverwrite?: boolean) => Promise<void>;
   onDelete?: () => Promise<void>;
 }
 
@@ -66,6 +68,7 @@ export function WorkPlanEditorModal({
   const [entryTab, setEntryTab] = useState<'schedule' | 'todo'>('todo');
   const [configModalTab, setConfigModalTab] = useState<'templates' | 'tags' | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const templateMenuRef = useRef<HTMLDivElement>(null);
 
@@ -91,9 +94,8 @@ export function WorkPlanEditorModal({
 
   // 일반 업무 등록 상태
   const [todoText, setTodoText] = useState('');
-  const [todoTag, setTodoTag] = useState('');
 
-  const { templates, tagMap } = useWorkPlanConfig();
+  const { templates } = useWorkPlanConfig();
 
   // 모달 열릴 때 초기 내용 동기화
   useEffect(() => {
@@ -133,12 +135,13 @@ export function WorkPlanEditorModal({
     }
   };
 
-  // ⏰ 시간 일정 추가
+  // ⏰ 시간 일정 추가 (회의/미팅 등 캘린더 공유 일정)
   const handleAddSchedule = () => {
-    if (!eventTitle.trim()) return;
+    const cleanTitle = eventTitle.replace(/^\[(회의|미팅)\]\s*/, '').trim();
+    if (!cleanTitle) return;
     const timePart = eventAllDay ? '' : `(${eventStartTime}~${eventEndTime}) `;
     const tagPart = eventTag ? `[${eventTag}] ` : '';
-    const newLine = `- [ ] ${tagPart}${timePart}${eventTitle.trim()}`;
+    const newLine = `- [ ] ${tagPart}${timePart}${cleanTitle}`;
 
     setContent((prev) => {
       const trimmed = prev.trim();
@@ -146,14 +149,14 @@ export function WorkPlanEditorModal({
     });
 
     setEventTitle('');
-    setNoticeMessage(`'${eventTitle.trim()}' 일정을 추가했습니다.`);
+    setNoticeMessage(`'${cleanTitle}' 일정을 추가했습니다.`);
   };
 
-  // 📋 일반 업무 추가
+  // 📋 일반 업무 추가 (순수 To-Do)
   const handleAddTodo = () => {
-    if (!todoText.trim()) return;
-    const tagPart = todoTag ? `[${todoTag}] ` : '';
-    const newLine = `- [ ] ${tagPart}${todoText.trim()}`;
+    const cleanTodo = todoText.replace(/^\[(회의|미팅)\]\s*/, '').trim();
+    if (!cleanTodo) return;
+    const newLine = `- [ ] ${cleanTodo}`;
 
     setContent((prev) => {
       const trimmed = prev.trim();
@@ -161,7 +164,7 @@ export function WorkPlanEditorModal({
     });
 
     setTodoText('');
-    setNoticeMessage(`'${todoText.trim()}' 업무를 추가했습니다.`);
+    setNoticeMessage(`'${cleanTodo}' 업무를 추가했습니다.`);
   };
 
   // 템플릿 적용
@@ -183,13 +186,34 @@ export function WorkPlanEditorModal({
     setContent((prev) => removeWorkPlanItem(prev, idx));
   };
 
-  // 최종 저장
-  const handleSave = async () => {
-    if (!content.trim()) return;
+  // 최종 저장 (낙관적 동시성 제어 적용)
+  const handleSave = async (forceOverwrite = false) => {
     setIsSaving(true);
+    setConflictError(null);
     try {
-      await onSave(content.trim(), shareToCalendar);
+      if (!content.trim()) {
+        if (onDelete && initialContent) {
+          await onDelete();
+        } else {
+          await onSave('', shareToCalendar, forceOverwrite);
+        }
+      } else {
+        await onSave(content.trim(), shareToCalendar, forceOverwrite);
+      }
       onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      if (
+        msg.includes('먼저 수정') ||
+        msg.includes('먼저 등록') ||
+        (err as { code?: string })?.code === 'CONFLICT'
+      ) {
+        setConflictError(
+          msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
+        );
+      } else {
+        alert(msg || '저장 중 오류가 발생했습니다.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -365,6 +389,41 @@ export function WorkPlanEditorModal({
             </div>
           </div>
 
+          {/* 동시 수정 충돌(OCC) 경고 배너 */}
+          {conflictError && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2.5 animate-in fade-in">
+              <div className="flex items-start gap-2.5 text-amber-900 dark:text-amber-200">
+                <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-1 text-[11.5px] leading-relaxed">
+                  <p className="font-extrabold text-[12px]">⚠️ 동시 수정 충돌 감지 (작성 데이터 보호됨)</p>
+                  <p>{conflictError}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-amber-500/20 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(content);
+                    setNoticeMessage('작성 중이던 내용을 클립보드에 안전하게 복사했습니다.');
+                  }}
+                  className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-white dark:bg-panel px-2.5 py-1 font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-panel-alt transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Copy size={11} />
+                  <span>내용 복사</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSave(true)}
+                  disabled={isSaving}
+                  className="rounded-lg bg-amber-600 px-3 py-1 font-bold text-white hover:bg-amber-700 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="다른 사람의 변경을 확인한 후 현재 내가 작성한 내용으로 최종 저장을 진행합니다."
+                >
+                  {isSaving ? '저장 중…' : '현재 작성본으로 저장 진행'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 알림 토스트 배너 */}
           {noticeMessage && (
             <div className="flex items-center gap-2 rounded-lg bg-teal/10 px-3 py-2 text-[11px] font-semibold text-teal border border-teal/20 transition-all animate-in fade-in">
@@ -419,17 +478,17 @@ export function WorkPlanEditorModal({
                   </div>
                 )}
 
-                {/* 태그 선택 버튼 */}
+                {/* 태그 선택 버튼 (캘린더 연동용 회의/미팅만 유지) */}
                 <div className="flex items-center gap-1">
-                  {['회의', '미팅', '보고', '행사'].map((tag) => (
+                  {['회의', '미팅'].map((tag) => (
                     <button
                       key={tag}
                       type="button"
                       onClick={() => setEventTag(tag)}
-                      className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
                         eventTag === tag
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'bg-panel border border-border text-ink2 hover:border-blue-400'
+                          ? 'bg-purple-600 text-white shadow-2xs'
+                          : 'bg-panel border border-border text-ink2 hover:border-purple-400'
                       }`}
                     >
                       {tag}
@@ -449,8 +508,8 @@ export function WorkPlanEditorModal({
                       handleAddSchedule();
                     }
                   }}
-                  placeholder="일정 제목 입력 (예: 데이터 플랫폼 백엔드 회의, 거래처 미팅)"
-                  className="flex-1 rounded-lg border border-border bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-blue-500"
+                  placeholder="회의/미팅 일정 입력 (예: 부서 주간 회의, 거래처 미팅)"
+                  className="flex-1 rounded-lg border border-border bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-purple-500"
                 />
                 <Button
                   size="sm"
@@ -463,29 +522,16 @@ export function WorkPlanEditorModal({
               </div>
             </div>
           ) : (
-            /* 2) 📋 일반 업무 추가 폼 */
+            /* 2) 📋 일반 업무 추가 폼 (순수 체크리스트) */
             <div className="rounded-xl border border-teal/25 bg-teal-soft/10 p-3.5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-teal">
                   <CheckSquare size={13} />
                   <span>새 일반 업무 등록 (오늘 완수할 To-Do 체크리스트)</span>
                 </span>
-                <div className="flex items-center gap-1">
-                  {['집중', '마감', '교육', '보고'].map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => setTodoTag(todoTag === tag ? '' : tag)}
-                      className={`rounded px-2 py-0.5 text-[10.5px] font-medium transition-all cursor-pointer ${
-                        todoTag === tag
-                          ? 'bg-teal text-white shadow-2xs'
-                          : 'bg-panel border border-border text-ink3 hover:border-teal hover:text-teal'
-                      }`}
-                    >
-                      +{tag}
-                    </button>
-                  ))}
-                </div>
+                <span className="text-[10px] text-ink3">
+                  (자유 텍스트 입력)
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -499,7 +545,7 @@ export function WorkPlanEditorModal({
                       handleAddTodo();
                     }
                   }}
-                  placeholder="할 일 내용 입력 (예: 결산 리포트 데이터 검증, 배치 쿼리 최적화)"
+                  placeholder="할 일 내용 입력 (예: 결산 리포트 데이터 검증, 개발 이슈 조치)"
                   className="flex-1 rounded-lg border border-border bg-panel px-3 py-2 text-[12px] text-ink outline-none focus:border-teal"
                 />
                 <Button
@@ -536,7 +582,6 @@ export function WorkPlanEditorModal({
                   if (!item.text && !item.tag) return null;
                   const { startTime, endTime, cleanText } = extractTimeFromText(item.text);
                   const hasTime = Boolean(startTime);
-                  const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
 
                   return (
                     <div
@@ -565,10 +610,10 @@ export function WorkPlanEditorModal({
                           </span>
                         )}
 
-                        {/* 태그 뱃지 */}
-                        {tagMeta && (
-                          <span className={`shrink-0 rounded px-1.5 py-0.2 text-[10px] font-bold ${tagMeta.badgeClass}`}>
-                            {tagMeta.tag}
+                        {/* 태그 뱃지 (회의/미팅만 유지) */}
+                        {(item.tag === '회의' || item.tag === '미팅') && (
+                          <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-0.2 text-[10px] font-bold text-purple-700 border border-purple-500/25 dark:text-purple-300">
+                            회의
                           </span>
                         )}
 
@@ -578,7 +623,7 @@ export function WorkPlanEditorModal({
                             item.completed ? 'line-through text-ink3' : 'text-ink'
                           }`}
                         >
-                          {cleanText || item.text}
+                          {(cleanText || item.text).replace(/^\[(회의|미팅)\]\s*/, '')}
                         </span>
                       </div>
 
@@ -645,7 +690,11 @@ export function WorkPlanEditorModal({
               <Button size="sm" variant="secondary" onClick={onClose} disabled={isSaving}>
                 취소
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={isSaving || !content.trim()}>
+              <Button
+                size="sm"
+                onClick={() => handleSave(false)}
+                disabled={isSaving || (content === initialContent && !content.trim())}
+              >
                 {isSaving ? '저장 중…' : '저장하기'}
               </Button>
             </div>

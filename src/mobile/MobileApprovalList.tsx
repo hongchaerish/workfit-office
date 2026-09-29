@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Bell, Settings, X, Info } from 'lucide-react';
+import { ClipboardCheck, Bell, Settings, X, Info, Search } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
@@ -76,6 +76,8 @@ export default function MobileApprovalList() {
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchBoxFilter, setSearchBoxFilter] = useState<'all' | ApprovalBox | '문서함'>('all');
   const org = useOrgTree();
 
   const preds = useMemo(() => getPredecessorsOf(me), [me]);
@@ -245,6 +247,55 @@ export default function MobileApprovalList() {
     return rawDocs;
   }, [byBox, box, todoFilter, draftFilter, doneFilter, rejectFilter, me, org, user?.dept]);
 
+  // 전체 문서함 통합 고유 문서 풀 (검색용)
+  const allUniqueDocs = useMemo(() => {
+    const map = new Map<string, ApprovalDoc>();
+    Object.values(byBox).forEach((list) => {
+      (list as ApprovalDoc[]).forEach((doc) => {
+        if (!map.has(doc.id)) map.set(doc.id, doc);
+      });
+    });
+    return Array.from(map.values());
+  }, [byBox]);
+
+  // 검색어 및 문서함 필터가 적용된 검색 결과
+  const searchResults = useMemo(() => {
+    const kw = searchQuery.trim().toLowerCase();
+    if (!kw && searchBoxFilter === 'all') return [];
+
+    let pool = allUniqueDocs;
+    if (searchBoxFilter !== 'all') {
+      if (searchBoxFilter === '문서함') {
+        const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
+        const myDeptId = myDeptObj?.id ?? '';
+        const myDeptName = user?.dept ?? '';
+        pool = pool.filter((d) => {
+          if (d.status !== '완료' || d.visibility === '비공개') return false;
+          const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
+          const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
+          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
+        });
+      } else {
+        const boxDocs = byBox[searchBoxFilter as ApprovalBox] ?? [];
+        const boxDocIds = new Set(boxDocs.map((d) => d.id));
+        pool = pool.filter((d) => boxDocIds.has(d.id));
+      }
+    }
+
+    if (!kw) return pool;
+
+    return pool.filter((d) => {
+      const titleMatch = d.title?.toLowerCase().includes(kw);
+      const noMatch = d.docNo?.toLowerCase().includes(kw);
+      const drafterMatch = d.drafterName?.toLowerCase().includes(kw);
+      const typeMatch = d.docType?.toLowerCase().includes(kw);
+      const deptMatch = d.drafterDept?.toLowerCase().includes(kw);
+      return Boolean(titleMatch || noMatch || drafterMatch || typeMatch || deptMatch);
+    });
+  }, [allUniqueDocs, byBox, searchQuery, searchBoxFilter, org, user?.dept]);
+
+  const isSearching = searchQuery.trim().length > 0;
+
   return (
     <div className="flex h-full flex-col" style={{ background: '#f0f4f8' }}>
       <header className="flex shrink-0 items-center gap-2 px-2 py-3 text-white" style={{ background: '#101830' }}>
@@ -264,11 +315,70 @@ export default function MobileApprovalList() {
 
       {notice && <div className="px-4 py-2 text-[11.5px] text-navy" style={{ background: '#c7ecc5' }}>{notice}</div>}
 
-      {/* 결재함 탭 */}
-      <div 
-        className="flex shrink-0 border-b border-[#e2e8f0] bg-white overflow-x-auto whitespace-nowrap scrollbar-none flex-row flex-nowrap"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-      >
+      {/* ── 검색 바 ── */}
+      <div className="shrink-0 border-b border-[#e2e8f0] bg-white px-3 py-2">
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-3 text-ink3" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="결재 문서명, 문서번호, 기안자 검색…"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-1.5 pl-8.5 pr-8 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-[#3b82f6] focus:bg-white transition-all shadow-2xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSearchBoxFilter('all');
+              }}
+              className="absolute right-2.5 p-1 text-ink3 hover:text-ink"
+              title="검색어 지우기"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* 검색어가 있을 때 문서함 필터 칩 */}
+        {isSearching && (
+          <div className="flex items-center gap-1 overflow-x-auto pt-2 pb-0.5 no-scrollbar">
+            <span className="text-[10px] font-bold text-ink3 shrink-0 mr-1">문서함:</span>
+            {[
+              { k: 'all', l: '전체' },
+              { k: '대기', l: '대기' },
+              { k: '상신', l: '상신' },
+              { k: '완료', l: '완료' },
+              { k: '반려', l: '반려' },
+              { k: '참조', l: '참조' },
+              { k: '수신', l: '수신' },
+              { k: '문서함', l: '부서문서' },
+            ].map((chip) => (
+              <button
+                key={chip.k}
+                type="button"
+                onClick={() => setSearchBoxFilter(chip.k as any)}
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold shrink-0 transition-all ${
+                  searchBoxFilter === chip.k
+                    ? 'bg-[#3b82f6] text-white shadow-2xs'
+                    : 'bg-slate-100 text-ink3 hover:bg-slate-200'
+                }`}
+              >
+                {chip.l}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 결재함 탭 (검색 모드가 아닐 때만 노출) */}
+      {!isSearching && (
+        <>
+          <div 
+            className="flex shrink-0 border-b border-[#e2e8f0] bg-white overflow-x-auto whitespace-nowrap scrollbar-none flex-row flex-nowrap"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
         {activeBoxes.map((b) => {
           const active = b.key === box;
           const rawCnt = counts[b.key as ApprovalBox] ?? 0;
@@ -433,32 +543,69 @@ export default function MobileApprovalList() {
           })}
         </div>
       )}
+      </>
+      )}
 
-
-
-
+      {/* ── 본문 목록 영역 ── */}
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        {isLoading ? (
-          <div className="py-16 text-center text-[12px] text-ink3">불러오는 중…</div>
-        ) : docs.length === 0 ? (
-          <div className="py-16 text-center text-[12px] text-ink3">
-            {box === '대기' ? '결재할 문서가 없습니다.' : '문서가 없습니다.'}
+        {isSearching ? (
+          /* 검색 결과 목록 */
+          <div>
+            <div className="flex items-center justify-between bg-slate-100/90 px-4 py-2 text-[11px] font-bold text-ink2 border-b border-slate-200">
+              <span>
+                {searchBoxFilter !== 'all' ? `[${searchBoxFilter}] ` : ''}
+                검색 결과 ({searchResults.length}건)
+              </span>
+              <span className="text-[10px] text-ink3">문서를 탭하여 상세 조회</span>
+            </div>
+
+            {searchResults.length === 0 ? (
+              <div className="py-20 text-center text-[12px] text-ink3">
+                검색 조건과 일치하는 결재 문서가 없습니다.
+              </div>
+            ) : (
+              searchResults.map((d) => (
+                <ApprovalRow
+                  key={d.id}
+                  doc={d}
+                  isUnread={box === '반려' && !readRejectedIds.has(d.id)}
+                  onOpen={() => {
+                    if (d.status === '반려' && me) {
+                      markRejectedDocAsRead(me, d.id);
+                      setReadRejectedIds((prev) => new Set(prev).add(d.id));
+                    }
+                    nav(`/m/approval/${d.id}`);
+                  }}
+                />
+              ))
+            )}
           </div>
         ) : (
-          docs.map((d) => (
-            <ApprovalRow
-              key={d.id}
-              doc={d}
-              isUnread={box === '반려' && !readRejectedIds.has(d.id)}
-              onOpen={() => {
-                if (box === '반려' && me) {
-                  markRejectedDocAsRead(me, d.id);
-                  setReadRejectedIds((prev) => new Set(prev).add(d.id));
-                }
-                nav(`/m/approval/${d.id}`);
-              }}
-            />
-          ))
+          /* 기존 결재함 문서 목록 */
+          <>
+            {isLoading ? (
+              <div className="py-16 text-center text-[12px] text-ink3">불러오는 중…</div>
+            ) : docs.length === 0 ? (
+              <div className="py-16 text-center text-[12px] text-ink3">
+                {box === '대기' ? '결재할 문서가 없습니다.' : '문서가 없습니다.'}
+              </div>
+            ) : (
+              docs.map((d) => (
+                <ApprovalRow
+                  key={d.id}
+                  doc={d}
+                  isUnread={box === '반려' && !readRejectedIds.has(d.id)}
+                  onOpen={() => {
+                    if (box === '반려' && me) {
+                      markRejectedDocAsRead(me, d.id);
+                      setReadRejectedIds((prev) => new Set(prev).add(d.id));
+                    }
+                    nav(`/m/approval/${d.id}`);
+                  }}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
 
