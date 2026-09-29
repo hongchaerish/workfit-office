@@ -141,23 +141,22 @@ function LocalCalendarScreen() {
     projectIds: myProjects.map((project) => project.id),
     active: actor?.status === '사용',
   }), [actor, deptId, myProjects]);
-  /** 공유받은 일정의 주인 이름. 내 일정이면 null이라 화면이 아무것도 덧붙이지 않는다. */
+  /** 공유받은 일정의 주인 이름과 직급. 내 일정이면 null이라 화면이 아무것도 덧붙이지 않는다. */
   const ownerNameOf = (event?: CalendarEvent): string | null => {
     if (!event || event.ownerUserId === (actor?.id ?? '')) return null;
-    return users.find((user) => user.id === event.ownerUserId)?.name ?? '다른 사용자';
+    const user = userMap.get(event.ownerUserId);
+    if (!user) return '다른 사용자';
+    return user.position ? `${user.name} ${user.position}` : user.name;
   };
   /**
-   * 팀 일정 전용 표기 — 이름·부서. 소유자가 나여도 항상 붙인다.
-   *
-   * `ownerNameOf`는 "내 일정" 탭에서 공유받은 것만 표시하려고 본인 소유는 일부러 null을
-   * 준다. 팀 탭에 그대로 쓰면 본인 소유 항목만 아무 표기 없이 떠서 "이름이 안 붙는
-   * 버그"처럼 보인다 — 팀 조회는 누구 것이든 항상 밝히는 게 맞아서 따로 둔다.
+   * 팀 일정 전용 표기 — 이름 직급 · 부서. 소유자가 나여도 항상 붙인다.
    */
   const teamLabelOf = (event?: CalendarEvent): string | null => {
     if (!event) return null;
-    const user = users.find((row) => row.id === event.ownerUserId);
+    const user = userMap.get(event.ownerUserId);
     if (!user) return '다른 사용자';
-    return `${user.name} · ${user.dept}`;
+    const nameWithPos = user.position ? `${user.name} ${user.position}` : user.name;
+    return `${nameWithPos} · ${user.dept}`;
   };
 
   /*
@@ -283,13 +282,12 @@ function LocalCalendarScreen() {
       const drafter = s.drafterName || drafterUser?.name || '';
       const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
 
-      // [연차 프라이버시 원칙]: 구체적 사유/유형 대신 "부재(Unavailable) 및 시간" 중심 표기
-      // 사용자 요청: 휴가 표시 시 이름과 직급까지 함께 표시
+      // 사용자 요청: 외근, 출장, 휴가 등 모든 일정에서 이름 뒤에 직급이 바로 붙도록 반영
       const title = isLeave
         ? `[휴가] ${drafterWithPos}`
         : isTrip
-        ? `[출장] ${drafter}${s.destination ? ` (${s.destination})` : ''}`
-        : `[외근] ${drafter}${s.destination ? ` (${s.destination})` : ''}`;
+        ? `[출장] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`
+        : `[외근] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`;
 
       while (curr <= last) {
         const yyyy = curr.getFullYear();
@@ -454,7 +452,7 @@ function LocalCalendarScreen() {
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
       <GwHead
         icon="📅"
-        name="일정관리"
+        name="캘린더"
         desc="전사·개인 일정 캘린더: 임직원의 주요 일정 및 사내 일정(외근, 휴가, 회의, 사내행사 등)을 캘린더에 배치해 한눈에 확인하고 조율합니다."
         right={(
           <div className="flex items-center gap-2">

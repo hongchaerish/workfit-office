@@ -386,7 +386,7 @@ export default function CalendarEventModal({
                       >
                         <Users size={11} />
                         <span>
-                          {u.name} {u.position ? `(${u.position})` : ''} · {u.dept}
+                          {u.name}{u.position ? ` ${u.position}` : ''} · {u.dept}
                         </span>
                         {canEdit && (
                           <button

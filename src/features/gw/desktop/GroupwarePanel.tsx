@@ -87,7 +87,7 @@ export function GroupwarePanel({ onClose }: { onClose: () => void }) {
       { l: '근태·휴가', icon: '⏱️', to: 'commute', hot: true },
 
       // 2. 일반 모듈 8종 (2~3행 배치 & 사용자 순서 변경 가능)
-      { l: '일정관리', icon: '📅', to: 'calendar' },
+      { l: '캘린더', icon: '📅', to: 'calendar' },
       { l: '게시판', icon: '📌', to: 'board' },
       { l: '인명관리', icon: '👥', to: 'employee' },
       { l: '회사 갤러리', icon: '🖼️', to: 'gallery' },

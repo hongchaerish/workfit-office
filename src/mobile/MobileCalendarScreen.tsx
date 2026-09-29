@@ -78,7 +78,7 @@ export default function MobileCalendarScreen() {
       const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
 
       // 연차 프라이버시: 사유는 비공개, '부재 여부와 시간' 중심 표기 (이름과 직급 표시)
-      const title = isLeave ? `[휴가] ${drafterWithPos}` : `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${drafter}`;
+      const title = isLeave ? `[휴가] ${drafterWithPos}` : `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${drafterWithPos}`;
 
       while (curr <= last) {
         const yyyy = curr.getFullYear();
@@ -182,7 +182,7 @@ export default function MobileCalendarScreen() {
   return (
     <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
       <MobileCommonHeader
-        title="일정관리"
+        title="캘린더"
         subtitle={selectedDateLabel}
         rightAction={
           <button

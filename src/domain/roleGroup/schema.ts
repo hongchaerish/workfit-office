@@ -42,7 +42,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_GW_COMMUTE_ADMIN', name: '근태/휴가 관제 센터', url: '/gw/commute/admin', category: 'GW', desc: '전사/부서 임직원 실시간 출퇴근, 이상근태(지각) 및 연차 대장 관제', supportedActions: ['access', 'update'] },
   { id: 'S_GW_LEAVE', name: '휴가관리', url: '/gw/leave', category: 'GW', desc: '연차/휴가 신청 및 잔여일수 조회', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_BOARD', name: '사내게시판', url: '/gw/board', category: 'GW', desc: '공지사항 및 전사 게시판', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_GW_CALENDAR', name: '일정관리', url: '/gw/calendar', category: 'GW', desc: '개인/부서/전사 캘린더', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_GW_CALENDAR', name: '캘린더', url: '/gw/calendar', category: 'GW', desc: '개인/부서/전사 캘린더', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_MAIL', name: '사내메일', url: '/gw/mail', category: 'GW', desc: '웹메일 송수신 및 메일함', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_TASK', name: '프로젝트', url: '/gw/task', category: 'GW', desc: '칸반/목록 프로젝트 배정 및 진행 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_GW_WORK_PLAN', name: '내 업무계획 (To-Do)', url: '/gw/work-plan', category: 'GW', desc: '일일 업무 보고 및 개인 To-Do 계획', supportedActions: ['access', 'create', 'update', 'delete'] },

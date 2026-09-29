@@ -161,7 +161,7 @@ export default function MobileModuleLauncher() {
     () => [
       {
         id: 'calendar',
-        name: '일정관리',
+        name: '캘린더',
         desc: '전사·개인 캘린더 및 외근·출장',
         path: '/m/calendar',
         icon: Calendar,
