@@ -30,8 +30,6 @@ import { enablePushForUser } from '@/shared/lib/messaging';
 import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import { workPlanPolicy } from '@/domain/security/policy/workPlanPolicy';
-import { useUnseenCount } from '@/features/mail/useMailbox';
-import { isMailBackendReady, isMailSampleData } from '@/data/mail/mail.client';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
 
 interface CoreAppItem {
@@ -44,6 +42,7 @@ interface CoreAppItem {
   badgeColor?: string;
   iconBg: string;
   iconColor: string;
+  disabled?: boolean;
 }
 
 interface CollabAppItem {
@@ -53,6 +52,7 @@ interface CollabAppItem {
   path: string;
   icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
   badge?: string;
+  disabled?: boolean;
 }
 
 export default function MobileModuleLauncher() {
@@ -84,14 +84,7 @@ export default function MobileModuleLauncher() {
     }).length;
   }, [byBox, me, preds]);
 
-  // 2. 안 읽은 메일 건수 계산
-  const mailUnseenQuery = useUnseenCount(isMailBackendReady || isMailSampleData ? user : null);
-  const mailUnseen = useMemo(
-    () => Object.values(mailUnseenQuery.data ?? {}).reduce((sum, count) => sum + count, 0),
-    [mailUnseenQuery.data]
-  );
-
-  // 3. 오늘 날짜 텍스트
+  // 2. 오늘 날짜 텍스트
   const todayText = useMemo(() => {
     const now = new Date();
     const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -130,9 +123,10 @@ export default function MobileModuleLauncher() {
         path: '/m/mail',
         icon: Mail,
         badge: '준비 중',
-        badgeColor: 'bg-amber-500 text-white',
+        badgeColor: 'bg-slate-400 text-white',
         iconBg: 'bg-slate-500/10 dark:bg-slate-500/20',
         iconColor: 'text-slate-600 dark:text-slate-400',
+        disabled: true,
       },
       {
         id: 'task',
@@ -194,6 +188,7 @@ export default function MobileModuleLauncher() {
         path: '/m/project',
         icon: FolderGit2,
         badge: '준비 중',
+        disabled: true,
       },
       {
         id: 'resource',
@@ -356,17 +351,15 @@ export default function MobileModuleLauncher() {
               </span>
             </button>
 
-            {/* 안 읽은 메일 */}
-            <button
-              type="button"
-              onClick={() => nav('/m/mail')}
-              className="flex flex-col rounded-xl bg-slate-50 border border-slate-200/80 p-2 text-left hover:bg-slate-100 transition-all active:scale-98"
+            {/* 안 읽은 메일 (준비 중 - 터치 차단 및 회색 표기) */}
+            <div
+              className="flex flex-col rounded-xl bg-slate-100/60 border border-slate-200/60 p-2 text-left pointer-events-none opacity-50 grayscale select-none cursor-not-allowed"
             >
-              <span className="text-[10px] font-semibold text-ink3">안 읽은 메일</span>
-              <span className={`text-[12.5px] font-extrabold mt-0.5 ${mailUnseen > 0 ? 'text-sky-600' : 'text-ink'}`}>
-                {mailUnseen > 0 ? `${mailUnseen > 99 ? '99+' : mailUnseen}건` : '0건'}
+              <span className="text-[10px] font-semibold text-slate-400">사내메일</span>
+              <span className="text-[12px] font-bold text-slate-400 mt-0.5">
+                준비 중
               </span>
-            </button>
+            </div>
 
             {/* 메신저 대화방 */}
             <button
@@ -397,6 +390,35 @@ export default function MobileModuleLauncher() {
           <div className="grid grid-cols-2 gap-2.5">
             {coreApps.map((item) => {
               const IconComponent = item.icon;
+              if (item.disabled) {
+                return (
+                  <div
+                    key={item.id}
+                    className="relative flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-100/70 p-3.5 text-left opacity-50 grayscale pointer-events-none cursor-not-allowed select-none"
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <div className={`grid h-10 w-10 place-items-center rounded-xl ${item.iconBg} ${item.iconColor}`}>
+                        <IconComponent size={20} strokeWidth={2.3} />
+                      </div>
+                      {item.badge && (
+                        <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold shadow-2xs ${item.badgeColor || 'bg-slate-300 text-slate-700'}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-3">
+                      <h4 className="text-[13.5px] font-extrabold text-slate-600 tracking-tight">
+                        {item.name}
+                      </h4>
+                      <p className="text-[10.5px] text-slate-400 line-clamp-1 mt-0.5">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={item.id}
@@ -441,6 +463,35 @@ export default function MobileModuleLauncher() {
           <div className="grid grid-cols-2 gap-2.5">
             {collabApps.map((item) => {
               const IconComponent = item.icon;
+              if (item.disabled) {
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-100/70 p-3 text-left opacity-50 grayscale pointer-events-none cursor-not-allowed select-none"
+                  >
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-200 text-slate-500">
+                      <IconComponent size={18} strokeWidth={2.1} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <h4 className="text-[12.5px] font-bold text-slate-600 truncate">
+                          {item.name}
+                        </h4>
+                        {item.badge && (
+                          <span className="rounded bg-slate-300 border border-slate-400/40 px-1 py-0.2 text-[8.5px] font-extrabold text-slate-600 shrink-0">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.2">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={item.id}
