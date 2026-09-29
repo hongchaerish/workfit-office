@@ -3,7 +3,6 @@ import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import {
   parseWorkPlanItems,
-  calculatePlanProgress,
 } from '@/domain/workPlan/engine';
 import {
   buildCalendarMonth,
@@ -130,7 +129,7 @@ function InlineCellTextarea({
           resize: 'none',
           display: 'block',
         }}
-        className="w-full rounded border border-blue-500 bg-white dark:bg-panel p-1.5 text-[10px] leading-relaxed text-ink outline-none font-sans focus:ring-1 focus:ring-blue-500 shadow-2xs"
+        className="w-full rounded border border-blue-400/50 bg-transparent p-0 text-[10px] leading-relaxed text-ink outline-none font-sans focus:border-blue-400 focus:ring-0"
       />
     </div>
   );
@@ -564,7 +563,6 @@ export function WorkPlanTeamMonthlyMatrix({
                             const dayStr = d.dateStr;
                             const plan = userPlans?.get(dayStr);
                             const parsed = plan ? parseWorkPlanItems(plan.content) : [];
-                            const prog = plan ? calculatePlanProgress(plan.content) : null;
                             const userProjectedDateMap = projectedSchedulesMap.get(member.id);
                             const projectedItems = userProjectedDateMap?.get(dayStr) ?? [];
 
@@ -646,11 +644,9 @@ export function WorkPlanTeamMonthlyMatrix({
                                         return (
                                           <div
                                             key={itemIdx}
-                                            className={`text-[10px] leading-tight flex items-start gap-1 py-0.5 ${
+                                            className={`text-[10px] leading-relaxed flex items-start gap-1 py-0.5 ${
                                               item.completed
-                                                ? 'line-through text-ink3 opacity-70'
-                                                : editTier === 1
-                                                ? 'text-ink font-semibold'
+                                                ? 'line-through text-ink3 opacity-60'
                                                 : editTier === 3
                                                 ? 'text-ink2/90'
                                                 : 'text-ink'
@@ -707,15 +703,6 @@ export function WorkPlanTeamMonthlyMatrix({
                                         );
                                       })}
                                     </div>
-
-                                    {/* 하단 진행률만 유지 */}
-                                    {prog && (
-                                      <div className="flex items-center justify-between pt-1 border-t border-border/30 text-[8.5px]">
-                                        <span className="text-ink3 font-medium">
-                                          {prog.completed}/{prog.total} ({prog.percent}%)
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 ) : (
                                   /* 빈 셀: 버튼 없이 칸을 클릭하면 즉시 작성 시작 */

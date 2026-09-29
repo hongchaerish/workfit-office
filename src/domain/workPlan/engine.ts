@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 업무계획(WorkPlan) 도메인 엔진
  * - 마크다운 체크리스트 파서 / 직렬화
  * - 진행률 계산
@@ -84,18 +84,58 @@ export function getWorkPlanTagMeta(tag: string, customTagMap?: Record<string, Wo
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 완료 상태 저장 방식:
+// 일반 텍스트 줄의 완료 여부는 content 맨 마지막 줄에 아래 형태로 숨겨서 저장합니다.
+//   __c__:0,2   (완료된 비어있지 않은 일반 텍스트 줄 번호를 콤마로 나열)
+// 텍스트 본문은 절대 수정하지 않으며, `- [ ]`나 `~~` 같은 기호는 붙이지 않습니다.
+// 기존 마크다운 체크리스트(- [ ] / - [x])는 그대로 지원합니다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CHECKED_META_PREFIX = '__c__:';
+
+/**
+ * content에서 완료 인덱스 메타 줄을 분리합니다.
+ */
+function splitContentMeta(content: string): { body: string; checkedIdxs: Set<number> } {
+  if (!content) return { body: '', checkedIdxs: new Set() };
+  const lines = content.split('\n');
+  const lastLine = lines[lines.length - 1]?.trim() ?? '';
+  if (lastLine.startsWith(CHECKED_META_PREFIX)) {
+    const body = lines.slice(0, -1).join('\n');
+    const idxStr = lastLine.slice(CHECKED_META_PREFIX.length).trim();
+    const checkedIdxs = new Set<number>(
+      idxStr
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n)),
+    );
+    return { body, checkedIdxs };
+  }
+  return { body: content, checkedIdxs: new Set() };
+}
+
 /**
  * 텍스트 내용을 항목별(To-Do 또는 일반 라인)로 파싱합니다.
+ *
+ * 완료 상태 저장 관례:
+ * - 기존 마크다운 체크리스트(isChecklist=true): `- [x] 텍스트` 형식 그대로
+ * - 일반 텍스트 줄: content 마지막에 `__c__:0,2` 메타로만 관리. 텍스트 본문 불변.
  */
 export function parseWorkPlanItems(content: string): WorkPlanItem[] {
   if (!content || !content.trim()) return [];
 
-  const lines = content.split('\n');
-  return lines.map((line, idx) => {
+  const { body, checkedIdxs } = splitContentMeta(content);
+  const lines = body.split('\n');
+
+  // 비어있지 않은 일반 텍스트 줄에만 순번 부여
+  let plainIdx = 0;
+
+  return lines.map((line, lineIdx) => {
     const trimmed = line.trim();
     if (!trimmed) {
       return {
-        id: `item-${idx}`,
+        id: `item-${lineIdx}`,
         raw: line,
         text: '',
         completed: false,
@@ -109,17 +149,14 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       const completed = checkMatch[2].toLowerCase() === 'x';
       let rest = checkMatch[3].trim();
       let tag: string | undefined;
-
-      // 태그 감지 ([외근], [회의] 등)
-      const tagMatch = rest.match(/^\[([^[\]]+)\]\s*(.*)$/);
+      const tagMatch = rest.match(/^\[([^\[\]]+)\]\s*(.*)$/);
       if (tagMatch) {
         const rawTag = tagMatch[1].trim();
         tag = WORK_PLAN_TAGS[rawTag]?.tag ?? rawTag;
         rest = tagMatch[2].trim();
       }
-
       return {
-        id: `item-${idx}`,
+        id: `item-${lineIdx}`,
         raw: line,
         text: rest || (tag ? `[${tag}]` : ''),
         completed,
@@ -128,10 +165,13 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       };
     }
 
-    // 일반 텍스트 라인
+    // 일반 텍스트 줄: 완료 여부는 __c__ 메타에서 읽음
+    const myIdx = plainIdx++;
+    const isCompleted = checkedIdxs.has(myIdx);
+
     let rest = trimmed;
     let tag: string | undefined;
-    const tagMatch = rest.match(/^\[([^[\]]+)\]\s*(.*)$/);
+    const tagMatch = rest.match(/^\[([^\[\]]+)\]\s*(.*)$/);
     if (tagMatch) {
       const rawTag = tagMatch[1].trim();
       tag = WORK_PLAN_TAGS[rawTag]?.tag ?? rawTag;
@@ -139,10 +179,10 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
     }
 
     return {
-      id: `item-${idx}`,
+      id: `item-${lineIdx}`,
       raw: line,
       text: rest,
-      completed: false,
+      completed: isCompleted,
       isChecklist: false,
       tag,
     };
@@ -151,34 +191,42 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
 
 /**
  * 아이템 배열을 다시 저장용 문자열로 직렬화합니다.
+ * - isChecklist=true 항목: `- [ ] / - [x]` 형식
+ * - 일반 텍스트 항목: raw 원본 그대로 유지, 완료 순번만 마지막 줄 메타에 기록
  */
 export function serializeWorkPlanItems(items: WorkPlanItem[]): string {
-  return items
-    .map((item) => {
-      if (!item.text && !item.tag && !item.isChecklist) return item.raw;
+  const completedIdxs: number[] = [];
+  let plainIdx = 0;
+
+  const lines = items.map((item) => {
+    if (item.isChecklist) {
       const tagPrefix = item.tag ? `[${item.tag}] ` : '';
-      if (item.isChecklist) {
-        return `- [${item.completed ? 'x' : ' '}] ${tagPrefix}${item.text}`;
-      }
-      return `${tagPrefix}${item.text}`;
-    })
-    .join('\n');
+      return `- [${item.completed ? 'x' : ' '}] ${tagPrefix}${item.text}`;
+    }
+    if (!item.text && !item.tag) {
+      // 빈 줄은 plainIdx 카운트 안 함
+      return item.raw;
+    }
+    const myIdx = plainIdx++;
+    if (item.completed) completedIdxs.push(myIdx);
+    return item.raw;
+  });
+
+  const body = lines.join('\n');
+  if (completedIdxs.length === 0) return body;
+  return `${body}\n${CHECKED_META_PREFIX}${completedIdxs.join(',')}`;
 }
 
 /**
- * 특정 인덱스의 체크리스트 항목을 토글하여 새 문자열을 반환합니다.
+ * 특정 인덱스의 항목 완료 상태를 토글하여 새 content 문자열을 반환합니다.
+ * 텍스트 본문은 절대 수정하지 않으며, 완료 인덱스 메타만 업데이트됩니다.
  */
 export function toggleWorkPlanItem(content: string, targetIdx: number): string {
   const items = parseWorkPlanItems(content);
   if (!items[targetIdx]) return content;
 
   const item = items[targetIdx];
-  if (item.isChecklist) {
-    items[targetIdx] = { ...item, completed: !item.completed };
-  } else {
-    // 일반 텍스트를 체크리스트로 전환
-    items[targetIdx] = { ...item, isChecklist: true, completed: true };
-  }
+  items[targetIdx] = { ...item, completed: !item.completed };
 
   return serializeWorkPlanItems(items);
 }
@@ -197,12 +245,16 @@ export function removeWorkPlanItem(content: string, targetIdx: number): string {
 
 /**
  * 새로운 업무 항목을 하나 추가하여 새 문자열을 반환합니다.
+ * 기존 완료 메타를 보존합니다.
  */
 export function addWorkPlanItem(content: string, text: string, tag?: string): string {
-  const trimmed = content.trim();
+  const { body, checkedIdxs } = splitContentMeta(content);
+  const trimmed = body.trim();
   const tagPrefix = tag ? `[${tag}] ` : '';
   const newLine = `${tagPrefix}${text.trim()}`;
-  return trimmed ? `${trimmed}\n${newLine}` : newLine;
+  const newBody = trimmed ? `${trimmed}\n${newLine}` : newLine;
+  if (checkedIdxs.size === 0) return newBody;
+  return `${newBody}\n${CHECKED_META_PREFIX}${Array.from(checkedIdxs).sort((a, b) => a - b).join(',')}`;
 }
 
 /**
@@ -217,6 +269,13 @@ export function calculatePlanProgress(content: string): WorkPlanProgress | null 
   const percent = Math.round((completed / total) * 100);
 
   return { total, completed, percent };
+}
+
+/**
+ * 편집 textarea에 표시할 순수 본문 텍스트를 반환합니다 (완료 메타 줄 제거).
+ */
+export function getEditableContent(content: string): string {
+  return splitContentMeta(content).body;
 }
 
 /**
@@ -260,3 +319,30 @@ export const WORK_PLAN_TEMPLATES: WorkPlanTemplate[] = [
     content: '당월 실적 및 지표 데이터 취합\n결산 보고서 작성 및 전자결재 상신',
   },
 ];
+
+/**
+ * 편집된 순수 텍스트 본문(newBody)에 기존 content의 체크 메타를 병합합니다.
+ * 편집으로 줄 수가 바뀌었다면 메타 인덱스는 초기화(완료 상태 리셋)됩니다.
+ */
+export function mergeCheckedMeta(newBody: string, oldContent: string): string {
+  const { checkedIdxs } = splitContentMeta(oldContent);
+  if (checkedIdxs.size === 0) return newBody;
+
+  // 줄 수가 바뀌면 메타 인덱스를 그대로 쓰기 어려우므로 초기화
+  const { body: oldBody } = splitContentMeta(oldContent);
+  const oldPlainCount = oldBody.split('\n').filter((l) => {
+    const t = l.trim();
+    return t && !t.match(/^([-*]\s*)?\[([ xX])\]/);
+  }).length;
+  const newPlainCount = newBody.split('\n').filter((l) => {
+    const t = l.trim();
+    return t && !t.match(/^([-*]\s*)?\[([ xX])\]/);
+  }).length;
+
+  if (oldPlainCount !== newPlainCount) return newBody;
+
+  // 줄 수가 같으면 기존 메타 재사용
+  const validIdxs = Array.from(checkedIdxs).filter((i) => i < newPlainCount).sort((a, b) => a - b);
+  if (validIdxs.length === 0) return newBody;
+  return `${newBody}\n${CHECKED_META_PREFIX}${validIdxs.join(',')}`;
+}

@@ -14,7 +14,7 @@ import {
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
 import { syncWorkPlanToCalendar, cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
-import { toggleWorkPlanItem } from '@/domain/workPlan/engine';
+import { toggleWorkPlanItem, getEditableContent, mergeCheckedMeta } from '@/domain/workPlan/engine';
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
@@ -547,9 +547,13 @@ export default function WorkPlanScreen() {
                 await removePlan(currentTarget.plan.id, currentTarget.date, currentTarget.targetUser?.id);
               }
             } else {
+              // 준수 텍스트 + 기존 체크 메타 병합하여 저장 (편집 중 케크 상태 보존)
+              const mergedContent = currentTarget.plan
+                ? mergeCheckedMeta(contentToSave.trim(), currentTarget.plan.content)
+                : contentToSave.trim();
               await savePlan(
                 currentTarget.date,
-                contentToSave.trim(),
+                mergedContent,
                 currentTarget.plan?.id,
                 shareToCalendar,
                 currentTarget.targetUser,
@@ -582,7 +586,8 @@ export default function WorkPlanScreen() {
         onCancelEditing={() => setEditingTarget(null)}
         onOpenEditor={(date, plan, member) => {
           setEditingTarget({ date, plan, targetUser: member });
-          setEditingContent(plan?.content ?? '');
+          // __c__: 완료 메타 줄은 textarea에 노출되지 않도록 제거
+          setEditingContent(plan ? getEditableContent(plan.content) : '');
           setShareToCalendar(true);
           setConflictError(null);
         }}
