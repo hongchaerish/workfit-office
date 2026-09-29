@@ -186,9 +186,9 @@ export default function App() {
     document.documentElement.style.setProperty('--font-scale', savedScale);
   }, [isMobilePwa, user?.id]);
 
-  // 초기 비밀번호(mes1234)를 사용하는 계정 감지 시 비밀번호 변경 유도 및 프로필 화면 이동.
-  // 단, 모바일 PWA(/m) 및 외부 슬라이드 도크(/dock)는 자체 흐름을 쓰므로 이 데스크톱 리다이렉트를 건너뛴다.
-  const isDock = location.pathname.startsWith('/dock');
+  // 타 MES 시스템 연동: /exec?from=mes 진입 시 대시보드를 노출하지 않고 독립 도크 뷰로 전환
+  const isFromMes = new URLSearchParams(location.search).get('from') === 'mes';
+  const isDock = location.pathname.startsWith('/dock') || (location.pathname === '/exec' && isFromMes);
   useEffect(() => {
     if (isMobilePwa || isDock) return;
     const defaultHash = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf218';
@@ -205,6 +205,10 @@ export default function App() {
       {/* 타 MES 시스템 슬라이드/iframe 전용 독립 도크 라우트 */}
       <Route path="/dock" element={<StandaloneDockScreen />} />
       <Route path="/dock/*" element={<StandaloneDockScreen />} />
+
+      {/* /exec?from=mes 진입 시 AppShell(GNB/사이드바) 및 대시보드를 일체 띄우지 않고 도크만 렌더링 */}
+      {isFromMes && <Route path="/exec" element={<StandaloneDockScreen />} />}
+
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={HOME} replace />} />
         {SCREENS.map((screen) => {

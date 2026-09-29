@@ -26,8 +26,8 @@ export default function StandaloneDockScreen() {
   const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
 
-  const view = searchParams.get('view') || 'groupware';
-  const isMessenger = view === 'messenger' || view === 'msg';
+  const view = searchParams.get('view');
+  const isGroupware = view === 'groupware' || view === 'gw';
 
   const [msgNotis, setMsgNotis] = useState<MsgNoti[]>(MOCK_MSG_NOTIS);
   const [msgNotiView, setMsgNotiView] = useState(false);
@@ -77,8 +77,13 @@ export default function StandaloneDockScreen() {
     );
   }
 
-  // 1. 그룹웨어 도크 렌더링
-  if (!isMessenger) {
+  // 1. view 파라미터가 없는 경우 (자동로그인만 되고 대시보드는 뜨지 않는 빈 화면)
+  if (!view) {
+    return <div className="h-screen w-full bg-slate-50" />;
+  }
+
+  // 2. 그룹웨어 도크 렌더링
+  if (isGroupware) {
     return (
       <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f2faf3] shadow-none select-none">
         <GroupwarePanel onClose={handleClose} onNavigate={handleNavigate} />
@@ -86,7 +91,7 @@ export default function StandaloneDockScreen() {
     );
   }
 
-  // 2. 메신저 도크 렌더링
+  // 3. 메신저 도크 렌더링 (view=messenger)
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f2f8fc] shadow-none select-none">
       {/* 메신저 헤더 */}
