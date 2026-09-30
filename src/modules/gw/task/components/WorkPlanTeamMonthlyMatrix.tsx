@@ -620,7 +620,7 @@ export function WorkPlanTeamMonthlyMatrix({
                       </td>
                     </tr>
                   ) : (
-                    members.map((member, memberIdx) => {
+                    members.map((member) => {
                       const isMe = member.id === actor.id;
                       const userPlans = plansByUserAndDate.get(member.id);
                       return (
@@ -633,7 +633,10 @@ export function WorkPlanTeamMonthlyMatrix({
                             <div className="flex flex-col items-center justify-center py-1">
                               <div className="flex items-center gap-1">
                                 <span className={`text-[12px] font-bold ${isMe ? 'text-teal' : 'text-ink'}`}>
-                                  {member.name}
+                                  {/* 업무계획 한정: 대표이사 이름/직책은 '위원장'으로 표시 */}
+                                  {member.name === '대표이사' || member.position === '대표이사' || member.jobTitle === '대표이사'
+                                    ? '위원장'
+                                    : member.name}
                                 </span>
                                 {isMe && (
                                   <span className="rounded bg-teal-soft/50 px-1 py-0.2 text-[8px] font-bold text-teal">
@@ -642,9 +645,9 @@ export function WorkPlanTeamMonthlyMatrix({
                                 )}
                               </div>
                               <span className="text-[9px] text-ink3 truncate max-w-[80px] mt-0.5">
-                                {/* 업무계획 한정: 대표이사 직책을 '위원장'으로 표시 */}
-                                {member.position === '대표이사' || member.jobTitle === '대표이사'
-                                  ? '위원장'
+                                {/* 업무계획 한정: 대표이사 서브라벨을 '위원회'로 표시 */}
+                                {member.name === '대표이사' || member.position === '대표이사' || member.jobTitle === '대표이사'
+                                  ? '위원회'
                                   : (member.position || member.jobTitle || member.dept)}
                               </span>
                             </div>
