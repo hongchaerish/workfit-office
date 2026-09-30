@@ -107,21 +107,20 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
       const rawData = `${userParam}:${tsParam}:${apiKey}`;
       const expectedSig = await sha256Hex(rawData);
       if (expectedSig === sigParam.toLowerCase()) {
+        // 그룹웨어 DB에 실제 '사용' 상태로 존재하는 사원/계정만 인증 승인 (미등록/비활성 계정은 null)
         targetUser =
           users.find(
             (u) =>
               u.status === '사용' &&
               (u.empNo === userParam || u.email.toLowerCase() === userParam.toLowerCase() || u.id === userParam)
-          ) || (userParam.toLowerCase() === 'admin' ? findAdminUser() : null);
+          ) || null;
       }
     }
   }
-  // 4. [방식 A-4] MES에서 from=mes 만 던지고 추가 파라미터가 없는 경우 -> 기본 관리자(admin)로 자동 로그인
-  else if (from === 'mes' && !loginId && !userParam) {
-    targetUser = findAdminUser();
-  }
 
+  // 등록되지 않은 사번이거나 파라미터가 누락된 경우 즉시 인증 거부(null)
   if (!targetUser) {
+    console.warn('[MES-SSO] 인증 대상 사용자가 그룹웨어에 존재하지 않거나 자격 증명이 유효하지 않습니다.');
     return null;
   }
 
@@ -130,14 +129,49 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
   void authRepo.touchLastLogin(targetUser.id);
   void systemLogRepo.recordLogin(targetUser, 'Web');
 
-  // 민감 파라미터(password, pw, sig, ts) 주소창에서 깔끔하게 제거 (from, view 는 유지)
+  // 민감 파라미터(password, pw, sig, ts, user 등) 주소창에서 깔끔하게 제거
   urlParams.delete('password');
   urlParams.delete('pw');
   urlParams.delete('sig');
   urlParams.delete('ts');
+  urlParams.delete('loginId');
+  urlParams.delete('id');
+
+  // 모듈 화면(도크가 아닌 일반 화면)으로 SSO 진입한 경우, 깨끗한 URL 유지를 위해 from, user 도 정리
+  const isDockPath = window.location.pathname === '/exec' || window.location.pathname.startsWith('/dock');
+  if (!isDockPath) {
+    urlParams.delete('from');
+    urlParams.delete('user');
+  }
+
   const remaining = urlParams.toString();
   const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '') + window.location.hash;
   window.history.replaceState(null, '', cleanUrl);
 
   return targetUser;
+}
+
+/**
+ * 도크(iframe/슬라이드)에서 모듈을 새 탭으로 띄울 때 사용할 보안 SSO 런칭 URL 생성.
+ * 브라우저 스토리지 격리(Storage Partitioning)를 극복하기 위해 타임스탬프와 SHA-256 서명을 전달합니다.
+ */
+export async function createMesSsoLaunchUrl(
+  targetPath: string,
+  user: User,
+  apiKey: string = DEFAULT_MES_SSO_API_KEY
+): Promise<string> {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const url = new URL(targetPath.startsWith('http') ? targetPath : `${origin}${targetPath}`);
+
+  const userParam = user.empNo || user.id;
+  const ts = Date.now().toString();
+  const rawData = `${userParam}:${ts}:${apiKey}`;
+  const sig = await sha256Hex(rawData);
+
+  url.searchParams.set('from', 'mes');
+  url.searchParams.set('user', userParam);
+  url.searchParams.set('ts', ts);
+  url.searchParams.set('sig', sig);
+
+  return url.toString();
 }

@@ -47,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     (async () => {
       try {
+        const isFromMes = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('from') === 'mes';
+
         // 1. URL에 MES SSO 파라미터가 있는 경우 서명 검증 및 자동 로그인 우선 시도
         const ssoUser = await verifyAndAuthenticateMesSso();
         if (!alive) return;
@@ -55,7 +57,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // 2. 기존 로컬 세션 복원
+        // MES 연동 진입(?from=mes)인데 SSO 인증에 실패한 경우,
+        // 이전 테스트나 다른 브라우저 창에서 남아있던 세션이 의도치 않게 복원되지 않도록 차단
+        if (isFromMes) {
+          setUser(null);
+          return;
+        }
+
+        // 2. 기존 로컬 세션 복원 (일반 접속 시)
         const uid = localStorage.getItem(SESSION_KEY);
         if (uid) {
           const users = await userRepo.list();

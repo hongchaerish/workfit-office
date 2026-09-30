@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { GroupwarePanel } from '@/features/gw/desktop/GroupwarePanel';
 import { MessengerPanel } from '@/features/chat/desktop/MessengerPanel';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
+import { createMesSsoLaunchUrl } from '@/features/auth/mesSso';
 
 interface MsgNoti {
   id: string;
@@ -47,9 +48,30 @@ export default function StandaloneDockScreen() {
   };
 
   // 모듈 클릭 시: 슬라이드 iframe 에 갇히지 않고 시원하게 새 탭으로 열기
+  // (iframe 브라우저 스토리지 격리를 우회하기 위해 SSO 서명 티켓을 전달)
   const handleNavigate = (url: string) => {
-    const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-    window.open(fullUrl, '_blank', 'noopener,noreferrer');
+    // 팝업 차단 방지를 위해 사용자 클릭 이벤트 직후 창 레퍼런스를 먼저 획득
+    const newTab = window.open('about:blank', '_blank');
+
+    void (async () => {
+      try {
+        let targetUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+        if (user) {
+          targetUrl = await createMesSsoLaunchUrl(url, user);
+        }
+        if (newTab && !newTab.closed) {
+          newTab.location.href = targetUrl;
+        } else {
+          window.open(targetUrl, '_blank');
+        }
+      } catch (err) {
+        console.error('[Dock] SSO 모듈 런칭 실패:', err);
+        const fallbackUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+        if (newTab && !newTab.closed) {
+          newTab.location.href = fallbackUrl;
+        }
+      }
+    })();
   };
 
   // 로딩 상태 화면
