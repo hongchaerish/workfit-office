@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import { buildCalendarMonth } from '@/domain/calendarEvent/calendarDate';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import type { Holiday } from '@/domain/holiday/schema';
 
 interface MonthCalendarProps {
   month: string;
   today: string;
   selectedDate?: string;
   events: CalendarEvent[];
+  /** DB 공휴일 목록. 날짜 셀에 이름과 빨간 숫자로 표시한다. */
+  holidays?: Holiday[];
   /** 날짜를 선택했을 때(좌측 패널 연동). */
   onSelectDate: (date: string) => void;
   /** 그 날짜로 새 일정을 등록한다(칸 우상단 +). */
@@ -29,6 +32,7 @@ export default function MonthCalendar({
   today,
   selectedDate,
   events,
+  holidays,
   onSelectDate,
   onAddOn,
   onSelectEvent,
@@ -41,6 +45,13 @@ export default function MonthCalendar({
     events.forEach((event) => rows.set(event.date, [...(rows.get(event.date) ?? []), event]));
     return rows;
   }, [events]);
+
+  /** 날짜 → 공휴일 이름 맵 (빠른 조회) */
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (holidays ?? []).forEach((h) => map.set(h.date, h.name));
+    return map;
+  }, [holidays]);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
@@ -55,6 +66,8 @@ export default function MonthCalendar({
             const rows = eventsByDate.get(cell.date) ?? [];
             const isToday = cell.date === today;
             const isSelected = cell.date === selectedDate;
+            const holidayName = holidayMap.get(cell.date);
+            const isHoliday = Boolean(holidayName);
             return (
               <div
                 key={cell.date}
@@ -62,21 +75,32 @@ export default function MonthCalendar({
                 className={`group relative min-h-[72px] lg:min-h-[78px] cursor-pointer border-b border-r border-border p-1.5 text-left align-top transition-all ${
                   isSelected
                     ? 'ring-2 ring-teal ring-inset bg-teal-soft/20 z-10'
+                    : isHoliday
+                    ? 'bg-danger/[0.03] hover:bg-danger/[0.07]'
                     : 'hover:bg-panel-alt/50'
                 } ${index % 7 === 6 ? 'border-r-0' : ''}`}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold transition-all ${
-                    isToday
-                      ? 'bg-teal text-white shadow-2xs'
-                      : isSelected
-                        ? 'bg-teal/20 text-teal font-extrabold'
-                        : cell.inCurrentMonth
-                          ? 'text-ink2'
-                          : 'text-ink3/45'
-                  }`}>
-                    {Number(cell.date.slice(-2))}
-                  </span>
+                  <div className="flex flex-col items-start gap-0.5 min-w-0">
+                    <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold transition-all ${
+                      isToday
+                        ? 'bg-teal text-white shadow-2xs'
+                        : isSelected
+                          ? 'bg-teal/20 text-teal font-extrabold'
+                          : isHoliday && cell.inCurrentMonth
+                            ? 'text-danger font-extrabold'
+                            : cell.inCurrentMonth
+                              ? 'text-ink2'
+                              : 'text-ink3/45'
+                    }`}>
+                      {Number(cell.date.slice(-2))}
+                    </span>
+                    {holidayName && cell.inCurrentMonth && (
+                      <span className="block max-w-[56px] truncate text-[8px] font-bold leading-tight text-danger/80" title={holidayName}>
+                        {holidayName}
+                      </span>
+                    )}
+                  </div>
                   {/*
                     등록 버튼은 평소 숨긴다 — 42칸 전부에 +가 떠 있으면 달력이 시끄럽다.
                     숨은 동안 `pointer-events-none`으로 터치 오작동까지 막되, 키보드 포커스는
@@ -93,7 +117,7 @@ export default function MonthCalendar({
                     +
                   </button>
                 </div>
-                <span className="mt-1 block space-y-0.5">
+                <span className="mt-0.5 block space-y-0.5">
                   {rows.slice(0, 2).map((event) => {
                     const owner = ownerNameOf?.(event) ?? null;
                     const isAppr = event.id.startsWith('CAL-APPR-');

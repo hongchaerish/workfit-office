@@ -17,6 +17,7 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
+import { useHolidays } from '@/features/holiday/useHolidays';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -143,6 +144,14 @@ export default function MobileCalendarScreen() {
     }
   }, [currentMonth]);
 
+  // 공휴일 데이터 (현재 월 기준 연도)
+  const holidaysQuery = useHolidays(currentMonth.slice(0, 4));
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (holidaysQuery.data ?? []).forEach((h) => map.set(h.date, h.name));
+    return map;
+  }, [holidaysQuery.data]);
+
   // 선택된 날짜의 이벤트 목록 (시간순 정렬)
   const dayEvents = useMemo(() => {
     return allEvents
@@ -254,13 +263,15 @@ export default function MobileCalendarScreen() {
               const isToday = cell.date === todayStr;
               const isSelected = cell.date === selectedDateStr;
               const cellEvents = eventsByDate.get(cell.date) ?? [];
+              const holidayName = holidayMap.get(cell.date);
+              const isHoliday = Boolean(holidayName) && cell.inCurrentMonth;
 
               return (
                 <button
                   key={cell.date}
                   type="button"
                   onClick={() => setSelectedDateStr(cell.date)}
-                  className={`relative flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
+                  className={`relative flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
                     isSelected
                       ? 'bg-teal text-white font-bold shadow-xs'
                       : isToday
@@ -270,10 +281,19 @@ export default function MobileCalendarScreen() {
                       : 'text-ink3/35'
                   }`}
                 >
-                  <span className="text-[12.5px] leading-none">{dayNum}</span>
+                  <span className={`text-[12.5px] leading-none ${
+                    !isSelected && !isToday && isHoliday ? 'text-danger font-extrabold' : ''
+                  }`}>{dayNum}</span>
+
+                  {/* 공휴일 이름 */}
+                  {isHoliday && !isSelected && (
+                    <span className="mt-0.5 block max-w-[36px] truncate text-[7px] font-bold leading-tight text-danger/80 text-center" title={holidayName}>
+                      {holidayName}
+                    </span>
+                  )}
 
                   {/* 일정 Dot 인디케이터 */}
-                  <div className="flex items-center gap-0.5 mt-1 h-1.5">
+                  <div className="flex items-center gap-0.5 mt-0.5 h-1.5">
                     {cellEvents.slice(0, 3).map((e, idx) => {
                       let dotColor = 'bg-teal';
                       if (e.eventType === 'VACATION') dotColor = 'bg-sky-400';

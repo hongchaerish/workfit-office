@@ -32,6 +32,7 @@ import {
 } from '@/domain/workPlan/engine';
 import { syncWorkPlanToCalendar } from '@/domain/workPlan/workPlanCalendarBridge';
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import CalendarEventModal from './CalendarEventModal';
@@ -361,6 +362,9 @@ function LocalCalendarScreen() {
   const createWorkPlan = useCreateWorkPlan();
   const updateWorkPlan = useUpdateWorkPlan();
   const { tags, tagMap } = useWorkPlanConfig();
+  /** 현재 월의 연도 기준 공휴일 조회 */
+  const holidaysQuery = useHolidays(month.slice(0, 4));
+  const holidays = holidaysQuery.data ?? [];
 
   /** 선택한 날짜에 해당하는 상세 일정 목록 */
   const selectedDayEvents = useMemo(
@@ -504,11 +508,16 @@ function LocalCalendarScreen() {
           <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[14px] font-extrabold text-ink">{dayTitle(selectedDate)}</span>
                   {selectedDate === today && (
                     <span className="rounded bg-teal px-1.5 py-0.5 text-[9.5px] font-extrabold text-white">
                       오늘
+                    </span>
+                  )}
+                  {holidays.find((h) => h.date === selectedDate) && (
+                    <span className="rounded bg-danger/10 border border-danger/25 px-1.5 py-0.5 text-[9px] font-extrabold text-danger">
+                      🎌 {holidays.find((h) => h.date === selectedDate)!.name}
                     </span>
                   )}
                 </div>
@@ -835,6 +844,7 @@ function LocalCalendarScreen() {
               today={today}
               selectedDate={selectedDate}
               events={visibleEvents}
+              holidays={holidays}
               onSelectDate={(date) => setSelectedDate(date)}
               onAddOn={(date) => openEventModal({ date })}
               onSelectEvent={(event) => {
