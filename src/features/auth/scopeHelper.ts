@@ -81,11 +81,33 @@ export function isLeaderUser(
 }
 
 /**
+ * 테스터 계정 여부 판별 (이름/부서/ID/이메일에 '테스트'/'test' 포함 여부)
+ */
+export function isTestUser(user?: { id?: string; name?: string; dept?: string; email?: string } | null): boolean {
+  if (!user) return false;
+  const name = (user.name || '').toLowerCase();
+  const dept = (user.dept || '').toLowerCase();
+  const id = (user.id || '').toLowerCase();
+  const email = (user.email || '').toLowerCase();
+
+  return (
+    name.includes('테스트') ||
+    name.includes('테스터') ||
+    name.includes('test') ||
+    dept.includes('테스트') ||
+    dept.includes('test') ||
+    id.includes('test') ||
+    email.includes('test')
+  );
+}
+
+/**
  * 업무계획 화면의 조회 스코프를 결정합니다.
  * 
  * [규칙]
- * 1. 임원 (roleGroups의 OPERATOR/EXEC 또는 임원 직급/직책 - 테스트 부서 임원 포함): 전사 스코프 (ALL)
- * 2. 팀장급 (조직도 부서장 또는 팀장/부서장 직책 - 테스트 부서장 포함): 팀원 + 타팀장 스코프 (TEAM_AND_LEADERS)
+ * 0. 테스터 계정: 무슨 일이 있어도 본인 외에는 뜨지 않음 (MY_ONLY)
+ * 1. 임원 (roleGroups의 OPERATOR/EXEC 또는 임원 직급/직책): 전사 스코프 (ALL)
+ * 2. 팀장급 (조직도 부서장 또는 팀장/부서장 직책): 팀원 + 타팀장 스코프 (TEAM_AND_LEADERS)
  * 3. 사원 및 일반 관리자(ADMIN): 본인 부서/팀 스코프 (TEAM)
  * ⚠️ ADMIN은 시스템 관리 권한일 뿐, 업무계획 조회는 자신의 본래 인사 스코프를 따릅니다.
  */
@@ -95,6 +117,11 @@ export function resolveWorkPlanScope(
   org?: OrgContextLike
 ): DataScope {
   if (!user) return 'TEAM';
+
+  // 0. 테스터 계정은 무조건 본인 전용 (MY_ONLY)
+  if (isTestUser(user)) {
+    return 'MY_ONLY';
+  }
 
   // 1. 임원 (전사 스코프)
   if (isExecutiveUser(user, userRoles)) {
@@ -152,6 +179,7 @@ export function resolveUserScope(
 /**
  * 업무계획 화면에서 특정 대상자의 업무계획을 조회할 수 있는지 판정합니다.
  * 
+ * 0. 테스터 격리: 테스터는 본인 외 어떤 대상자도 열람 불가, 일반 사용자도 테스터 열람 불가
  * 1. ALL (임원): 전사 임직원 업무계획 열람 가능
  * 2. 본인: 항상 열람 가능
  * 3. TEAM / TEAM_AND_LEADERS: 동일 부서 소속 팀원 간 상호 열람 가능
@@ -164,10 +192,20 @@ export function canViewWorkPlan(
   actorScope: DataScope,
   org?: OrgContextLike
 ): boolean {
-  if (actorScope === 'ALL') return true;
-
   // 1. 본인 업무계획은 항상 열람 가능
   if (target.id === actor.id) return true;
+
+  // 0. 테스터 격리: 접속자가 테스터이면 본인 외에는 어떤 임직원도 열람 불가
+  if (isTestUser(actor)) return false;
+
+  // 0. 일반 사용자는 테스터 계정 열람 불가
+  if (isTestUser(target)) return false;
+
+  // 본인 전용 스코프인 경우
+  if (actorScope === 'MY_ONLY') return false;
+
+  // 전사 임원 스코프
+  if (actorScope === 'ALL') return true;
 
   // 2. 같은 부서 소속 팀원 간 상호 열람 허용 (팀원끼리 업무계획 확인 로직)
   if (target.dept && actor.dept && target.dept === actor.dept) {

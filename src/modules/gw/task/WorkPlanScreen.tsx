@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveWorkPlanScope, canViewWorkPlan, isLeaderPosition } from '@/features/auth/scopeHelper';
+import { resolveWorkPlanScope, canViewWorkPlan, isLeaderPosition, isTestUser } from '@/features/auth/scopeHelper';
 import { calendarToday, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
@@ -35,31 +35,20 @@ function dayTitle(date: string): string {
 }
 
 /**
- * 로스터 제외 대상 — 일반 운영 모드에서의 테스트 계정 처리.
- * - 대표이사 포함 모든 정규 임직원이 표시됩니다.
- * - 본인 계정은 테스터라도 항상 표시됩니다.
- * - 테스트 계정/부서로 로그인하여 시연 중일 때는 테스트 부서 인원들이 정상 표시됩니다.
+ * 로스터 제외 대상 — 테스터 계정 철저 격리:
+ * - 테스터 로그인 시: 무슨 일이 있어도 본인 외 모든 사용자 로스터 제외
+ * - 일반 사용자 로그인 시: 모든 테스터 계정 로스터 제외
  */
 const isExcludedFromRoster = (user: User, actor?: User | null) => {
   if (actor && user.id === actor.id) return false;
 
-  const isActorTest = Boolean(
-    actor?.dept?.includes('테스트') ||
-    actor?.name?.includes('테스트') ||
-    actor?.name?.includes('테스터') ||
-    actor?.id?.toLowerCase().includes('test') ||
-    actor?.name?.toLowerCase().includes('test')
-  );
-  const isUserTest = Boolean(
-    user.dept?.includes('테스트') ||
-    user.name?.includes('테스트') ||
-    user.name?.includes('테스터') ||
-    user.id?.toLowerCase().includes('test') ||
-    user.name?.toLowerCase().includes('test')
-  );
+  // 접속자(actor)가 테스터이면 본인 외 모든 사용자를 무조건 제외
+  if (isTestUser(actor)) return true;
 
-  if (isActorTest && isUserTest) return false;
-  return isUserTest;
+  // 일반 사용자가 접속한 경우 테스터 계정을 무조건 제외
+  if (isTestUser(user)) return true;
+
+  return false;
 };
 
 export default function WorkPlanScreen() {
@@ -251,6 +240,11 @@ function sortWorkPlanUsers(
 
   /** 고유 부서 목록 (소속 인원이 1명 이상 있는 부서만 자동 표시 & 조직도 배치순 정렬) */
   const departments = useMemo(() => {
+    // 테스터 계정인 경우 본인 부서 외 어떤 부서도 표시하지 않음
+    if (isTestUser(actor)) {
+      return actor?.dept ? [actor.dept] : [];
+    }
+
     const memberCountByDept = new Map<string, number>();
 
     // A. 본직 인원 카운트
@@ -278,10 +272,19 @@ function sortWorkPlanUsers(
       const orderB = deptOrderMap.get(b) ?? 9999;
       return orderA - orderB || a.localeCompare(b, 'ko');
     });
-  }, [roster, departmentMembers, users, deptOrderMap]);
+  }, [roster, departmentMembers, users, deptOrderMap, actor]);
 
   /** 부서 및 검색어 필터가 적용된 최종 열람 인원 (본직 + 겸직 부서 동시 지원) */
   const scopedMembers = useMemo(() => {
+    if (!actor) return [];
+
+    // [원칙] 테스터는 무슨 일이 있어도 본인 외에는 업무계획에 표시되지 않음
+    if (isTestUser(actor)) {
+      const kw = searchKeyword.trim().toLowerCase();
+      if (!kw) return [actor];
+      return (actor.name.toLowerCase().includes(kw) || actor.dept.toLowerCase().includes(kw)) ? [actor] : [];
+    }
+
     const kw = searchKeyword.trim().toLowerCase();
 
     // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합)
