@@ -4,6 +4,7 @@ import { Bell, ArrowLeft, X, User } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { GroupwarePanel } from '@/features/gw/desktop/GroupwarePanel';
 import { MessengerPanel } from '@/features/chat/desktop/MessengerPanel';
+import { ChatbotPanel } from '@/features/widdy/desktop/ChatbotPanel';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { createMesSsoLaunchUrl } from '@/features/auth/mesSso';
 
@@ -20,8 +21,8 @@ const MOCK_MSG_NOTIS: MsgNoti[] = [];
 
 /**
  * 타 MES 시스템 슬라이드/iframe 및 단독 팝업 전용 도크 화면.
- * 상단바, 사이드바 등 전체 쉘 없이 오직 [그룹웨어 도크] 또는 [메신저 도크]만 100% 화면으로 렌더링합니다.
- * URL: /dock?view=groupware (또는 /dock?view=messenger)
+ * 상단바, 사이드바 등 전체 쉘 없이 오직 [그룹웨어 도크], [Widdy AI 도크], 또는 [메신저 도크]를 100% 화면으로 렌더링합니다.
+ * URL: /dock?view=groupware | /dock?view=widdy | /dock?view=messenger
  */
 export default function StandaloneDockScreen() {
   const [searchParams] = useSearchParams();
@@ -29,6 +30,7 @@ export default function StandaloneDockScreen() {
 
   const view = searchParams.get('view');
   const isGroupware = view === 'groupware' || view === 'gw';
+  const isWiddy = view === 'widdy' || view === 'bot' || view === 'chatbot';
 
   const [msgNotis, setMsgNotis] = useState<MsgNoti[]>(MOCK_MSG_NOTIS);
   const [msgNotiView, setMsgNotiView] = useState(false);
@@ -113,7 +115,43 @@ export default function StandaloneDockScreen() {
     );
   }
 
-  // 3. 메신저 도크 렌더링 (view=messenger)
+  // 3. Widdy AI 도크 렌더링 (view=widdy 또는 view=bot 또는 view=chatbot)
+  if (isWiddy) {
+    return (
+      <div className="flex h-screen w-full flex-col overflow-hidden bg-[#eaf2ff] shadow-none select-none">
+        {/* Widdy 헤더 */}
+        <header
+          style={{ background: '#a9c8f5' }}
+          className="flex h-14 shrink-0 items-center justify-between px-4"
+        >
+          <span className="flex items-center gap-2.5 text-ink">
+            <MenuGlyph glyph="✦" size={18} />
+            <span className="text-[14.5px] font-extrabold">Widdy</span>
+          </span>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleClose}
+              title="닫기"
+              className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-black/10 text-ink hover:bg-black/15 transition-colors cursor-pointer"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </header>
+
+        {/* Widdy 본문 패널 */}
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div className="menu-scroll h-full overflow-y-auto">
+            <ChatbotPanel />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. 메신저 도크 렌더링 (view=messenger)
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f2f8fc] shadow-none select-none">
       {/* 메신저 헤더 */}

@@ -1,6 +1,7 @@
 import { userRepo } from '@/data/user/user.repo';
 import { authRepo } from '@/data/auth/auth.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
+import { mintWiddyToken } from '@/data/widdyChat/widdyAuth';
 import type { User } from '@/domain/user/schema';
 
 /**
@@ -129,10 +130,11 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
 
   if (!targetUser) return null;
 
-  // 세션 저장 및 통계 기록
+  // 세션 저장 및 통계 기록, Widdy 토큰 발급
   localStorage.setItem('mes.auth.uid', targetUser.id);
   void authRepo.touchLastLogin(targetUser.id);
   void systemLogRepo.recordLogin(targetUser, 'Web');
+  void mintWiddyToken(targetUser.empNo || targetUser.id, password || 'admin1234!');
 
   // URL에서 민감 파라미터(password, sig 등) 정리 (화면 표시 깔끔화)
   try {
