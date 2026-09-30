@@ -28,9 +28,38 @@ export default function StandaloneDockScreen() {
   const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
 
-  const view = searchParams.get('view');
-  const isGroupware = view === 'groupware' || view === 'gw';
-  const isWiddy = view === 'widdy' || view === 'bot' || view === 'chatbot';
+  const rawView =
+    searchParams.get('view') ||
+    searchParams.get('app') ||
+    searchParams.get('type') ||
+    searchParams.get('tab') ||
+    searchParams.get('mode') ||
+    '';
+  const view = rawView.toLowerCase();
+  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+
+  const isGroupware =
+    view === 'groupware' ||
+    view === 'gw' ||
+    pathname.includes('/dock/gw') ||
+    pathname.includes('/dock/groupware');
+
+  const isWiddy =
+    view === 'widdy' ||
+    view === 'bot' ||
+    view === 'chatbot' ||
+    pathname.startsWith('/widdy') ||
+    pathname.includes('/dock/widdy') ||
+    pathname.includes('/dock/bot') ||
+    pathname.includes('/exec/widdy');
+
+  const isMessenger =
+    view === 'messenger' ||
+    view === 'msg' ||
+    pathname.includes('/dock/msg') ||
+    pathname.includes('/dock/messenger');
+
+  const hasExplicitView = isGroupware || isWiddy || isMessenger;
 
   const [msgNotis, setMsgNotis] = useState<MsgNoti[]>(MOCK_MSG_NOTIS);
   const [msgNotiView, setMsgNotiView] = useState(false);
@@ -101,8 +130,8 @@ export default function StandaloneDockScreen() {
     );
   }
 
-  // 1. view 파라미터가 없는 경우 (자동로그인만 되고 대시보드는 뜨지 않는 빈 화면)
-  if (!view) {
+  // 1. view 파라미터나 서브패스 지정이 없는 경우 (자동로그인만 되고 대시보드는 뜨지 않는 빈 화면)
+  if (!hasExplicitView) {
     return <div className="h-screen w-full bg-slate-50" />;
   }
 
