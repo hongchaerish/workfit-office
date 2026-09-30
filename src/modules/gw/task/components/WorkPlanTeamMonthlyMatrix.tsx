@@ -623,24 +623,8 @@ export function WorkPlanTeamMonthlyMatrix({
                     members.map((member, memberIdx) => {
                       const isMe = member.id === actor.id;
                       const userPlans = plansByUserAndDate.get(member.id);
-                      const prevMember = members[memberIdx - 1];
-                      const isDeptStart = memberIdx > 0 && member.dept !== prevMember?.dept;
-
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
-                          {/* 부서 경계 구분선 */}
-                          {isDeptStart && (
-                            <tr className="border-t-2 border-t-slate-300/60 dark:border-t-slate-600/60">
-                              <td
-                                colSpan={8}
-                                className="bg-slate-100/70 dark:bg-slate-800/30 px-3 py-0.5"
-                              >
-                                <span className="text-[9.5px] font-bold text-ink3 tracking-wide uppercase">
-                                  {member.dept}
-                                </span>
-                              </td>
-                            </tr>
-                          )}
                         <tr
                           className="border-b border-border/60 hover:bg-panel-alt/10 transition-colors last:border-b-0"
                         >
@@ -658,7 +642,10 @@ export function WorkPlanTeamMonthlyMatrix({
                                 )}
                               </div>
                               <span className="text-[9px] text-ink3 truncate max-w-[80px] mt-0.5">
-                                {member.position || member.jobTitle || member.dept}
+                                {/* 업무계획 한정: 대표이사 직책을 '위원장'으로 표시 */}
+                                {member.position === '대표이사' || member.jobTitle === '대표이사'
+                                  ? '위원장'
+                                  : (member.position || member.jobTitle || member.dept)}
                               </span>
                             </div>
                           </td>

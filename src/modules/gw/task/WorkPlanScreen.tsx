@@ -171,6 +171,7 @@ function getJobTitleRank(jobTitle?: string, position?: string): number {
 
 /**
  * 업무계획 사용자 3단계 정렬 헬퍼
+ * 0순위: 임원/본부장급 (상무이사, 본부장 등) — 부서 무관 항상 최상위
  * 1순위: 부서순 (DB 배치순서 order)
  * 2순위: 팀장->팀원 (직책순: 대표/본부장/임원 > 위원장/소장 > 팀장 > 부팀장 > 팀원)
  * 3순위: 직급순 (상무 > 이사 > 부장 > 차장 > 과장 > 대리 > 사원)
@@ -182,6 +183,15 @@ function sortWorkPlanUsers(
   deptOrderMap: Map<string, number>,
   rankOf: (pos: string) => number,
 ): number {
+  // 0순위: 임원/본부장급은 부서 순서와 무관하게 항상 최상위
+  const execRankA = getJobTitleRank(a.jobTitle, a.position);
+  const execRankB = getJobTitleRank(b.jobTitle, b.position);
+  const isExecA = execRankA <= 2; // 대표이사(1), 본부장/상무/임원(2)
+  const isExecB = execRankB <= 2;
+  if (isExecA !== isExecB) return isExecA ? -1 : 1;
+  // 둘 다 임원급이면 직책 서열로 비교
+  if (isExecA && isExecB && execRankA !== execRankB) return execRankA - execRankB;
+
   // 1순위: 부서순 (조직도 배치순 order)
   const orderA = deptOrderMap.get(a.dept) ?? 9999;
   const orderB = deptOrderMap.get(b.dept) ?? 9999;
@@ -189,9 +199,7 @@ function sortWorkPlanUsers(
   if (a.dept !== b.dept) return a.dept.localeCompare(b.dept, 'ko');
 
   // 2순위: 직책순
-  const titleRankA = getJobTitleRank(a.jobTitle, a.position);
-  const titleRankB = getJobTitleRank(b.jobTitle, b.position);
-  if (titleRankA !== titleRankB) return titleRankA - titleRankB;
+  if (execRankA !== execRankB) return execRankA - execRankB;
 
   // 3순위: 직급순
   const rankA = rankOf(a.position);
@@ -300,10 +308,14 @@ function sortWorkPlanUsers(
           seenUserIds.add(dm.userId);
         });
 
-      // 부서 내 서열 정렬 (1:직책순 리더 우선 > 2:직급순 > 3:이름순)
+      // 부서 내 서열 정렬 (0순위: 임원/본부장 최상위 > 1:직책순 > 2:직급순 > 3:이름순)
       const sorted = matchedUsers.sort((a, b) => {
         const titleRankA = getJobTitleRank(a.jobTitle, a.position);
         const titleRankB = getJobTitleRank(b.jobTitle, b.position);
+        // 임원급(rank<=2)은 비임원보다 무조건 앞
+        const isExecA = titleRankA <= 2;
+        const isExecB = titleRankB <= 2;
+        if (isExecA !== isExecB) return isExecA ? -1 : 1;
         if (titleRankA !== titleRankB) return titleRankA - titleRankB;
 
         const rankA = org.rankOf(a.position);
