@@ -29,12 +29,13 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    // MES 도크 경로(/dock, /widdy, /exec)는 전체화면 로그인 창 대신 StandaloneDockScreen 의 전용 안내 화면 렌더링
+    // MES 도크 경로(/exec?from=mes 또는 /dock, /widdy)는 전체화면 로그인 창 대신 StandaloneDockScreen 의 전용 안내 화면 렌더링
     const isDockUrl =
       typeof window !== 'undefined' &&
       (window.location.pathname.startsWith('/dock') ||
         window.location.pathname.startsWith('/widdy') ||
-        window.location.pathname.startsWith('/exec'));
+        (window.location.pathname === '/exec' &&
+          new URLSearchParams(window.location.search).get('from') === 'mes'));
 
     if (isDockUrl) return <>{children}</>;
     return <LoginScreen />;

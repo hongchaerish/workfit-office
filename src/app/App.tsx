@@ -206,8 +206,9 @@ export default function App() {
       <Route path="/dock" element={<StandaloneDockScreen />} />
       <Route path="/dock/*" element={<StandaloneDockScreen />} />
       <Route path="/widdy" element={<StandaloneDockScreen />} />
-      <Route path="/exec" element={<StandaloneDockScreen />} />
-      <Route path="/exec/*" element={<StandaloneDockScreen />} />
+
+      {/* /exec?from=mes 진입 시 AppShell(GNB/사이드바) 및 대시보드를 일체 띄우지 않고 도크만 렌더링 */}
+      {isFromMes && <Route path="/exec" element={<StandaloneDockScreen />} />}
 
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={HOME} replace />} />
