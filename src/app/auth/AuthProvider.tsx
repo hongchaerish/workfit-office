@@ -4,7 +4,7 @@ import { userRepo } from '@/data/user/user.repo';
 import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
 import { mintWiddyToken, clearWiddyToken } from '@/data/widdyChat/widdyAuth';
 import type { User } from '@/domain/user/schema';
-import { verifyAndAuthenticateMesSso } from '@/features/auth/mesSso';
+import { verifyAndAuthenticateMesSso, FALLBACK_ADMIN_USER } from '@/features/auth/mesSso';
 
 /**
  * 인증 컨텍스트 — 자체 로그인(users 컬렉션 대조) 세션.
@@ -47,7 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     (async () => {
       try {
-        const isFromMes = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('from') === 'mes';
+        const search = typeof window !== 'undefined' ? window.location.search : '';
+        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        const isFromMes =
+          new URLSearchParams(search).get('from')?.toLowerCase() === 'mes' ||
+          (hash.includes('?') && new URLSearchParams(hash.split('?')[1]).get('from')?.toLowerCase() === 'mes');
 
         // 1. URL에 MES SSO 파라미터가 있는 경우 서명 검증 및 자동 로그인 우선 시도
         const ssoUser = await verifyAndAuthenticateMesSso();
@@ -60,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // MES 연동 진입(?from=mes)인데 SSO 인증에 실패한 경우,
         // 이전 테스트나 다른 브라우저 창에서 남아있던 세션이 의도치 않게 복원되지 않도록 차단
         if (isFromMes) {
+          console.warn('[AuthProvider] MES 진입 요청이었으나 SSO 인증 조건 불충족으로 미로그인 처리');
           setUser(null);
           return;
         }
@@ -71,11 +76,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 언마운트된 경우 아무 것도 건드리지 않는다. StrictMode는 effect를 두 번 실행하는데,
           // 첫 번째 cleanup 이후 비동기가 끝났다고 세션을 지우면 정상 로그인 상태가 날아간다.
           if (!alive) return;
-          const found = users.find((u) => u.id === uid && u.status === '사용');
-          if (found) setUser(found);
-          else localStorage.removeItem(SESSION_KEY);
+          let found = users.find((u) => u.id === uid && u.status === '사용');
+          // DB에 admin 계정이 직접 없더라도 admin 세션인 경우 fallback 최고관리자로 복원 유지
+          if (!found && (uid === 'admin' || uid.toLowerCase() === 'admin')) {
+            const topAdmin = users.find((u) => u.id === 'U001' && u.status === '사용');
+            found = topAdmin ? { ...topAdmin, name: '최고관리자 (admin)' } : FALLBACK_ADMIN_USER;
+          }
+          if (found) {
+            setUser(found);
+          } else {
+            localStorage.removeItem(SESSION_KEY);
+          }
         }
-      } catch {
+      } catch (err) {
+        console.error('[AuthProvider] 세션 복원 오류:', err);
         /* 복원 실패 시 미로그인으로 처리 */
       } finally {
         if (alive) setLoading(false);

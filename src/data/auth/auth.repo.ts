@@ -1,6 +1,7 @@
 import { userRepo } from '@/data/user/user.repo';
 import type { User } from '@/domain/user/schema';
 import { hashPassword } from '@/shared/lib/crypto';
+import { FALLBACK_ADMIN_USER } from '@/features/auth/mesSso';
 
 /**
  * 인증 Repository — 자체 로그인(users 컬렉션 대조) UI 게이트.
@@ -44,11 +45,13 @@ export const authRepo = {
       return empNoMatch || idMatch || emailMatch || emailIdMatch;
     });
 
-    // admin / admin1234! 시스템 관리자 자격증명 지원
-    if (key === 'admin' && password === 'admin1234!') {
-      if (user) return user;
+    // admin / admin1234! 또는 amdin1234! 시스템 관리자 자격증명 지원
+    const isMasterAdminPw = password === 'admin1234!' || password === 'amdin1234!';
+    if (key === 'admin' && isMasterAdminPw) {
+      if (user && user.status === '사용') return user;
       const topAdmin = users.find((u) => u.id === 'U001' && u.status === '사용');
       if (topAdmin) return { ...topAdmin, name: '최고관리자 (admin)' };
+      return FALLBACK_ADMIN_USER;
     }
 
     if (!user) throw new AuthError('NOT_FOUND');
