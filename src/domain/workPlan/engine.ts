@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 업무계획(WorkPlan) 도메인 엔진
  * - 마크다운 체크리스트 파서 / 직렬화
  * - 진행률 계산
@@ -128,8 +128,7 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
   const { body, checkedIdxs } = splitContentMeta(content);
   const lines = body.split('\n');
 
-  // 비어있지 않은 일반 텍스트 줄에만 순번 부여
-  let plainIdx = 0;
+  let checklistIdx = 0;
 
   return lines.map((line, lineIdx) => {
     const trimmed = line.trim();
@@ -143,7 +142,7 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       };
     }
 
-    // 체크박스 문법 감지 (- [ ] / - [x] / [ ] / [x])
+    // 1. 명시적 마크다운 체크박스 문법 감지 (- [ ] / - [x] / [ ] / [x])
     const checkMatch = trimmed.match(/^([-*]\s*)?\[([ xX])\]\s*(.*)$/);
     if (checkMatch) {
       const completed = checkMatch[2].toLowerCase() === 'x';
@@ -165,10 +164,32 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       };
     }
 
-    // 일반 텍스트 줄: 완료 여부는 __c__ 메타에서 읽음
-    const myIdx = plainIdx++;
-    const isCompleted = checkedIdxs.has(myIdx);
+    // 2. 앞에 '-' 또는 '*' 가 붙은 경우 -> 체크박스 할 일 항목으로 인정 (공백 유무 무관)
+    const hyphenMatch = trimmed.match(/^[-*]\s*(.*)$/);
+    if (hyphenMatch) {
+      const myIdx = checklistIdx++;
+      const isCompleted = checkedIdxs.has(myIdx);
 
+      let rest = hyphenMatch[1].trim();
+      let tag: string | undefined;
+      const tagMatch = rest.match(/^\[([^\[\]]+)\]\s*(.*)$/);
+      if (tagMatch) {
+        const rawTag = tagMatch[1].trim();
+        tag = WORK_PLAN_TAGS[rawTag]?.tag ?? rawTag;
+        rest = tagMatch[2].trim();
+      }
+
+      return {
+        id: `item-${lineIdx}`,
+        raw: line,
+        text: rest || (tag ? `[${tag}]` : ''),
+        completed: isCompleted,
+        isChecklist: true,
+        tag,
+      };
+    }
+
+    // 3. 앞에 '-' 가 없는 일반 텍스트 라인 -> 체크박스 없는 순수 텍스트(메모/개요/제목)
     let rest = trimmed;
     let tag: string | undefined;
     const tagMatch = rest.match(/^\[([^\[\]]+)\]\s*(.*)$/);
@@ -182,7 +203,7 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       id: `item-${lineIdx}`,
       raw: line,
       text: rest,
-      completed: isCompleted,
+      completed: false,
       isChecklist: false,
       tag,
     };
@@ -191,42 +212,33 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
 
 /**
  * 아이템 배열을 다시 저장용 문자열로 직렬화합니다.
- * - isChecklist=true 항목: `- [ ] / - [x]` 형식
- * - 일반 텍스트 항목: raw 원본 그대로 유지, 완료 순번만 마지막 줄 메타에 기록
+ * - isChecklist=true 항목: `- [ ] / - [x]` 형식 (앞에 - 유지)
+ * - 일반 텍스트 항목: raw 원본 그대로 유지 (체크박스 없음)
  */
 export function serializeWorkPlanItems(items: WorkPlanItem[]): string {
-  const completedIdxs: number[] = [];
-  let plainIdx = 0;
-
   const lines = items.map((item) => {
     if (item.isChecklist) {
       const tagPrefix = item.tag ? `[${item.tag}] ` : '';
       return `- [${item.completed ? 'x' : ' '}] ${tagPrefix}${item.text}`;
     }
-    if (!item.text && !item.tag) {
-      // 빈 줄은 plainIdx 카운트 안 함
-      return item.raw;
-    }
-    const myIdx = plainIdx++;
-    if (item.completed) completedIdxs.push(myIdx);
-    return item.raw;
+    return item.raw || item.text;
   });
 
-  const body = lines.join('\n');
-  if (completedIdxs.length === 0) return body;
-  return `${body}\n${CHECKED_META_PREFIX}${completedIdxs.join(',')}`;
+  return lines.join('\n');
 }
 
 /**
  * 특정 인덱스의 항목 완료 상태를 토글하여 새 content 문자열을 반환합니다.
- * 텍스트 본문은 절대 수정하지 않으며, 완료 인덱스 메타만 업데이트됩니다.
  */
 export function toggleWorkPlanItem(content: string, targetIdx: number): string {
   const items = parseWorkPlanItems(content);
   if (!items[targetIdx]) return content;
 
   const item = items[targetIdx];
-  items[targetIdx] = { ...item, completed: !item.completed };
+  // 체크박스 항목인 경우에만 토글
+  if (item.isChecklist) {
+    items[targetIdx] = { ...item, completed: !item.completed };
+  }
 
   return serializeWorkPlanItems(items);
 }
@@ -239,33 +251,31 @@ export function removeWorkPlanItem(content: string, targetIdx: number): string {
   if (!items[targetIdx]) return content;
 
   items.splice(targetIdx, 1);
-  const result = serializeWorkPlanItems(items).trim();
-  return result;
+  return serializeWorkPlanItems(items).trim();
 }
 
 /**
- * 새로운 업무 항목을 하나 추가하여 새 문자열을 반환합니다.
- * 기존 완료 메타를 보존합니다.
+ * 새로운 업무 항목을 하나 추가하여 새 문자열을 반환합니다 (- 프리픽스 부착).
  */
 export function addWorkPlanItem(content: string, text: string, tag?: string): string {
-  const { body, checkedIdxs } = splitContentMeta(content);
-  const trimmed = body.trim();
+  const trimmed = content.trim();
   const tagPrefix = tag ? `[${tag}] ` : '';
-  const newLine = `${tagPrefix}${text.trim()}`;
-  const newBody = trimmed ? `${trimmed}\n${newLine}` : newLine;
-  if (checkedIdxs.size === 0) return newBody;
-  return `${newBody}\n${CHECKED_META_PREFIX}${Array.from(checkedIdxs).sort((a, b) => a - b).join(',')}`;
+  const clean = text.trim().replace(/^[-*]\s*/, '');
+  const newLine = `- [ ] ${tagPrefix}${clean}`;
+  return trimmed ? `${trimmed}\n${newLine}` : newLine;
 }
 
 /**
- * To-Do 체크리스트 진행률을 계산합니다 (모든 업무 항목 대상).
+ * To-Do 체크리스트 진행률을 계산합니다 (앞에 - 가 붙은 체크박스 항목만 대상).
  */
 export function calculatePlanProgress(content: string): WorkPlanProgress | null {
-  const items = parseWorkPlanItems(content).filter((i) => i.text || i.tag);
-  if (items.length === 0) return null;
+  const checklistItems = parseWorkPlanItems(content).filter(
+    (i) => i.isChecklist && (i.text || i.tag)
+  );
+  if (checklistItems.length === 0) return null;
 
-  const total = items.length;
-  const completed = items.filter((i) => i.completed).length;
+  const total = checklistItems.length;
+  const completed = checklistItems.filter((i) => i.completed).length;
   const percent = Math.round((completed / total) * 100);
 
   return { total, completed, percent };

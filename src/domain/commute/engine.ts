@@ -338,18 +338,32 @@ export function evaluateCommuteRecord(
     nightMin = outMin - nightStartMin;
   }
 
+  // 외근/출장이 승인된 날은 외근/출장 상태와 명칭을 확정 부여하고 지각 면제 및 기본 8시간 인정
+  const isOutside = approvedLeave?.category === 'OUTSIDE';
+  const isTrip = approvedLeave?.category === 'TRIP';
+
+  if (isOutside || isTrip) {
+    if (status !== 'holiday_work') {
+      status = isOutside ? 'outside' : 'trip';
+    }
+    lateMin = 0;
+    totalMin = Math.max(totalMin, 8 * 60);
+  }
+
   return {
     empId,
     date,
     inAt,
     outAt,
-    basicMin,
+    basicMin: Math.max(basicMin, (isOutside || isTrip) ? 8 * 60 : basicMin),
     overMin,
     nightMin,
     lateMin,
     totalMin,
     status,
-    leaveName: approvedLeave?.leaveType,
+    leaveName: approvedLeave?.category === 'LEAVE' ? approvedLeave?.leaveType : undefined,
+    outsideName: isOutside ? approvedLeave?.leaveType : undefined,
+    tripName: isTrip ? approvedLeave?.leaveType : undefined,
     holidayName: holiday ?? undefined,
   };
 }

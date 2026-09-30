@@ -406,11 +406,22 @@ export default function CommuteScreen() {
           docId: schedule.docId,
         };
 
-        if (!map.has(drafterName)) map.set(drafterName, new Map());
-        map.get(drafterName)!.set(dateKey, leaveInfo);
-        const normDrafter = normName(drafterName);
-        if (normDrafter && !map.has(normDrafter)) map.set(normDrafter, new Map());
-        if (normDrafter) map.get(normDrafter)!.set(dateKey, leaveInfo);
+        if (schedule.drafterId) {
+          if (!map.has(schedule.drafterId)) map.set(schedule.drafterId, new Map());
+          map.get(schedule.drafterId)!.set(dateKey, leaveInfo);
+        }
+        if (doc.drafterId && doc.drafterId !== schedule.drafterId) {
+          if (!map.has(doc.drafterId)) map.set(doc.drafterId, new Map());
+          map.get(doc.drafterId)!.set(dateKey, leaveInfo);
+        }
+
+        if (drafterName) {
+          if (!map.has(drafterName)) map.set(drafterName, new Map());
+          map.get(drafterName)!.set(dateKey, leaveInfo);
+          const normDrafter = normName(drafterName);
+          if (normDrafter && !map.has(normDrafter)) map.set(normDrafter, new Map());
+          if (normDrafter) map.get(normDrafter)!.set(dateKey, leaveInfo);
+        }
 
         curr.setDate(curr.getDate() + 1);
       }
@@ -418,11 +429,21 @@ export default function CommuteScreen() {
     return map;
   }, [approvalsQuery.data, normName]);
 
-  // 내 전용 휴가 맵
+  // 내 전용 휴가/외근/출장 맵 (userId 우선, 이름 및 정규화이름 폴백)
   const myLeaveMap = useMemo(() => {
+    if (user?.id && globalLeaveMap.has(user.id)) {
+      return globalLeaveMap.get(user.id)!;
+    }
     const targetName = user?.name?.trim() ?? '';
-    return globalLeaveMap.get(targetName) ?? new Map();
-  }, [globalLeaveMap, user?.name]);
+    if (targetName && globalLeaveMap.has(targetName)) {
+      return globalLeaveMap.get(targetName)!;
+    }
+    const norm = normName(targetName);
+    if (norm && globalLeaveMap.has(norm)) {
+      return globalLeaveMap.get(norm)!;
+    }
+    return new Map();
+  }, [globalLeaveMap, user?.id, user?.name, normName]);
 
   const myHireDate = useMemo(() => {
     return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
@@ -597,7 +618,11 @@ export default function CommuteScreen() {
     for (const emp of scopedEmployees) {
       const u = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
       const hireDate = getHireDateForEmp(emp.name, emp.empId);
-      const personLeaveMap = globalLeaveMap.get(emp.name.trim()) ?? globalLeaveMap.get(normName(emp.name)) ?? new Map();
+      const personLeaveMap =
+        (u?.id ? globalLeaveMap.get(u.id) : undefined) ??
+        globalLeaveMap.get(emp.name.trim()) ??
+        globalLeaveMap.get(normName(emp.name)) ??
+        new Map();
       
       const capsId = capsEmpIdByName.get(emp.name.trim()) ?? capsEmpIdByName.get(normName(emp.name));
       const rawMap = rawByEmp.get(emp.empId) ?? (capsId !== undefined ? rawByEmp.get(capsId) : undefined);
@@ -619,9 +644,15 @@ export default function CommuteScreen() {
         recordsMap.set(dateStr, evaluated);
       }
 
-      // 입사일 이전 달이라 유효 출퇴근 기록이 없는 사원은 해당 월 명단에서 제외
+      // 입사일 이전 달이라 유효 출퇴근 기록이 없는 사원은 해당 월 명단에서 제외 (외근, 출장도 유효 근무로 인정)
       const hasValidWork = records.some(
-        (r) => r.status === 'normal' || r.status === 'late' || r.status === 'holiday_work' || r.status === 'leave',
+        (r) =>
+          r.status === 'normal' ||
+          r.status === 'late' ||
+          r.status === 'holiday_work' ||
+          r.status === 'leave' ||
+          r.status === 'outside' ||
+          r.status === 'trip',
       );
       const hireMonth = hireDate ? hireDate.slice(0, 7) : null;
       const isPreHireMonth = Boolean(hireMonth && month < hireMonth) || records.every((r) => r.status === 'unknown' || r.status === 'off');
@@ -682,7 +713,9 @@ export default function CommuteScreen() {
           );
           if (!hasMissing) return false;
         } else if (statusFilter === 'present' || statusFilter === 'normal') {
-          const hasNormal = row.records.some((r) => r.status === 'normal');
+          const hasNormal = row.records.some(
+            (r) => r.status === 'normal' || r.status === 'outside' || r.status === 'trip'
+          );
           if (!hasNormal) return false;
         } else {
           const hasStatus = row.records.some((r) => r.status === statusFilter);

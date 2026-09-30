@@ -107,7 +107,7 @@ export function MyCommuteLeaveTab({
       const isPreHire = Boolean(effectiveHireDate && r.date < effectiveHireDate);
       if (isPreHire) continue;
 
-      if (r.status === 'normal' || r.status === 'holiday_work') workDays++;
+      if (r.status === 'normal' || r.status === 'holiday_work' || r.status === 'outside' || r.status === 'trip') workDays++;
       if (r.status === 'leave') leaveDays++;
       if (r.status === 'late') {
         workDays++;
@@ -175,7 +175,29 @@ export function MyCommuteLeaveTab({
           </div>
 
           <div className="my-2.5">
-            {todayRecord?.inAt ? (
+            {todayRecord?.status === 'outside' ? (
+              <div className="py-1">
+                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
+                  <Briefcase size={16} className="text-teal" />
+                  <span>{todayRecord.outsideName || '외근 중'}</span>
+                </div>
+                <div className="text-[11px] text-ink3">
+                  {todayRecord.inAt ? `태그 기록(${timeOf(todayRecord.inAt)}) 포함 ` : ''}
+                  승인된 외근 일정이 적용되어 정상 인정됩니다.
+                </div>
+              </div>
+            ) : todayRecord?.status === 'trip' ? (
+              <div className="py-1">
+                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
+                  <Briefcase size={16} className="text-teal" />
+                  <span>{todayRecord.tripName || '출장 중'}</span>
+                </div>
+                <div className="text-[11px] text-ink3">
+                  {todayRecord.inAt ? `태그 기록(${timeOf(todayRecord.inAt)}) 포함 ` : ''}
+                  승인된 출장 일정이 적용되어 정상 인정됩니다.
+                </div>
+              </div>
+            ) : todayRecord?.inAt ? (
               <div className="space-y-1">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[20px] font-extrabold text-teal tabular-nums">
@@ -196,22 +218,6 @@ export function MyCommuteLeaveTab({
                   <span>{todayRecord.leaveName || '휴가 중'}</span>
                 </div>
                 <div className="text-[11px] text-ink3">승인된 휴가 일정이 적용되었습니다.</div>
-              </div>
-            ) : todayRecord?.status === 'outside' ? (
-              <div className="py-1">
-                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
-                  <Briefcase size={16} className="text-teal" />
-                  <span>{todayRecord.outsideName || '외근 중'}</span>
-                </div>
-                <div className="text-[11px] text-ink3">승인된 외근 일정이 적용되어 정상 인정됩니다.</div>
-              </div>
-            ) : todayRecord?.status === 'trip' ? (
-              <div className="py-1">
-                <div className="text-[18px] font-extrabold text-ink flex items-center gap-1.5">
-                  <Briefcase size={16} className="text-teal" />
-                  <span>{todayRecord.tripName || '출장 중'}</span>
-                </div>
-                <div className="text-[11px] text-ink3">승인된 출장 일정이 적용되어 정상 인정됩니다.</div>
               </div>
             ) : isWeekend(todayStr) ? (
               <div className="py-1">

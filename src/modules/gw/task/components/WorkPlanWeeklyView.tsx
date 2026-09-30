@@ -235,7 +235,10 @@ export function WorkPlanWeeklyView({
                   </div>
                 ) : (
                   parsed.map((item, idx) => {
-                    if (!item.text && !item.tag && !item.isChecklist) return null;
+                    if (!item.text && !item.tag && !item.isChecklist) {
+                      // 빈 줄 간격(줄바꿈) 유지
+                      return <div key={idx} className="h-2" />;
+                    }
                     const tagMeta = item.tag ? getWorkPlanTagMeta(item.tag, tagMap) : null;
 
                     return (
@@ -243,18 +246,16 @@ export function WorkPlanWeeklyView({
                         key={idx}
                         className="group flex items-start gap-1.5 rounded-md p-1 hover:bg-panel-alt/50 transition-colors"
                       >
-                        {item.isChecklist ? (
+                        {item.isChecklist && (
                           <button
                             type="button"
                             onClick={() => plan && handleToggleItem(plan, idx)}
-                            className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors ${
-                              item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel'
+                            className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition-colors cursor-pointer ${
+                              item.completed ? 'border-teal bg-teal text-white' : 'border-border bg-panel hover:border-teal'
                             }`}
                           >
                             {item.completed && <CheckCircle2 size={11} />}
                           </button>
-                        ) : (
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink3" />
                         )}
 
                         <div className="min-w-0 flex-1 leading-snug">

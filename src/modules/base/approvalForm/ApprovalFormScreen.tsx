@@ -52,11 +52,57 @@ export default function ApprovalFormScreen() {
 
   const save = async () => {
     if (!sel) return;
-    if (!sel.code.trim()) return setMsg('코드를 입력하세요.');
-    if (!sel.name.trim()) return setMsg('서식명을 입력하세요.');
-    await upsert.mutateAsync({ ...sel, id: sel.code.trim() });
-    setMsg('저장되었습니다 — 상신·인쇄에 즉시 반영됩니다.');
-    setSel(null);
+    const cleanCode = sel.code.trim();
+    const cleanName = sel.name.trim();
+
+    if (!cleanCode) {
+      setMsg('오류: 서식 코드를 입력하세요.');
+      return;
+    }
+    if (!cleanName) {
+      setMsg('오류: 서식명을 입력하세요.');
+      return;
+    }
+
+    // 1. 신규 등록이거나 코드 변경 시 중복 검사 (DB 무결성 보호)
+    const isNew = !sel.id;
+    const isCodeChanged = sel.id && sel.id !== cleanCode;
+    if (isNew || isCodeChanged) {
+      const exists = forms.some((f) => f.code.toLowerCase() === cleanCode.toLowerCase());
+      if (exists) {
+        setMsg(`오류: 서식 코드 '${cleanCode}'는 이미 사용 중입니다. 다른 코드를 지정하세요.`);
+        return;
+      }
+    }
+
+    // 2. 필드 키 중복 및 빈 키 검사
+    const fieldKeys: string[] = [];
+    for (let i = 0; i < sel.fields.length; i++) {
+      const k = (sel.fields[i].key || '').trim();
+      if (!k) {
+        setMsg(`오류: ${i + 1}번째 필드의 키(Key)가 비어있습니다.`);
+        return;
+      }
+      if (fieldKeys.includes(k)) {
+        setMsg(`오류: 필드 키 '${k}'가 중복되었습니다. 각 필드는 고유한 영문 키를 가져야 합니다.`);
+        return;
+      }
+      fieldKeys.push(k);
+    }
+
+    try {
+      setMsg('저장 중입니다...');
+      await upsert.mutateAsync({ ...sel, id: cleanCode, code: cleanCode, name: cleanName });
+      setMsg('저장되었습니다 — 상신·인쇄에 즉시 반영됩니다.');
+      setTimeout(() => {
+        setSel(null);
+        setMsg('');
+      }, 600);
+    } catch (err: any) {
+      console.error('Failed to save approval form:', err);
+      const errMsg = err?.message || '저장 처리 중 오류가 발생했습니다.';
+      setMsg(`저장 실패: ${errMsg}`);
+    }
   };
 
   const del = async (form: ApprovalForm) => {

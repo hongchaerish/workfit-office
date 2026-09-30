@@ -108,7 +108,55 @@ export const approvalFormRepo = {
   },
 
   async save(form: ApprovalForm): Promise<void> {
-    await backend.save(approvalFormSchema.parse(form));
+    // 1. 필드 데이터 정제: 빈 key 자동 채번, 유효한 너비/옵션 보장
+    const cleanFields = (form.fields || []).map((f, idx) => ({
+      ...f,
+      key: (f.key || '').trim() || `field_${idx + 1}_${Date.now().toString(36).slice(-4)}`,
+      label: (f.label || '').trim() || f.key || `항목 ${idx + 1}`,
+      options: Array.isArray(f.options) ? f.options.filter(Boolean) : [],
+      width: f.width === 'half' ? ('half' as const) : ('full' as const),
+      tabOverrides: f.tabOverrides && typeof f.tabOverrides === 'object' ? f.tabOverrides : {},
+      visibleIf: f.visibleIf || null,
+      isAmountKey: Boolean(f.isAmountKey),
+      isTabSelector: Boolean(f.isTabSelector),
+      isSecret: Boolean(f.isSecret),
+    }));
+
+    // 2. 메타 속성 정제 (빈 문자열 -> null/유효값)
+    const sanitized: ApprovalForm = {
+      ...form,
+      id: (form.id || form.code).trim(),
+      code: form.code.trim(),
+      name: form.name.trim(),
+      icon: form.icon || '📄',
+      docTitle: form.docTitle || '',
+      closing: form.closing || '',
+      active: Boolean(form.active),
+      order: typeof form.order === 'number' && !isNaN(form.order) ? form.order : 0,
+      system: Boolean(form.system),
+      fields: cleanFields,
+      folderId: form.folderId || null,
+      recipientDeptId: form.recipientDeptId || null,
+      recipientUserId: form.recipientUserId || null,
+      recipientDrafter: Boolean(form.recipientDrafter),
+      allowedPositionFromRank:
+        typeof form.allowedPositionFromRank === 'number' && !isNaN(form.allowedPositionFromRank)
+          ? form.allowedPositionFromRank
+          : null,
+      allowedPositionToRank:
+        typeof form.allowedPositionToRank === 'number' && !isNaN(form.allowedPositionToRank)
+          ? form.allowedPositionToRank
+          : null,
+      allowedDeptIds: Array.isArray(form.allowedDeptIds) ? form.allowedDeptIds : [],
+      preservationPeriod: form.preservationPeriod || '5년',
+      securityLevel: (['일반', '대외비', '극비'] as const).includes(form.securityLevel as any)
+        ? form.securityLevel
+        : '일반',
+      visibility: form.visibility === '비공개' ? '비공개' : '부서',
+    };
+
+    const parsed = approvalFormSchema.parse(sanitized);
+    await backend.save(parsed);
   },
 
   async remove(id: string): Promise<void> {

@@ -92,9 +92,14 @@ export default function DepartmentScreen() {
     const oldHeadUserId = oldDept?.headUserId;
 
     const targetId = sel.id || nextId();
+    const targetOrder = sel.id
+      ? (oldDept?.order ?? sel.order ?? rows.length + 1)
+      : (rows.reduce((max, d) => Math.max(max, d.order || 0), 0) + 1);
+
     await upsert.mutateAsync({
       ...sel,
       id: targetId,
+      order: targetOrder,
       parentId: sel.parentId || null,
       headUserId: sel.headUserId || null,
     });
@@ -227,7 +232,12 @@ export default function DepartmentScreen() {
                   {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.dept} · {u.position}</option>)}
                 </select>
               </Field>
-              <Field label="정렬순서"><input type="number" value={sel.order} onChange={(e) => setSel({ ...sel, order: Number(e.target.value) })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal" /></Field>
+              <div className="rounded-lg border border-border bg-panel-alt/60 px-3 py-2 text-[11px] text-ink2 flex items-center justify-between">
+                <span className="font-bold">정렬 순서</span>
+                <span className="font-mono text-teal font-extrabold text-[11px]">
+                  배치 순서에 따라 시스템 자동 관리
+                </span>
+              </div>
               {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setSel(null)} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>

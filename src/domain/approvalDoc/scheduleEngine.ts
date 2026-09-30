@@ -74,8 +74,21 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
   }
 
   if (!startDate) {
-    startDate = String(fVals['period'] || fVals['startDate'] || fVals['workDate'] || '');
-    endDate = String(fVals['period__end'] || fVals['endDate'] || startDate);
+    startDate = String(
+      fVals['period'] ||
+      fVals['startDate'] ||
+      fVals['workDate'] ||
+      fVals['date'] ||
+      fVals['outDate'] ||
+      fVals['tripDate'] ||
+      ''
+    );
+    endDate = String(
+      fVals['period__end'] ||
+      fVals['endDate'] ||
+      fVals['workDate__end'] ||
+      startDate
+    );
     days = category === 'LEAVE'
       ? calculateLeaveDays({
           leaveType: String(fVals['leaveType'] || ''),
@@ -84,7 +97,7 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
           rawDays: Number(fVals['period__days']) || undefined,
           title: doc.title,
         })
-      : Number(fVals['period__days']) || 1;
+      : Number(fVals['period__days'] || fVals['days']) || 1;
   }
 
   if (!startDate) return null;

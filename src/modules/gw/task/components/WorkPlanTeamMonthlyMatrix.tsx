@@ -13,7 +13,7 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules, isDateInSchedule } from '@/domain/approvalDoc/scheduleEngine';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
-import { extractTimeFromText, isWorkPlanDerivedEvent } from '@/domain/workPlan/workPlanCalendarBridge';
+import { isWorkPlanDerivedEvent } from '@/domain/workPlan/workPlanCalendarBridge';
 import {
   ChevronLeft,
   ChevronRight,
@@ -638,67 +638,72 @@ export function WorkPlanTeamMonthlyMatrix({
                                   <div className="space-y-1 min-h-[48px] group/cell relative">
                                     <div className="space-y-0.5">
                                       {parsed.map((item, itemIdx) => {
-                                        if (!item.text && !item.tag) return null;
-                                        const { startTime, endTime, cleanText } = extractTimeFromText(item.text);
+                                        // 빈 줄인 경우 줄바꿈 여백 유지
+                                        if (!item.text && !item.tag) {
+                                          return <div key={itemIdx} className="h-1.5" />;
+                                        }
 
+                                        // 1) 체크박스 할 일 항목 (앞에 - 또는 마크다운 체크박스)
+                                        if (item.isChecklist) {
+                                          return (
+                                            <div
+                                              key={itemIdx}
+                                              className={`text-[10px] leading-relaxed flex items-start gap-1 py-0.5 ${
+                                                item.completed
+                                                  ? 'line-through text-ink3 opacity-60'
+                                                  : editTier === 3
+                                                  ? 'text-ink2/90'
+                                                  : 'text-ink'
+                                              }`}
+                                            >
+                                              {/* 본인만 체크 가능한 상호작용 체크박스 (타인은 읽기 전용) */}
+                                              <button
+                                                type="button"
+                                                disabled={!isMe}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (!isMe) return;
+                                                  if (plan) {
+                                                    onToggleItem?.(plan, itemIdx);
+                                                  }
+                                                }}
+                                                className={`shrink-0 mt-0.5 h-3.5 w-3.5 rounded border flex items-center justify-center transition-all ${
+                                                  !isMe
+                                                    ? 'cursor-default opacity-60 ' +
+                                                      (item.completed
+                                                        ? 'border-teal/60 bg-teal/60 text-white'
+                                                        : 'border-border/60 bg-panel/30')
+                                                    : item.completed
+                                                    ? 'border-teal bg-teal text-white shadow-2xs cursor-pointer'
+                                                    : 'border-border/90 bg-white dark:bg-panel hover:border-teal hover:bg-teal-soft/10 cursor-pointer'
+                                                }`}
+                                                title={
+                                                  !isMe
+                                                    ? '진행도 체크는 본인만 가능합니다'
+                                                    : item.completed
+                                                    ? '미완료로 변경'
+                                                    : '완료로 표시 (가로줄)'
+                                                }
+                                              >
+                                                {item.completed && <Check size={10} strokeWidth={3} />}
+                                              </button>
+
+                                              <div className="min-w-0 flex-1 break-words">
+                                                <span>{item.text}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+
+                                        // 2) 일반 텍스트 라인 (체크박스 없이 순수 텍스트 줄바꿈)
                                         return (
                                           <div
                                             key={itemIdx}
-                                            className={`text-[10px] leading-relaxed flex items-start gap-1 py-0.5 ${
-                                              item.completed
-                                                ? 'line-through text-ink3 opacity-60'
-                                                : editTier === 3
-                                                ? 'text-ink2/90'
-                                                : 'text-ink'
+                                            className={`text-[10px] leading-relaxed py-0.5 break-words ${
+                                              editTier === 3 ? 'text-ink2/90' : 'text-ink'
                                             }`}
                                           >
-                                            {/* 본인만 체크 가능한 상호작용 체크박스 (타인은 읽기 전용) */}
-                                            <button
-                                              type="button"
-                                              disabled={!isMe}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (!isMe) return;
-                                                if (plan) {
-                                                  onToggleItem?.(plan, itemIdx);
-                                                }
-                                              }}
-                                              className={`shrink-0 mt-0.5 h-3.5 w-3.5 rounded border flex items-center justify-center transition-all ${
-                                                !isMe
-                                                  ? 'cursor-default opacity-60 ' +
-                                                    (item.completed
-                                                      ? 'border-teal/60 bg-teal/60 text-white'
-                                                      : 'border-border/60 bg-panel/30')
-                                                  : item.completed
-                                                  ? 'border-teal bg-teal text-white shadow-2xs cursor-pointer'
-                                                  : 'border-border/90 bg-white dark:bg-panel hover:border-teal hover:bg-teal-soft/10 cursor-pointer'
-                                              }`}
-                                              title={
-                                                !isMe
-                                                  ? '진행도 체크는 본인만 가능합니다'
-                                                  : item.completed
-                                                  ? '미완료로 변경'
-                                                  : '완료로 표시 (가로줄)'
-                                              }
-                                            >
-                                              {item.completed && <Check size={10} strokeWidth={3} />}
-                                            </button>
-
-                                            <div className="min-w-0 flex-1 break-words">
-                                              {/* 회의/미팅 태그 */}
-                                              {(item.tag === '회의' || item.tag === '미팅') && (
-                                                <span className="mr-1 rounded bg-purple-500/10 px-1 py-0.2 text-[8px] font-bold text-purple-700 border border-purple-500/25 dark:text-purple-300">
-                                                  회의
-                                                </span>
-                                              )}
-                                              {startTime && (
-                                                <span className="mr-1 text-[8.5px] font-bold text-blue-600 dark:text-blue-400">
-                                                  ({startTime}
-                                                  {endTime ? `~${endTime}` : ''})
-                                                </span>
-                                              )}
-                                              <span>{(cleanText || item.text).replace(/^\[(회의|미팅)\]\s*/, '')}</span>
-                                            </div>
+                                            {item.text}
                                           </div>
                                         );
                                       })}

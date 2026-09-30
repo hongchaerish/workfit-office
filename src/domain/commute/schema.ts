@@ -104,7 +104,9 @@ export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummar
   }
 
   return {
-    workDays: rows.filter((row) => row.inAt !== null || row.outAt !== null).length,
+    workDays: rows.filter(
+      (row) => row.inAt !== null || row.outAt !== null || row.status === 'outside' || row.status === 'trip'
+    ).length,
     lateDays: rows.filter((row) => row.status === 'late').length,
     absentDays: rows.filter((row) => row.status === 'absent').length,
     leaveDays,

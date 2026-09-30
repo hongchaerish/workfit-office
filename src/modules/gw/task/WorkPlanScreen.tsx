@@ -123,6 +123,76 @@ export default function WorkPlanScreen() {
   const update = useUpdateWorkPlan();
   const remove = useRemoveWorkPlan();
 
+/**
+ * 직책 서열 가중치 도출 (2순위: 팀장/임원 -> 팀원)
+ * 대표/본부장/임원 > 위원장/소장 > 팀장/부서장 > 부팀장/파트장 > 팀원
+ */
+function getJobTitleRank(jobTitle?: string, position?: string): number {
+  const title = (jobTitle || '').trim();
+  const pos = (position || '').trim();
+
+  // 1순위: 대표이사, 대표
+  if (title.includes('대표') || pos.includes('대표')) return 1;
+  // 2순위: 본부장, 임원, 상무이사, 상무, 전무, 이사
+  if (
+    title.includes('본부장') ||
+    title.includes('임원') ||
+    pos.includes('상무') ||
+    pos.includes('전무') ||
+    pos.includes('부사장') ||
+    title.includes('상무')
+  ) {
+    return 2;
+  }
+  // 3순위: 위원장, 센터장, 소장, 실장
+  if (title.includes('위원장') || title.includes('센터장') || title.includes('소장') || title.includes('실장')) {
+    return 3;
+  }
+  // 4순위: 팀장, 부서장
+  if (title.includes('팀장') || title.includes('부서장')) {
+    return 4;
+  }
+  // 5순위: 부팀장, 파트장, 그룹장, 차석
+  if (title.includes('부팀장') || title.includes('파트장') || title.includes('그룹장')) {
+    return 5;
+  }
+  // 6순위: 일반 팀원 / 매니저 / 연구원
+  return 10;
+}
+
+/**
+ * 업무계획 사용자 3단계 정렬 헬퍼
+ * 1순위: 부서순 (DB 배치순서 order)
+ * 2순위: 팀장->팀원 (직책순: 대표/본부장/임원 > 위원장/소장 > 팀장 > 부팀장 > 팀원)
+ * 3순위: 직급순 (상무 > 이사 > 부장 > 차장 > 과장 > 대리 > 사원)
+ * 4순위: 이름 가나다순
+ */
+function sortWorkPlanUsers(
+  a: User,
+  b: User,
+  deptOrderMap: Map<string, number>,
+  rankOf: (pos: string) => number,
+): number {
+  // 1순위: 부서순 (조직도 배치순 order)
+  const orderA = deptOrderMap.get(a.dept) ?? 9999;
+  const orderB = deptOrderMap.get(b.dept) ?? 9999;
+  if (orderA !== orderB) return orderA - orderB;
+  if (a.dept !== b.dept) return a.dept.localeCompare(b.dept, 'ko');
+
+  // 2순위: 직책순
+  const titleRankA = getJobTitleRank(a.jobTitle, a.position);
+  const titleRankB = getJobTitleRank(b.jobTitle, b.position);
+  if (titleRankA !== titleRankB) return titleRankA - titleRankB;
+
+  // 3순위: 직급순
+  const rankA = rankOf(a.position);
+  const rankB = rankOf(b.position);
+  if (rankA !== rankB) return rankA - rankB;
+
+  // 4순위: 이름 가나다순
+  return a.name.localeCompare(b.name, 'ko');
+}
+
   /** 부서별 조직도 정렬 순서 맵 */
   const deptOrderMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -132,49 +202,47 @@ export default function WorkPlanScreen() {
     return map;
   }, [org.depts]);
 
-  /** 권한 스코프(개인/팀장/전사) 적용 + 재직 + 대표/테스트 제외 인원 정렬 */
+  /** 권한 스코프(개인/팀장/전사) 적용 + 재직 + 대표/테스트 제외 인원 정렬 (1:부서순, 2:직책순, 3:직급순) */
   const roster = useMemo(() => {
     if (!actor) return [];
     return users
       .filter((user) => user.status === '사용' && !isExcludedFromRoster(user, actor))
       .filter((user) => canViewWorkPlan(actor, user, actorScope, org))
-      .sort((a, b) => {
-        const orderA = deptOrderMap.get(a.dept) ?? 9999;
-        const orderB = deptOrderMap.get(b.dept) ?? 9999;
-        if (orderA !== orderB) return orderA - orderB;
-        if (a.dept !== b.dept) return a.dept.localeCompare(b.dept, 'ko');
-
-        const rankA = org.rankOf(a.position);
-        const rankB = org.rankOf(b.position);
-        if (rankA !== rankB) return rankA - rankB;
-
-        return a.name.localeCompare(b.name, 'ko');
-      });
+      .sort((a, b) => sortWorkPlanUsers(a, b, deptOrderMap, org.rankOf));
   }, [users, actor, actorScope, deptOrderMap, org]);
 
   const { data: departmentMembers = [] } = useDepartmentMembers();
 
-  /** 고유 부서 목록 (조직도 공식 부서 + 로스터 부서 + 겸직 부서 종합) */
+  /** 고유 부서 목록 (소속 인원이 1명 이상 있는 부서만 자동 표시 & 조직도 배치순 정렬) */
   const departments = useMemo(() => {
-    const validOrgDepts = org.depts
-      .filter((d) => !d.name.includes('테스트'))
-      .map((d) => d.name);
+    const memberCountByDept = new Map<string, number>();
 
-    const allDeptNames = new Set<string>(validOrgDepts);
-    roster.forEach((u) => allDeptNames.add(u.dept));
+    // A. 본직 인원 카운트
+    roster.forEach((u) => {
+      memberCountByDept.set(u.dept, (memberCountByDept.get(u.dept) ?? 0) + 1);
+    });
+
+    // B. 겸직 인원 카운트
     departmentMembers.forEach((dm) => {
       if (dm.deptName && !dm.deptName.includes('테스트')) {
-        allDeptNames.add(dm.deptName);
+        const baseUser = users.find((u) => u.id === dm.userId && u.status === '사용');
+        if (baseUser) {
+          memberCountByDept.set(dm.deptName, (memberCountByDept.get(dm.deptName) ?? 0) + 1);
+        }
       }
     });
 
-    const list = Array.from(allDeptNames).filter(Boolean);
-    return list.sort((a, b) => {
+    // 소속 인원이 없는(0명) 부서는 자동으로 숨김처리
+    const activeDepts = Array.from(memberCountByDept.keys()).filter((deptName) => {
+      return (memberCountByDept.get(deptName) ?? 0) > 0;
+    });
+
+    return activeDepts.sort((a, b) => {
       const orderA = deptOrderMap.get(a) ?? 9999;
       const orderB = deptOrderMap.get(b) ?? 9999;
       return orderA - orderB || a.localeCompare(b, 'ko');
     });
-  }, [org.depts, roster, departmentMembers, deptOrderMap]);
+  }, [roster, departmentMembers, users, deptOrderMap]);
 
   /** 부서 및 검색어 필터가 적용된 최종 열람 인원 (본직 + 겸직 부서 동시 지원) */
   const scopedMembers = useMemo(() => {
@@ -223,26 +291,16 @@ export default function WorkPlanScreen() {
           seenUserIds.add(dm.userId);
         });
 
-      // 부서 내 서열 정렬 (팀장/부서장/위원장 최우선 > 파트장/실장 > 직급 > 이름)
+      // 부서 내 서열 정렬 (1:직책순 리더 우선 > 2:직급순 > 3:이름순)
       const sorted = matchedUsers.sort((a, b) => {
-        const isALeader =
-          a.jobTitle?.includes('팀장') ||
-          a.jobTitle?.includes('위원장') ||
-          a.jobTitle?.includes('대표') ||
-          a.jobTitle?.includes('소장') ||
-          a.jobTitle?.includes('부서장');
-        const isBLeader =
-          b.jobTitle?.includes('팀장') ||
-          b.jobTitle?.includes('위원장') ||
-          b.jobTitle?.includes('대표') ||
-          b.jobTitle?.includes('소장') ||
-          b.jobTitle?.includes('부서장');
-        if (isALeader && !isBLeader) return -1;
-        if (!isALeader && isBLeader) return 1;
+        const titleRankA = getJobTitleRank(a.jobTitle, a.position);
+        const titleRankB = getJobTitleRank(b.jobTitle, b.position);
+        if (titleRankA !== titleRankB) return titleRankA - titleRankB;
 
         const rankA = org.rankOf(a.position);
         const rankB = org.rankOf(b.position);
         if (rankA !== rankB) return rankA - rankB;
+
         return a.name.localeCompare(b.name, 'ko');
       });
 

@@ -465,7 +465,13 @@ export function ApprovalFormEditor({
       </div>
 
       {msg && (
-        <div className="rounded-lg bg-teal-soft/60 border border-teal/20 px-4 py-2 text-[12px] font-bold text-teal">
+        <div
+          className={`rounded-lg px-4 py-2.5 text-[12px] font-bold border transition-all ${
+            msg.includes('오류') || msg.includes('실패')
+              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+              : 'bg-teal-soft/70 border-teal/30 text-teal'
+          }`}
+        >
           {msg}
         </div>
       )}
@@ -629,9 +635,18 @@ export function ApprovalFormEditor({
                       <F label="필드 키 (영문 Key)">
                         <input
                           value={selectedField.key}
-                          onChange={(e) =>
-                            setField(selectedFieldIdx, { key: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const newKey = e.target.value;
+                            setField(selectedFieldIdx, { key: newKey });
+                            setSelectedFieldKey(newKey);
+                          }}
+                          onBlur={(e) => {
+                            if (!e.target.value.trim()) {
+                              const fallbackKey = `field_${selectedFieldIdx + 1}_${Date.now().toString(36).slice(-4)}`;
+                              setField(selectedFieldIdx, { key: fallbackKey });
+                              setSelectedFieldKey(fallbackKey);
+                            }
+                          }}
                           placeholder="예: body"
                           className={`${inp} font-mono`}
                         />

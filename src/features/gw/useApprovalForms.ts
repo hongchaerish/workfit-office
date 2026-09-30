@@ -14,10 +14,15 @@ export function useApprovalForms() {
   return useQuery({ queryKey: [KEY], queryFn: () => approvalFormRepo.list() });
 }
 
-/** 활성 서식만 — 상신 유형 선택용. */
+/** 활성 서식만 — 상신 유형 선택용 (취소신청서는 기존 문서 취소 전용 특수 서식이므로 기안 카탈로그에서 제외). */
 export function useActiveApprovalForms() {
   const q = useApprovalForms();
-  return { ...q, data: (q.data ?? []).filter((form) => form.active) };
+  return {
+    ...q,
+    data: (q.data ?? []).filter(
+      (form) => form.active && form.code !== '취소신청' && form.id !== '취소신청'
+    ),
+  };
 }
 
 export function useUpsertApprovalForm() {
