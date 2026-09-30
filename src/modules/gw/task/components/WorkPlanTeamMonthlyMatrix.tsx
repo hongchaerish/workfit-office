@@ -24,6 +24,9 @@ import {
   LocateFixed,
 } from 'lucide-react';
 
+import { useHolidays } from '@/features/holiday/useHolidays';
+import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
+
 const WEEKDAYS_KO_MON = ['월', '화', '수', '목', '금', '토', '일'];
 
 interface DayInfo {
@@ -36,6 +39,8 @@ interface DayInfo {
   isSun: boolean;
   isToday: boolean;
   inCurrentMonth: boolean;
+  holidayName?: string;
+  isRedDay: boolean;
 }
 
 interface WeekBlock {
@@ -56,6 +61,7 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onSaveEditing?: () => void;
   onCancelEditing?: () => void;
   onOpenEditor: (date: string, plan?: WorkPlan, targetUser?: User) => void;
+  onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
   onOpenConfig?: () => void;
   onToggleItem?: (plan: WorkPlan, itemIdx: number) => void;
 }
@@ -146,12 +152,28 @@ export function WorkPlanTeamMonthlyMatrix({
   onSaveEditing,
   onCancelEditing,
   onOpenEditor,
+  onOpenCompanySchedule,
   onOpenConfig,
   onToggleItem,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
   const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
   const currentWeekRef = useRef<HTMLTableRowElement>(null);
+
+  // 공휴일 데이터 조회 및 날짜별 매핑
+  const holidaysQuery = useHolidays();
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, string>();
+    // 1. 한국 표준 공휴일
+    Object.values(KOREA_STANDARD_HOLIDAYS).flat().forEach((h) => {
+      map.set(h.date, h.name);
+    });
+    // 2. DB 등록 공휴일 오버라이드
+    (holidaysQuery.data ?? []).forEach((h) => {
+      map.set(h.date, h.name);
+    });
+    return map;
+  }, [holidaysQuery.data]);
 
   // 1. 달력 월간 셀을 바탕으로 일주일(월~일 7일) 단위 주차(WeekBlock) 목록 생성
   const weeks = useMemo(() => {
@@ -182,6 +204,9 @@ export function WorkPlanTeamMonthlyMatrix({
       const days: DayInfo[] = chunk.map((c, colIdx) => {
         const [y, m, d] = c.date.split('-').map(Number);
         const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0(일) ~ 6(토)
+        const holidayName = holidayMap.get(c.date);
+        const isRedDay = dow === 0 || Boolean(holidayName);
+
         return {
           dateStr: c.date,
           dayNum: d,
@@ -192,6 +217,8 @@ export function WorkPlanTeamMonthlyMatrix({
           isSun: dow === 0,
           isToday: c.date === todayStr,
           inCurrentMonth: c.inCurrentMonth,
+          holidayName,
+          isRedDay,
         };
       });
 
@@ -204,7 +231,7 @@ export function WorkPlanTeamMonthlyMatrix({
     }
 
     return list;
-  }, [currentMonth, todayStr]);
+  }, [currentMonth, todayStr, holidayMap]);
 
   // 전체 날짜 목록 (데이터 쿼리용)
   const allDays = useMemo(() => weeks.flatMap((w) => w.days), [weeks]);
@@ -225,6 +252,11 @@ export function WorkPlanTeamMonthlyMatrix({
     });
     return userMap;
   }, [monthlyPlansQuery.data]);
+
+  // 전사 공통 중요 일정 맵 (__COMPANY__)
+  const companyPlansMap = useMemo(() => {
+    return plansByUserAndDate.get('__COMPANY__') ?? new Map<string, WorkPlan>();
+  }, [plansByUserAndDate]);
 
   // 3. 전자결재 승인 일정 및 회의 캘린더 일정 투영
   const approvalsQuery = useAllApprovals();
@@ -480,11 +512,11 @@ export function WorkPlanTeamMonthlyMatrix({
                       const isOtherMonth = !d.inCurrentMonth;
                       const targetMonth = d.dateStr.slice(0, 7);
 
-                      // 토요일: 연한 파랑, 일요일: 연한 살구/주황 (사용자 이미지 싱크로율 100%)
-                      const headerBg = d.isSat
+                      // 빨간날(일요일 또는 공휴일): 연한 살구/장미톤, 토요일: 연한 파랑
+                      const headerBg = d.isRedDay
+                        ? 'bg-rose-100/75 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-extrabold'
+                        : d.isSat
                         ? 'bg-blue-100/75 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
-                        : d.isSun
-                        ? 'bg-orange-100/75 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300'
                         : d.isToday
                         ? 'bg-teal-50 dark:bg-teal-950/30 text-teal font-extrabold'
                         : 'bg-panel-alt/60 text-ink';
@@ -503,21 +535,75 @@ export function WorkPlanTeamMonthlyMatrix({
                               : ''
                           }`}
                         >
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-[12px] font-extrabold">{d.dayNum}</span>
-                            <span className="text-[10px] opacity-80">({d.weekdayKo})</span>
-                            {isOtherMonth && (
-                              <span className="text-[8.5px] font-semibold text-teal opacity-90">
-                                ({d.monthNum}월)
-                              </span>
-                            )}
-                            {d.isToday && (
-                              <span className="rounded bg-teal px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
-                                오늘
-                              </span>
-                            )}
+                          <div className="flex flex-col items-center justify-center gap-0.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-[12px] font-extrabold">{d.dayNum}</span>
+                              <span className="text-[10px] opacity-80">({d.weekdayKo})</span>
+                              {isOtherMonth && (
+                                <span className="text-[8.5px] font-semibold text-teal opacity-90">
+                                  ({d.monthNum}월)
+                                </span>
+                              )}
+                              {d.isToday && (
+                                <span className="rounded bg-teal px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
+                                  오늘
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </th>
+                      );
+                    })}
+                  </tr>
+
+                  {/* ── 전사 공통 중요 일정 행 (사용자 요청: 모든 임직원이 작성 및 공유) ── */}
+                  <tr className="border-b border-border bg-amber-50/20 dark:bg-amber-950/10">
+                    <th className="border-r border-border p-1.5 text-center bg-amber-100/60 dark:bg-amber-950/40 select-none">
+                      <span className="text-[10.5px] font-black text-amber-800 dark:text-amber-300 tracking-tight">
+                        중요 일정
+                      </span>
+                    </th>
+
+                    {week.days.map((d) => {
+                      const dayStr = d.dateStr;
+                      const cPlan = companyPlansMap.get(dayStr);
+                      const content = cPlan?.content?.trim() || '';
+                      const holidayName = d.holidayName;
+                      const isRedDay = d.isRedDay;
+
+                      return (
+                        <td
+                          key={dayStr}
+                          onClick={() => onOpenCompanySchedule?.(dayStr, content, cPlan?.id)}
+                          className={`p-1.5 align-top border-r border-border last:border-r-0 cursor-pointer transition-colors group relative ${
+                            isRedDay
+                              ? 'bg-rose-50/40 dark:bg-rose-950/15 hover:bg-rose-50/70 dark:hover:bg-rose-950/30'
+                              : d.isSat
+                              ? 'bg-blue-50/30 dark:bg-blue-950/10 hover:bg-blue-50/60 dark:hover:bg-blue-950/25'
+                              : 'bg-white/60 dark:bg-panel/40 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                          }`}
+                          title="클릭하여 전사 주요 일정을 작성/수정합니다"
+                        >
+                          <div className="flex flex-col gap-0.5 min-h-[26px] justify-center">
+                            {/* 공휴일: 심플한 빨간 텍스트 */}
+                            {holidayName && (
+                              <span className="text-[9.5px] font-semibold text-rose-500 dark:text-rose-400 truncate" title={holidayName}>
+                                {holidayName}
+                              </span>
+                            )}
+                            {/* 전사 주요 일정 내용 */}
+                            {content ? (
+                              <div className="text-[10px] font-semibold text-ink2 dark:text-ink2 break-words leading-tight line-clamp-2">
+                                {content}
+                              </div>
+                            ) : !holidayName ? (
+                              <div className="text-[9px] text-ink3 opacity-0 group-hover:opacity-70 transition-opacity flex items-center gap-0.5 italic">
+                                <Plus size={10} className="text-ink3" />
+                                <span>일정 등록</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
                       );
                     })}
                   </tr>
@@ -575,15 +661,15 @@ export function WorkPlanTeamMonthlyMatrix({
                             const isEditingThisCell =
                               Boolean(activeEditing && activeEditing.date === dayStr && activeEditing.userId === member.id);
 
-                            // 토요일: 연파랑, 일요일: 연살구, 오늘: 깨끗한 흰색
+                            // 토요일: 연파랑, 일요일/공휴일(빨간날): 연살구/장미, 오늘: 깨끗한 흰색
                             const cellBgClass = isEditingThisCell
                               ? 'bg-blue-50/60 dark:bg-blue-950/20'
                               : editTier === 1
                               ? 'bg-white dark:bg-panel shadow-2xs border-l-2 border-r-2 border-teal/40 dark:border-teal/50'
+                              : d.isRedDay
+                              ? 'bg-rose-50/30 dark:bg-rose-950/15'
                               : d.isSat
                               ? 'bg-blue-50/40 dark:bg-blue-950/20'
-                              : d.isSun
-                              ? 'bg-orange-50/40 dark:bg-orange-950/20'
                               : editTier === 2
                               ? 'bg-panel/10 hover:bg-panel/40'
                               : d.isToday

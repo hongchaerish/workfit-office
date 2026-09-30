@@ -18,6 +18,7 @@ import { toggleWorkPlanItem, getEditableContent, mergeCheckedMeta } from '@/doma
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
+import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { Calendar } from 'lucide-react';
 import { resolveDeptId } from '@/domain/department/engine';
@@ -96,6 +97,14 @@ export default function WorkPlanScreen() {
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+  // 전사 공통 중요 일정 모달 상태
+  const [companyScheduleModal, setCompanyScheduleModal] = useState<{
+    isOpen: boolean;
+    date: string;
+    content?: string;
+    planId?: string;
+  }>({ isOpen: false, date: '' });
 
   const departmentsQuery = useDepartments();
   const deptId = useMemo(
@@ -651,12 +660,46 @@ function sortWorkPlanUsers(
         }}
         onOpenConfig={() => setIsConfigOpen(true)}
         onToggleItem={handleToggleItem}
+        onOpenCompanySchedule={(date, content, planId) =>
+          setCompanyScheduleModal({ isOpen: true, date, content, planId })
+        }
       />
 
       {/* 루틴 템플릿 및 태그 관리 모달 */}
       <WorkPlanConfigModal
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}
+      />
+
+      {/* 전사 공통 중요 일정 등록/수정 모달 */}
+      <WorkPlanCompanyScheduleModal
+        isOpen={companyScheduleModal.isOpen}
+        date={companyScheduleModal.date}
+        initialContent={companyScheduleModal.content}
+        planId={companyScheduleModal.planId}
+        onClose={() => setCompanyScheduleModal((prev) => ({ ...prev, isOpen: false }))}
+        onSave={async (date, content, planId) => {
+          if (!actor) return;
+          const actorParam = { userId: actor.id, active: actor.status === '사용' };
+          if (!content.trim()) {
+            if (planId) {
+              await remove.mutateAsync({ actor: actorParam, id: planId });
+              setNotice('전사 주요 일정을 삭제했습니다.');
+            }
+            return;
+          }
+          if (planId) {
+            await update.mutateAsync({ actor: actorParam, id: planId, draft: { date, content } });
+          } else {
+            await create.mutateAsync({ actor: actorParam, draft: { date, content, ownerUserId: '__COMPANY__' } });
+          }
+          setNotice('전사 주요 일정을 저장했습니다.');
+        }}
+        onDelete={async (planId, _date) => {
+          if (!actor) return;
+          await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
+          setNotice('전사 주요 일정을 삭제했습니다.');
+        }}
       />
     </div>
   );
