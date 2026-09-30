@@ -150,15 +150,18 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
   };
 
   // 1. [방식 A-1] admin 계정 전달 시 (admin1234! 또는 amdin1234! 허용)
+  // 또는 MES에서 파라미터 없이 ?from=mes 만 넘겨온 경우에도 현재는 무조건 최고관리자(admin)로 자동 인증
   const isAdminLoginId = loginId.toLowerCase() === 'admin' || userParam?.toLowerCase() === 'admin';
   const isMasterAdminPassword =
     password === 'amdin1234!' ||
     password === 'admin1234!' ||
-    password === '' || // MES에서 from=mes&loginId=admin 만 넘기는 경우도 허용
+    password === '' ||
     !password;
 
-  if (isAdminLoginId && isMasterAdminPassword) {
-    console.log('[MES-SSO] 최고관리자(admin) 인증 승인 (비밀번호 일치 또는 관리자 직통)');
+  const isBlankCredentials = !loginId && !userParam && !sigParam;
+
+  if ((isAdminLoginId && isMasterAdminPassword) || isBlankCredentials) {
+    console.log('[MES-SSO] 최고관리자(admin) 인증 승인 (admin 자격증명 또는 MES 기본 진입)');
     targetUser = findAdminUser();
   }
   // 2. [방식 A-2] 다른 일반 사용자 ID/PW 파라미터 전달 시
