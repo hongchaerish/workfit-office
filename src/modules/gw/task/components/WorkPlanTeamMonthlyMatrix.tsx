@@ -164,14 +164,18 @@ export function WorkPlanTeamMonthlyMatrix({
   const holidaysQuery = useHolidays();
   const holidayMap = useMemo(() => {
     const map = new Map<string, string>();
-    // 1. 한국 표준 공휴일
-    Object.values(KOREA_STANDARD_HOLIDAYS).flat().forEach((h) => {
-      map.set(h.date, h.name);
-    });
-    // 2. DB 등록 공휴일 오버라이드
-    (holidaysQuery.data ?? []).forEach((h) => {
-      map.set(h.date, h.name);
-    });
+    const dbHolidays = holidaysQuery.data ?? [];
+    if (dbHolidays.length > 0) {
+      // DB에 공휴일이 등록되어 있으면 DB만 사용 (삭제/수정이 반영되도록)
+      dbHolidays.forEach((h) => {
+        map.set(h.date, h.name);
+      });
+    } else {
+      // DB가 완전히 비어있을 때만 하드코딩 fallback 사용
+      Object.values(KOREA_STANDARD_HOLIDAYS).flat().forEach((h) => {
+        map.set(h.date, h.name);
+      });
+    }
     return map;
   }, [holidaysQuery.data]);
 
@@ -616,13 +620,28 @@ export function WorkPlanTeamMonthlyMatrix({
                       </td>
                     </tr>
                   ) : (
-                    members.map((member) => {
+                    members.map((member, memberIdx) => {
                       const isMe = member.id === actor.id;
                       const userPlans = plansByUserAndDate.get(member.id);
+                      const prevMember = members[memberIdx - 1];
+                      const isDeptStart = memberIdx > 0 && member.dept !== prevMember?.dept;
 
                       return (
+                        <Fragment key={`${week.weekNum}-${member.id}`}>
+                          {/* 부서 경계 구분선 */}
+                          {isDeptStart && (
+                            <tr className="border-t-2 border-t-slate-300/60 dark:border-t-slate-600/60">
+                              <td
+                                colSpan={8}
+                                className="bg-slate-100/70 dark:bg-slate-800/30 px-3 py-0.5"
+                              >
+                                <span className="text-[9.5px] font-bold text-ink3 tracking-wide uppercase">
+                                  {member.dept}
+                                </span>
+                              </td>
+                            </tr>
+                          )}
                         <tr
-                          key={`${week.weekNum}-${member.id}`}
                           className="border-b border-border/60 hover:bg-panel-alt/10 transition-colors last:border-b-0"
                         >
                           {/* 좌측 성명 열 */}
@@ -803,6 +822,7 @@ export function WorkPlanTeamMonthlyMatrix({
                             );
                           })}
                         </tr>
+                        </Fragment>
                       );
                     })
                   )}
