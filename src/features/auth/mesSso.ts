@@ -120,33 +120,47 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
 
   // 등록되지 않은 사번이거나 파라미터가 누락된 경우 즉시 인증 거부(null)
   if (!targetUser) {
-    console.warn('[MES-SSO] 인증 대상 사용자가 그룹웨어에 존재하지 않거나 자격 증명이 유효하지 않습니다.');
+    console.warn('[MES-SSO] 인증 실패: 자격 증명이 유효하지 않거나 등록되지 않은 계정입니다.', {
+      loginId,
+      userParam,
+      hasPassword: Boolean(password),
+      hasSig: Boolean(sigParam),
+    });
     return null;
   }
+
+  console.log('[MES-SSO] 인증 성공:', targetUser.name, `(${targetUser.id})`);
 
   // 로그인 세션 저장 및 통계 기록
   localStorage.setItem('mes.auth.uid', targetUser.id);
   void authRepo.touchLastLogin(targetUser.id);
   void systemLogRepo.recordLogin(targetUser, 'Web');
 
-  // 민감 파라미터(password, pw, sig, ts, user 등) 주소창에서 깔끔하게 제거
-  urlParams.delete('password');
-  urlParams.delete('pw');
-  urlParams.delete('sig');
-  urlParams.delete('ts');
-  urlParams.delete('loginId');
-  urlParams.delete('id');
+  // 민감 파라미터(password, pw, sig, ts 등) 주소창 정리는 비동기 마운트(특히 개발환경 React StrictMode 2회 실행)가
+  // 안정적으로 끝난 후 지연 실행하여 두 번째 마운트에서 파라미터가 조기 유실되지 않도록 보장합니다.
+  setTimeout(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      p.delete('password');
+      p.delete('pw');
+      p.delete('sig');
+      p.delete('ts');
+      p.delete('loginId');
+      p.delete('id');
 
-  // 모듈 화면(도크가 아닌 일반 화면)으로 SSO 진입한 경우, 깨끗한 URL 유지를 위해 from, user 도 정리
-  const isDockPath = window.location.pathname === '/exec' || window.location.pathname.startsWith('/dock');
-  if (!isDockPath) {
-    urlParams.delete('from');
-    urlParams.delete('user');
-  }
+      const isDockPath = window.location.pathname === '/exec' || window.location.pathname.startsWith('/dock');
+      if (!isDockPath) {
+        p.delete('from');
+        p.delete('user');
+      }
 
-  const remaining = urlParams.toString();
-  const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '') + window.location.hash;
-  window.history.replaceState(null, '', cleanUrl);
+      const remaining = p.toString();
+      const cleanUrl = window.location.pathname + (remaining ? `?${remaining}` : '') + window.location.hash;
+      window.history.replaceState(null, '', cleanUrl);
+    } catch {
+      /* ignore */
+    }
+  }, 500);
 
   return targetUser;
 }
