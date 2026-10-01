@@ -2,6 +2,7 @@ import { CALENDAR_EVENT_SEED } from '@/data/seeds/calendarEvent.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { canViewEvent, maskEventForSupervisor, isCompanyEvent, type CalendarAccessContext } from '@/domain/calendarEvent/engine';
+import { canJoinMeeting, isMeeting, meetingNotifyTargets } from '@/domain/calendarEvent/meeting';
 import { calendarEventSchema, type CalendarEvent, type CalendarEventDraft, type CalendarEventType } from '@/domain/calendarEvent/schema';
 
 /**
@@ -208,29 +209,22 @@ function nextId(rows: CalendarEvent[], date: string): string {
  *
  * 수정(update)은 대상으로 삼지 않는다 — "공유로 바뀐 것"과 "공유인 채 내용만 바뀐 것"을
  * 가르려면 이전 값과 비교해야 하는데, 지금은 생성 시점만으로 충분하다.
+ * 예외로 회의에 참석자를 새로 추가하면 그 사람들에게만 초대 알림을 보낸다(`onlyUserIds`).
+ *
+ * 회의는 공개 범위와 무관하게 **참석자에게만** 알린다 — 전사 공개 회의라도 전 직원에게 보내지 않는다.
  */
-async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent): Promise<void> {
+async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent, onlyUserIds?: string[]): Promise<void> {
   const { userRepo } = await import('@/data/user/user.repo');
   let recipientIds: string[] = [];
 
-  // 참여자가 지정되어 있으면 참여자들에게도 알림
-  if (event.attendeeUserIds && event.attendeeUserIds.length > 0) {
-    recipientIds.push(...event.attendeeUserIds);
-  }
-
-  if (event.visibility === 'COMPANY' || event.eventType === 'COMPANY_EVENT') {
-    recipientIds.push(...(await userRepo.list({ status: '사용' })).map((row) => row.id));
-  } else if (event.visibility === 'TEAM' && event.deptId) {
-    const { departmentRepo } = await import('@/data/department/department.repo');
-    const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
-    if (dept) recipientIds.push(...(await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id));
-  } else if (event.visibility === 'PROJECT' && event.projectId) {
-    const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
-    const project = await workProjectRepo.get(
-      { userId: actor.userId, deptId: actor.deptId ?? null, active: actor.active },
-      event.projectId,
-    );
-    if (project) recipientIds.push(project.ownerUserId, ...project.memberUserIds);
+  if (onlyUserIds) {
+    recipientIds.push(...onlyUserIds);
+  } else if (isMeeting(event)) {
+    recipientIds.push(...meetingNotifyTargets(event));
+  } else {
+    // 회의가 아닌 일정: 참여자 + 공개 범위 대상
+    recipientIds.push(...(event.attendeeUserIds ?? []));
+    recipientIds.push(...(await sharedAudienceOf(actor, event)));
   }
 
   const uniqueRecipients = [...new Set(recipientIds)].filter((id) => id !== event.ownerUserId);
@@ -250,6 +244,27 @@ async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent)
     senderName: owner?.name ?? '동료',
     linkUrl: `/gw/calendar?date=${event.date}`,
   })));
+}
+
+/** 공개 범위로 이 일정을 보게 되는 사람들(전사·부서·프로젝트). */
+async function sharedAudienceOf(actor: CalendarEventActor, event: CalendarEvent): Promise<string[]> {
+  const { userRepo } = await import('@/data/user/user.repo');
+  const recipientIds: string[] = [];
+  if (event.visibility === 'COMPANY' || event.eventType === 'COMPANY_EVENT') {
+    recipientIds.push(...(await userRepo.list({ status: '사용' })).map((row) => row.id));
+  } else if (event.visibility === 'TEAM' && event.deptId) {
+    const { departmentRepo } = await import('@/data/department/department.repo');
+    const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
+    if (dept) recipientIds.push(...(await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id));
+  } else if (event.visibility === 'PROJECT' && event.projectId) {
+    const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
+    const project = await workProjectRepo.get(
+      { userId: actor.userId, deptId: actor.deptId ?? null, active: actor.active },
+      event.projectId,
+    );
+    if (project) recipientIds.push(project.ownerUserId, ...project.memberUserIds);
+  }
+  return recipientIds;
 }
 
 function scopeLabel(event: CalendarEvent): string {
@@ -361,6 +376,68 @@ export const calendarEventRepo = {
         updatedAt: new Date().toISOString(),
         reminded: timeChanged ? false : current.reminded,
       });
+      await persist(updated);
+      // 회의에 참석자를 새로 넣었으면 그 사람들에게만 초대 알림
+      const added = isMeeting(updated) ? updated.attendeeUserIds.filter((id) => !current.attendeeUserIds.includes(id)) : [];
+      if (added.length > 0) {
+        try {
+          await notifyRecipients(actor, updated, added);
+        } catch (e) {
+          console.error('회의 초대 알림 전송 실패:', e);
+        }
+      }
+      return cloneEvent(updated);
+    });
+  },
+
+  /**
+   * 회의에 참석자로 합류 — 주최자가 아니어도 **본인만** 참석자에 넣을 수 있다(다른 필드는 못 바꾼다).
+   * 이미 참석 중이면 그대로 돌려준다(멱등). 주최자에게 "○○님이 회의에 참석합니다"를 알린다.
+   */
+  joinAsAttendee(actor: CalendarEventActor, id: string): Promise<CalendarEvent> {
+    return exclusiveMutation(async () => {
+      requireActive(actor);
+      const rows = await loadAll();
+      // 저장소에 따라 참석자가 메모(CAL_META)에 인코딩된 채 올 수 있어 먼저 풀어 둔다 — 안 풀면 옛 참석자 목록이 덮어쓴다.
+      const found = rows.find((row) => row.id === id);
+      const current = found ? parseEvent(found) : null;
+      if (!current || !canViewEvent(accessContextOf(actor), current)) throw new CalendarEventError('NOT_FOUND', '회의를 찾을 수 없습니다.');
+      if (!isMeeting(current)) throw new CalendarEventError('FORBIDDEN', '회의 일정에만 참석자로 합류할 수 있습니다.');
+      if (current.ownerUserId === actor.userId) throw new CalendarEventError('FORBIDDEN', '주최자는 이미 회의에 포함되어 있습니다.');
+      if (!canJoinMeeting(actor.userId, current)) return cloneEvent(current);
+
+      const updated = parseEvent({ ...current, attendeeUserIds: [...current.attendeeUserIds, actor.userId], updatedAt: new Date().toISOString() });
+      await persist(updated);
+      try {
+        const { userRepo } = await import('@/data/user/user.repo');
+        const { notificationRepo } = await import('@/data/notification/notification.repo');
+        const me = (await userRepo.list()).find((row) => row.id === actor.userId);
+        await notificationRepo.create({
+          userId: current.ownerUserId,
+          type: '일정',
+          title: '회의 참석',
+          text: `${me?.name ?? '동료'}님이 [${current.title}] 회의에 참석합니다`,
+          senderName: me?.name ?? '동료',
+          linkUrl: `/gw/calendar?date=${current.date}`,
+        });
+      } catch (e) {
+        console.error('회의 참석 알림 전송 실패:', e);
+      }
+      return cloneEvent(updated);
+    });
+  },
+
+  /** 회의 참석 취소 — 본인만 참석자에서 빠진다. */
+  leaveAsAttendee(actor: CalendarEventActor, id: string): Promise<CalendarEvent> {
+    return exclusiveMutation(async () => {
+      requireActive(actor);
+      const rows = await loadAll();
+      const found = rows.find((row) => row.id === id);
+      const current = found ? parseEvent(found) : null;
+      if (!current || !current.attendeeUserIds.includes(actor.userId)) {
+        throw new CalendarEventError('NOT_FOUND', '참석 중인 회의가 아닙니다.');
+      }
+      const updated = parseEvent({ ...current, attendeeUserIds: current.attendeeUserIds.filter((uid) => uid !== actor.userId), updatedAt: new Date().toISOString() });
       await persist(updated);
       return cloneEvent(updated);
     });
