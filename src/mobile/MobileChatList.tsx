@@ -95,8 +95,16 @@ export default function MobileChatList() {
   const kw = q.trim().toLowerCase();
 
   const sortedRooms = useMemo(() => {
-    // 숨김 방은 미읽음이 있을 때만 다시 노출(데스크톱과 동일).
-    const visible = rooms.filter((r) => !hiddenIds.includes(r.id) || (unread[r.id] ?? 0) > 0);
+    // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제(Unhide)
+    let activeHidden = hiddenIds;
+    const unhidden = hiddenIds.filter((hid) => (unread[hid] ?? 0) > 0);
+    if (unhidden.length > 0) {
+      activeHidden = hiddenIds.filter((hid) => !unhidden.includes(hid));
+      setHiddenIds(activeHidden);
+      localStorage.setItem(hiddenKeyOf(me), JSON.stringify(activeHidden));
+    }
+
+    const visible = rooms.filter((r) => !activeHidden.includes(r.id));
     const named = visible.map((r) => ({ ...r, displayName: getRoomDisplayName(r, me, users) }));
     const filtered = kw ? named.filter((r) => r.displayName.toLowerCase().includes(kw)) : named;
     return [...filtered].sort((a, b) => {
@@ -108,7 +116,7 @@ export default function MobileChatList() {
       const bt = b.lastMessage?.at ? new Date(b.lastMessage.at).getTime() : 0;
       return bt - at;
     });
-  }, [rooms, hiddenIds, unread, users, me, kw, pinnedIds]);
+  }, [rooms, hiddenIds, unread, users, me, kw, pinnedIds, me]);
 
   const sheetActions: SheetAction[] = sheetRoom
     ? [

@@ -136,7 +136,30 @@ export function MessengerPanel() {
     try {
       const key = `workfit-hidden-rooms-${me}`;
       const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      const list = rooms.filter((r) => !hidden.includes(r.id));
+      if (hidden.length === 0) {
+        const kw = q.trim().toLowerCase();
+        if (!kw) return rooms;
+        return rooms.filter((r) => getRoomDisplayName(r, me, users).toLowerCase().includes(kw));
+      }
+
+      // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제(Unhide)
+      const unhiddenRooms: string[] = [];
+      const activeHidden = hidden.filter((hid) => {
+        const targetRoom = rooms.find((r) => r.id === hid);
+        if (!targetRoom) return true;
+        const hasUnread = (unreadMap[hid] ?? 0) > 0;
+        if (hasUnread) {
+          unhiddenRooms.push(hid);
+          return false;
+        }
+        return true;
+      });
+
+      if (unhiddenRooms.length > 0) {
+        localStorage.setItem(key, JSON.stringify(activeHidden));
+      }
+
+      const list = rooms.filter((r) => !activeHidden.includes(r.id));
       const kw = q.trim().toLowerCase();
       if (!kw) return list;
       return list.filter((r) => {
@@ -146,7 +169,7 @@ export function MessengerPanel() {
     } catch {
       return rooms;
     }
-  }, [rooms, me, q, users]);
+  }, [rooms, me, q, users, unreadMap]);
 
   if (composing) {
     return <NewRoomView me={me} onCancel={() => setComposing(false)} onCreated={handleCreated} />;
