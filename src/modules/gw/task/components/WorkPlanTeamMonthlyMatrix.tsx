@@ -375,25 +375,15 @@ export function WorkPlanTeamMonthlyMatrix({
 
         {/* 액션 버튼 */}
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              const myTodayPlan = plansByUserAndDate.get(actor.id)?.get(todayStr);
-              onOpenEditor(todayStr, myTodayPlan);
-            }}
-            className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-white dark:bg-panel px-3 py-1.5 text-[11.5px] font-semibold text-ink hover:bg-slate-50 dark:hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
-          >
-            <Plus size={13} className="text-ink2" />
-            <span>오늘 업무 작성</span>
-          </button>
           {onOpenConfig && (
             <button
               type="button"
               onClick={onOpenConfig}
+              title="루틴 템플릿과 태그를 추가·수정·삭제합니다"
               className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
             >
               <Settings size={12} className="text-ink3" />
-              <span>설정</span>
+              <span>루틴 편집</span>
             </button>
           )}
         </div>

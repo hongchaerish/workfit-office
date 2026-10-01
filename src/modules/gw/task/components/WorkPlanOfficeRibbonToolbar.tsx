@@ -2,14 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
 import { useWorkPlanConfig, stripMarkdownAndTags } from '@/features/workPlan/useWorkPlanConfig';
-import { WorkPlanConfigModal } from './WorkPlanConfigModal';
 import { WorkPlanFormatButtons } from './WorkPlanFormatButtons';
 import type { Editor } from '@tiptap/react';
 import {
   Sparkles,
   Trash2,
   ChevronDown,
-  Settings,
   Save,
   X,
   FileSpreadsheet,
@@ -46,7 +44,6 @@ export function WorkPlanOfficeRibbonToolbar({
   onDelete,
   onClose,
 }: WorkPlanOfficeRibbonToolbarProps) {
-  const [configModalTab, setConfigModalTab] = useState<'templates' | 'tags' | null>(null);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
 
   const templateMenuRef = useRef<HTMLDivElement>(null);
@@ -131,17 +128,7 @@ export function WorkPlanOfficeRibbonToolbar({
                     <Sparkles size={12} className="text-amber-500" />
                     <span>루틴 템플릿 선택</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTemplateMenu(false);
-                      setConfigModalTab('templates');
-                    }}
-                    className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 hover:underline cursor-pointer"
-                  >
-                    <Settings size={11} />
-                    <span>관리</span>
-                  </button>
+                  <span className="text-[9.5px] text-ink3">편집은 상단 [루틴 편집]에서</span>
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1">
                   {templates.length === 0 ? (
@@ -244,12 +231,6 @@ export function WorkPlanOfficeRibbonToolbar({
           </div>
         </div>
       )}
-
-      <WorkPlanConfigModal
-        isOpen={Boolean(configModalTab)}
-        onClose={() => setConfigModalTab(null)}
-        defaultTab={configModalTab ?? 'templates'}
-      />
     </div>
   );
 }
