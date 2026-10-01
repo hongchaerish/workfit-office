@@ -367,7 +367,16 @@ function MessengerThread({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const readonly = room.type === 'notice';
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 24), 84);
+    el.style.height = `${nextHeight}px`;
+  }, [text]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -618,12 +627,40 @@ function MessengerThread({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (readonly) return;
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const ext = file.type.split('/')[1] || 'png';
+          const namedFile = new File(
+            [file],
+            `capture_${Date.now()}_${i + 1}.${ext}`,
+            { type: file.type }
+          );
+          imageFiles.push(namedFile);
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      handleFilesAttach(imageFiles);
+    }
+  };
+
   if (inviting) {
     return <InviteView room={room} meName={meName} onCancel={() => setInviting(false)} onDone={() => setInviting(false)} />;
   }
 
   return (
-    <div className="flex h-full w-full bg-white select-none relative">
+    <div className="flex h-full w-full bg-white relative">
       {showFileBox ? (
         <DesktopFileBoxPanel
           files={filesInRoom}
@@ -863,47 +900,71 @@ function MessengerThread({
                   </span>
                 </div>
               )}
-              {item.type === 'image-bundle' && item.bundleMessages ? (
-                <ImageBundleBubble
-                  bundle={item.bundleMessages}
-                  me={me}
-                  group={room.type === 'group'}
-                  roomMembers={room.members}
-                  onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
-                  onReply={setReplyTo}
-                  onToggleEmoji={handleToggleEmoji}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
-                    const zoom = parseFloat(fontScaleStr) || 1.1875;
-                    setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
-                  }}
-                />
-              ) : (
-                <MessageBubble
-                  m={m}
-                  me={me}
-                  group={room.type === 'group'}
-                  roomMembers={room.members}
-                  onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
-                  onReply={setReplyTo}
-                  isEditing={editingMsgId === m.id}
-                  onStartEdit={() => setEditingMsgId(m.id)}
-                  onCancelEdit={() => setEditingMsgId(null)}
-                  onToggleEmoji={handleToggleEmoji}
-                  searchQuery={searchQuery}
-                  isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
-                  onContextMenu={(e) => {
-                    if (m.type === 'system') return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
-                    const zoom = parseFloat(fontScaleStr) || 1.1875;
-                    setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
-                  }}
-                />
-              )}
+              {(() => {
+                const curLastMsg = item.type === 'image-bundle' && item.bundleMessages && item.bundleMessages.length > 0
+                  ? item.bundleMessages[item.bundleMessages.length - 1]
+                  : item.message;
+
+                const nextItem = idx < processedItems.length - 1 ? processedItems[idx + 1] : null;
+                const nextFirstMsg = nextItem
+                  ? (nextItem.type === 'image-bundle' && nextItem.bundleMessages && nextItem.bundleMessages.length > 0
+                      ? nextItem.bundleMessages[0]
+                      : nextItem.message)
+                  : null;
+
+                const hideTime = Boolean(
+                  nextFirstMsg &&
+                  nextFirstMsg.type !== 'system' &&
+                  curLastMsg.type !== 'system' &&
+                  nextFirstMsg.senderId === curLastMsg.senderId &&
+                  isSameMinute(curLastMsg.at, nextFirstMsg.at)
+                );
+                const showTime = !hideTime;
+
+                return item.type === 'image-bundle' && item.bundleMessages ? (
+                  <ImageBundleBubble
+                    bundle={item.bundleMessages}
+                    me={me}
+                    group={room.type === 'group'}
+                    roomMembers={room.members}
+                    onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
+                    onReply={setReplyTo}
+                    onToggleEmoji={handleToggleEmoji}
+                    showTime={showTime}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                      const zoom = parseFloat(fontScaleStr) || 1.1875;
+                      setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                    }}
+                  />
+                ) : (
+                  <MessageBubble
+                    m={m}
+                    me={me}
+                    group={room.type === 'group'}
+                    roomMembers={room.members}
+                    onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
+                    onReply={setReplyTo}
+                    isEditing={editingMsgId === m.id}
+                    onStartEdit={() => setEditingMsgId(m.id)}
+                    onCancelEdit={() => setEditingMsgId(null)}
+                    onToggleEmoji={handleToggleEmoji}
+                    searchQuery={searchQuery}
+                    isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
+                    showTime={showTime}
+                    onContextMenu={(e) => {
+                      if (m.type === 'system') return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                      const zoom = parseFloat(fontScaleStr) || 1.1875;
+                      setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                    }}
+                  />
+                );
+              })()}
             </div>
           );
         })}
@@ -989,20 +1050,23 @@ function MessengerThread({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
+          <div className="flex items-end gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
             <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
             <button
+              type="button"
               onClick={() => fileRef.current?.click()}
               disabled={sendFile.isPending}
               title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40"
+              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none mb-0.5"
             >
               <Paperclip size={16} />
             </button>
             <textarea
+              ref={textareaRef}
               rows={1}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -1010,108 +1074,32 @@ function MessengerThread({
                 }
               }}
               placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
-              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3 resize-none max-h-20 py-1 leading-normal"
+              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3 resize-none min-h-[24px] max-h-[84px] py-1 leading-normal menu-scroll"
+              style={{ overflowY: text.split('\n').length > 3 ? 'auto' : 'hidden' }}
             />
-            <button onClick={submit} className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white">↑</button>
+            <button
+              type="button"
+              onClick={submit}
+              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white select-none hover:bg-amber-dark transition-colors mb-0.5"
+            >
+              ↑
+            </button>
           </div>
         </div>
       )}
       </div>
       )}
-      {activeMenu && createPortal(
-        <div
-          style={{
-            top: `${activeMenu.y}px`,
-            left: `${activeMenu.x}px`,
-            backgroundColor: '#ffffff',
-            color: '#1c2536',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 4px 12px rgba(16, 24, 48, 0.15)',
-            right: 'auto',
-            bottom: 'auto',
-            margin: 0,
-          }}
-          className="fixed z-[99999] min-w-[150px] rounded-lg py-1 text-[11.5px] font-medium outline-none"
-          onClick={() => setActiveMenu(null)}
-        >
-          {/* 이모지 리액션 단축 5종 */}
-          <div className="flex items-center justify-around border-b border-border/40 px-2 py-1 bg-panel-alt/30" onClick={(e) => e.stopPropagation()}>
-            {['👍', '❤️', '😄', '😮', '😢'].map((emoji) => {
-              const list = (activeMenu.m.reactions as Record<string, string[]> | undefined)?.[emoji] ?? [];
-              const active = list.includes(me);
-              return (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    handleToggleEmoji(activeMenu.m.id, emoji);
-                    setActiveMenu(null);
-                  }}
-                  className="grid h-6 w-6 place-items-center text-[13px] rounded-md hover:bg-black/5 active:bg-black/10 transition-colors"
-                  style={active ? { background: '#e6960c20' } : undefined}
-                >
-                  {emoji}
-                </button>
-              );
-            })}
-          </div>
-
-          {activeMenu.m.type === 'text' ? (
-            <>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(activeMenu.m.text);
-                }}
-                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                메시지 복사
-              </button>
-              <button
-                onClick={() => setReplyTo(activeMenu.m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                답장
-              </button>
-              <button
-                onClick={() => setForwardMessage(activeMenu.m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                전달
-              </button>
-              {activeMenu.mine && (
-                <button
-                  onClick={() => setEditingMsgId(activeMenu.m.id)}
-                  className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors text-teal cursor-pointer"
-                >
-                  수정
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setReplyTo(activeMenu.m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                답장
-              </button>
-              <button
-                onClick={() => setForwardMessage(activeMenu.m)}
-                className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                전달
-              </button>
-              {activeMenu.m.attachment && (
-                <button
-                  onClick={() => downloadAttachment(activeMenu.m.attachment!)}
-                  className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
-                >
-                  다운로드
-                </button>
-              )}
-            </>
-          )}
-        </div>,
-        document.body
+      {activeMenu && (
+        <MessageContextMenuPortal
+          activeMenu={activeMenu}
+          me={me}
+          onClose={() => setActiveMenu(null)}
+          onToggleEmoji={handleToggleEmoji}
+          onReply={(msg) => setReplyTo(msg)}
+          onForward={(msg) => setForwardMessage(msg)}
+          onStartEdit={(msgId) => setEditingMsgId(msgId)}
+          onDownload={(att) => downloadAttachment(att)}
+        />
       )}
       {forwardMessage && createPortal(
         <DesktopForwardModal
@@ -1133,6 +1121,153 @@ function MessengerThread({
 }
 
 
+function MessageContextMenuPortal({
+  activeMenu,
+  me,
+  onClose,
+  onToggleEmoji,
+  onReply,
+  onForward,
+  onStartEdit,
+  onDownload,
+}: {
+  activeMenu: { m: ChatMessage; x: number; y: number; mine: boolean };
+  me: string;
+  onClose: () => void;
+  onToggleEmoji: (msgId: string, emoji: string) => void;
+  onReply: (m: ChatMessage) => void;
+  onForward: (m: ChatMessage) => void;
+  onStartEdit: (msgId: string) => void;
+  onDownload: (att: Attachment) => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: activeMenu.x, y: activeMenu.y });
+
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+    const zoom = parseFloat(fontScaleStr) || 1.1875;
+
+    const vWidth = window.innerWidth / zoom;
+    const vHeight = window.innerHeight / zoom;
+
+    let targetX = activeMenu.x;
+    let targetY = activeMenu.y;
+
+    const menuW = rect.width / zoom;
+    const menuH = rect.height / zoom;
+
+    // 하단 경계 넘침 시 위쪽 방향으로 반전
+    if (targetY + menuH > vHeight - 12) {
+      targetY = Math.max(12, targetY - menuH);
+    }
+    // 우측 경계 넘침 시 왼쪽 방향으로 반전
+    if (targetX + menuW > vWidth - 12) {
+      targetX = Math.max(12, targetX - menuW);
+    }
+
+    setPos({ x: targetX, y: targetY });
+  }, [activeMenu]);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{
+        top: `${pos.y}px`,
+        left: `${pos.x}px`,
+        backgroundColor: '#ffffff',
+        color: '#1c2536',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 16px rgba(16, 24, 48, 0.18)',
+        right: 'auto',
+        bottom: 'auto',
+        margin: 0,
+      }}
+      className="fixed z-[99999] min-w-[150px] rounded-lg py-1 text-[11.5px] font-medium outline-none select-none animate-in fade-in zoom-in-95 duration-75"
+      onClick={onClose}
+    >
+      {/* 이모지 리액션 단축 5종 */}
+      <div className="flex items-center justify-around border-b border-border/40 px-2 py-1 bg-panel-alt/30" onClick={(e) => e.stopPropagation()}>
+        {['👍', '❤️', '😄', '😮', '😢'].map((emoji) => {
+          const list = (activeMenu.m.reactions as Record<string, string[]> | undefined)?.[emoji] ?? [];
+          const active = list.includes(me);
+          return (
+            <button
+              key={emoji}
+              onClick={() => {
+                onToggleEmoji(activeMenu.m.id, emoji);
+                onClose();
+              }}
+              className="grid h-6 w-6 place-items-center text-[13px] rounded-md hover:bg-black/5 active:bg-black/10 transition-colors"
+              style={active ? { background: '#e6960c20' } : undefined}
+            >
+              {emoji}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeMenu.m.type === 'text' ? (
+        <>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(activeMenu.m.text);
+            }}
+            className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+          >
+            메시지 복사
+          </button>
+          <button
+            onClick={() => onReply(activeMenu.m)}
+            className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+          >
+            답장
+          </button>
+          <button
+            onClick={() => onForward(activeMenu.m)}
+            className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+          >
+            전달
+          </button>
+          {activeMenu.mine && (
+            <button
+              onClick={() => onStartEdit(activeMenu.m.id)}
+              className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors text-teal cursor-pointer"
+            >
+              수정
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <button
+            onClick={() => onReply(activeMenu.m)}
+            className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+          >
+            답장
+          </button>
+          <button
+            onClick={() => onForward(activeMenu.m)}
+            className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+          >
+            전달
+          </button>
+          {activeMenu.m.attachment && (
+            <button
+              onClick={() => onDownload(activeMenu.m.attachment!)}
+              className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors cursor-pointer"
+            >
+              다운로드
+            </button>
+          )}
+        </>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 function ImageBundleBubble({
   bundle,
   me,
@@ -1142,6 +1277,7 @@ function ImageBundleBubble({
   onReply,
   onContextMenu,
   onToggleEmoji,
+  showTime = true,
 }: {
   bundle: ChatMessage[];
   me: string;
@@ -1151,6 +1287,7 @@ function ImageBundleBubble({
   onReply: (m: ChatMessage) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
+  showTime?: boolean;
 }) {
   const m = bundle[0];
   const presenceMap = useAllUserPresences();
@@ -1233,7 +1370,7 @@ function ImageBundleBubble({
           {unreadCount}
         </span>
       )}
-      <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+      {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
     </div>
   );
 
@@ -1314,6 +1451,7 @@ function MessageBubble({
   onToggleEmoji,
   searchQuery = '',
   isSearchActive = false,
+  showTime = true,
 }: {
   m: ChatMessage;
   me: string;
@@ -1328,6 +1466,7 @@ function MessageBubble({
   onToggleEmoji?: (messageId: string, emoji: string) => void;
   searchQuery?: string;
   isSearchActive?: boolean;
+  showTime?: boolean;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -1412,7 +1551,7 @@ function MessageBubble({
         {m.text && (
           <div
             style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {renderHighlightedText(m.text, searchQuery, isSearchActive)}
           </div>
@@ -1427,7 +1566,7 @@ function MessageBubble({
           onClick={() => downloadAttachment(att)}
           title="다운로드"
           style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-          className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+          className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         >
           <span className="text-[18px]">📄</span>
           <span className="min-w-0">
@@ -1438,7 +1577,7 @@ function MessageBubble({
         {m.text && (
           <div
             style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {renderHighlightedText(m.text, searchQuery, isSearchActive)}
           </div>
@@ -1449,7 +1588,7 @@ function MessageBubble({
     body = (
       <div
         style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-        className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+        className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         onContextMenu={onContextMenu}
       >
         {renderHighlightedText(m.text, searchQuery, isSearchActive)}
@@ -1464,7 +1603,7 @@ function MessageBubble({
           {unreadCount}
         </span>
       )}
-      <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
+      {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
       {m.isEdited && (
         <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
       )}
