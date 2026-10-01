@@ -14,6 +14,7 @@ import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { RelatedDocDetailModal } from './RelatedDocDetailModal';
 import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
+import { useDocPostReads } from '@/features/gw/usePostReadShares';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -157,6 +158,19 @@ export function ApprovalDocumentView({
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';
 
+  /*
+    후열(공람)로 전달받은 사람은 문서 전체를 볼 수 있다 — 공개 범위·보안 등급·보안 필드 무관.
+    관리자가 일부러 보여 주려고 전달한 문서인데 "권한 없음"으로 막히던 논리 오류를 고친다.
+    전임자 앞으로 전달된 건은 후임자도 본다(결재함 승계와 같은 규칙).
+  */
+  const postReadQuery = useDocPostReads(isPreview ? '' : doc.id);
+  const isPostReadRecipient = Boolean(
+    currentUser?.id &&
+      (postReadQuery.data ?? []).some(
+        (s) => s.toUserId === currentUser.id || getPredecessorsOf(currentUser.id).includes(s.toUserId),
+      ),
+  );
+
   // 1단계: 문서 자체의 보안 등급(securityLevel) 및 공개 범위(visibility)에 따른 물리적 접근 차단 판별
   const canAccessDocument = (() => {
     if (isPreview) return true; // 미리보기 시에는 통과
@@ -193,9 +207,9 @@ export function ApprovalDocumentView({
       return false;
     });
 
-    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated || !!isExecutor;
+    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated || !!isExecutor || isPostReadRecipient;
 
-    // 공식 관계자 및 후임자 승계자인 경우 등급/공개범위 무관 무조건 열람 가능 (제1순위)
+    // 공식 관계자(후열 전달받은 사람 포함) 및 후임자 승계자인 경우 등급/공개범위 무관 무조건 열람 가능 (제1순위)
     if (isOfficialRelated) return true;
 
     // 대표이사/상무이사 등 마스터 권한 소지 임원 (제2순위)
@@ -236,6 +250,7 @@ export function ApprovalDocumentView({
     if (isPreview) return false; // 미리보기 모드에서는 기안자도 블러/마스킹된 모습 확인 가능하도록 false 반환
     if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
     if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
+    if (isPostReadRecipient) return true; // 후열 전달받은 사람은 문서 전체 열람
     if (doc.status === '완료' && doc.drafterId === currentUser.id) return true; // 기안자 본인은 완료함 등 완결 상태일 때만 해제
     if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
     return false;
@@ -427,6 +442,11 @@ export function ApprovalDocumentView({
       longTextFields: longTexts,
     };
   }, [form, doc.fieldValues, amountField]);
+
+  if (!canAccessDocument && postReadQuery.isLoading) {
+    // 후열 전달 여부를 확인하기 전에 "열람 불가"를 잠깐 띄우지 않는다.
+    return <div className="py-12 text-center text-[12px] text-ink3">열람 권한 확인 중…</div>;
+  }
 
   if (!canAccessDocument) {
     return (

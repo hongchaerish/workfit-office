@@ -5,7 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
-import { useAutoMarkPostRead } from '@/features/gw/usePostReadShares';
+import { useAutoMarkPostRead, useDocPostReads } from '@/features/gw/usePostReadShares';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
@@ -34,6 +34,9 @@ export default function MobileApprovalDetail() {
   const me = user!.id;
   const doc = useApprovalDoc(id);
   useAutoMarkPostRead(doc?.id ?? '', me);
+  // 후열(공람)로 전달받은 사람은 문서 전체를 볼 수 있다(웹 ApprovalDocumentView와 같은 규칙).
+  const postReadQuery = useDocPostReads(doc?.id ?? '');
+  const isPostReadRecipient = (postReadQuery.data ?? []).some((s) => s.toUserId === me);
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
   const form = forms.find((f) => f.code === doc?.docType);
@@ -119,7 +122,7 @@ export default function MobileApprovalDetail() {
     const isApprover = doc.steps.some((s) => s.approverId === me);
     const isRecipient = doc.recipients?.some((r) => r.id === me || r.id === userObj?.dept);
     const isExecutor = doc.executionDepts?.some((d) => d.id === userObj?.dept) || doc.executionsSnapshot?.some((s) => s.deptId === userObj?.dept || s.deptName === userObj?.dept);
-    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || !!isExecutor;
+    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || !!isExecutor || isPostReadRecipient;
 
     if (isOfficialRelated || isExecutive) return true;
 
@@ -138,6 +141,7 @@ export default function MobileApprovalDetail() {
   const canViewSecret = (() => {
     if (!doc) return false;
     if (isExecutive) return true;
+    if (isPostReadRecipient) return true;
     if (doc.status === '완료' && doc.drafterId === me) return true;
     if (doc.steps.some((s) => s.approverId === me && s.kind !== '참조')) return true;
     return false;
@@ -176,6 +180,8 @@ export default function MobileApprovalDetail() {
 
       {!doc ? (
         <div className="grid flex-1 place-items-center text-[12px] text-ink3">문서를 불러오는 중…</div>
+      ) : !canAccessDocument && postReadQuery.isLoading ? (
+        <div className="grid flex-1 place-items-center text-[12px] text-ink3">열람 권한 확인 중…</div>
       ) : !canAccessDocument ? (
         <div className="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-3 bg-white m-4 rounded-xl border border-black/10">
           <div className="text-[32px]">🛡️</div>
