@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -14,7 +14,9 @@ import {
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
 import { cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
-import { toggleWorkPlanItem, getEditableContent, mergeCheckedMeta } from '@/domain/workPlan/engine';
+import { toggleWorkPlanItem, mergeCheckedMeta } from '@/domain/workPlan/engine';
+import { toEditableText } from '@/domain/workPlan/richText';
+import type { Editor } from '@tiptap/react';
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
@@ -82,6 +84,10 @@ export default function WorkPlanScreen() {
   const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan; targetUser?: User } | null>(null);
   const [editingContent, setEditingContent] = useState<string>('');
   const [isSavingPlan, setIsSavingPlan] = useState<boolean>(false);
+  /** 칸 편집기(Tiptap) — 리본 서식 버튼이 명령을 보낸다. */
+  const [cellEditor, setCellEditor] = useState<Editor | null>(null);
+  /** 같은 칸 저장이 겹치지 않게(Ctrl+Enter 직후 blur 등) 진행 중 여부를 동기적으로 들고 있는다. */
+  const savingCellRef = useRef(false);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -544,6 +550,7 @@ function sortWorkPlanUsers(
           actor={actor}
           content={editingContent}
           onContentChange={setEditingContent}
+          editor={cellEditor}
           todayEvents={editingDateEvents}
           isSaving={isSavingPlan}
           conflictError={conflictError}
@@ -623,9 +630,15 @@ function sortWorkPlanUsers(
         editingContent={editingContent}
         onEditingContentChange={setEditingContent}
         onSaveEditing={async () => {
-          if (!editingTarget) return;
+          if (!editingTarget || savingCellRef.current) return;
           const currentTarget = editingTarget;
           const contentToSave = editingContent;
+          // 아무것도 고치지 않고 칸을 벗어났으면 저장하지 않는다 — 불필요한 갱신과 동시 수정 충돌을 줄인다.
+          if (currentTarget.plan && contentToSave.trim() === toEditableText(currentTarget.plan.content).trim()) {
+            setEditingTarget((prev) => (prev?.date === currentTarget.date && prev?.targetUser?.id === currentTarget.targetUser?.id ? null : prev));
+            return;
+          }
+          savingCellRef.current = true;
           setIsSavingPlan(true);
           setConflictError(null);
           try {
@@ -666,18 +679,20 @@ function sortWorkPlanUsers(
               alert(msg || '저장 중 오류가 발생했습니다.');
             }
           } finally {
+            savingCellRef.current = false;
             setIsSavingPlan(false);
           }
         }}
         onCancelEditing={() => setEditingTarget(null)}
         onOpenEditor={(date, plan, member) => {
           setEditingTarget({ date, plan, targetUser: member });
-          // __c__: 완료 메타 줄은 textarea에 노출되지 않도록 제거
-          setEditingContent(plan ? getEditableContent(plan.content) : '');
+          // 체크 메타(__c__)는 편집기에서 - [x] 표기로 풀어 보여 준다
+          setEditingContent(plan ? toEditableText(plan.content) : '');
           setConflictError(null);
         }}
         onOpenConfig={() => setIsConfigOpen(true)}
         onToggleItem={handleToggleItem}
+        onEditorReady={setCellEditor}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }

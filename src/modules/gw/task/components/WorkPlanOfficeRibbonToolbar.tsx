@@ -3,6 +3,8 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
 import { useWorkPlanConfig, stripMarkdownAndTags } from '@/features/workPlan/useWorkPlanConfig';
 import { WorkPlanConfigModal } from './WorkPlanConfigModal';
+import { WorkPlanFormatButtons } from './WorkPlanFormatButtons';
+import type { Editor } from '@tiptap/react';
 import {
   CheckSquare,
   Sparkles,
@@ -22,6 +24,8 @@ export interface WorkPlanOfficeRibbonToolbarProps {
   actor: User;
   content: string;
   onContentChange: (next: string | ((prev: string) => string)) => void;
+  /** 칸 편집기 — 서식 버튼이 명령을 보낸다. 편집기가 아직 없으면 버튼만 비활성. */
+  editor?: Editor | null;
   todayEvents?: CalendarEvent[];
   isSaving: boolean;
   conflictError: string | null;
@@ -36,6 +40,7 @@ export function WorkPlanOfficeRibbonToolbar({
   actor,
   content,
   onContentChange,
+  editor = null,
   isSaving,
   conflictError,
   onSave,
@@ -108,6 +113,9 @@ export function WorkPlanOfficeRibbonToolbar({
           </div>
 
           <div className="h-4 w-px bg-border mx-0.5" />
+
+          {/* 0) 서식: 굵게·밑줄·취소선·형광펜·글자색 */}
+          <WorkPlanFormatButtons editor={editor} />
 
           {/* 1) 📋 - 체크박스 할 일 삽입 버튼 */}
           <button

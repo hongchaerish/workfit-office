@@ -224,3 +224,47 @@ body {
     margin: 14mm;
   }
 }
+/* ──────────────────────────────────────────────────────────────
+   업무계획 칸 편집기(Tiptap) — 편집 중 서식·할 일 표시
+   ────────────────────────────────────────────────────────────── */
+.workplan-rich-editor p {
+  margin: 0;
+  min-height: 1.2em;
+}
+.workplan-rich-editor ul[data-type='taskList'] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.workplan-rich-editor ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+.workplan-rich-editor ul[data-type='taskList'] li > label {
+  flex-shrink: 0;
+  margin-top: 0.15em;
+  user-select: none;
+}
+.workplan-rich-editor ul[data-type='taskList'] li > label input {
+  width: 0.8rem;
+  height: 0.8rem;
+  cursor: pointer;
+  accent-color: var(--color-teal, #0d9488);
+}
+.workplan-rich-editor ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+.workplan-rich-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+  text-decoration-line: line-through;
+  opacity: 0.6;
+}
+.workplan-rich-editor mark {
+  border-radius: 2px;
+  background-color: rgb(254 240 138 / 0.8);
+  color: inherit;
+}
+.workplan-rich-editor strong {
+  font-weight: 700;
+}

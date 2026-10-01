@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import {
@@ -27,6 +27,8 @@ import {
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { WorkPlanInlineText } from './WorkPlanInlineText';
+import { WorkPlanRichEditor } from './WorkPlanRichEditor';
+import type { Editor } from '@tiptap/react';
 
 const WEEKDAYS_KO_MON = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -65,81 +67,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
   onOpenConfig?: () => void;
   onToggleItem?: (plan: WorkPlan, itemIdx: number) => void;
-}
-
-/** 셀 내부에서 세로 스크롤 없이 늘어난 칸 그대로 보여주는 인라인 에디터 */
-function InlineCellTextarea({
-  value,
-  onChange,
-  onBlur,
-  onSave,
-  onCancel,
-}: {
-  value: string;
-  onChange: (val: string) => void;
-  onBlur: () => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // 글자가 늘어나거나 줄어들 때 세로 스크롤바 없이 칸 전체 높이를 동적으로 정확히 확장
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${Math.max(65, el.scrollHeight)}px`;
-    }
-  }, [value]);
-
-  return (
-    <div className="w-full">
-      <textarea
-        ref={textareaRef}
-        autoFocus
-        rows={1}
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-        onBlur={(e) => {
-          // 상단 리본 메뉴 영역을 조작 중인 경우 닫지 않고 유지
-          const nextTarget = e.relatedTarget as HTMLElement | null;
-          if (nextTarget && nextTarget.closest('[data-workplan-ribbon="true"]')) {
-            return;
-          }
-          const activeEl = document.activeElement as HTMLElement | null;
-          if (activeEl && activeEl.closest('[data-workplan-ribbon="true"]')) {
-            return;
-          }
-          onBlur();
-        }}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            e.preventDefault();
-            onSave();
-            return;
-          }
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            onCancel();
-            return;
-          }
-        }}
-        placeholder=""
-        style={{
-          overflow: 'hidden',
-          overflowY: 'hidden',
-          resize: 'none',
-          display: 'block',
-        }}
-        className="w-full rounded border border-blue-400/50 bg-transparent p-0 text-[10px] leading-relaxed text-ink outline-none font-sans focus:border-blue-400 focus:ring-0"
-      />
-    </div>
-  );
+  /** 칸 편집기 인스턴스 전달 — 상단 리본의 서식 버튼이 쓴다. */
+  onEditorReady?: (editor: Editor | null) => void;
 }
 
 export function WorkPlanTeamMonthlyMatrix({
@@ -156,6 +85,7 @@ export function WorkPlanTeamMonthlyMatrix({
   onOpenCompanySchedule,
   onOpenConfig,
   onToggleItem,
+  onEditorReady,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
   const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
@@ -723,12 +653,13 @@ export function WorkPlanTeamMonthlyMatrix({
 
                                 {/* 2) 업무 계획 영역: 칸 안에서 직접 심플하게 작성 (세로 스크롤 없이 늘어난 칸 그대로 보임, 다른 칸 클릭 시 자동 저장) */}
                                 {isEditingThisCell ? (
-                                  <InlineCellTextarea
+                                  <WorkPlanRichEditor
                                     value={editingContent}
                                     onChange={(val) => onEditingContentChange?.(val)}
                                     onBlur={() => onSaveEditing?.()}
                                     onSave={() => onSaveEditing?.()}
                                     onCancel={() => onCancelEditing?.()}
+                                    onEditorReady={onEditorReady}
                                   />
                                 ) : parsed.length > 0 ? (
                                   <div className="space-y-1 min-h-[48px] group/cell relative">
