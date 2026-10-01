@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import { ClipboardCheck, Bell, Settings, X, Info, Search } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
+import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
+import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { currentApproverIds, getPredecessorsOf, getReadRejectedDocIds, markRejectedDocAsRead } from '@/domain/approvalDoc/engine';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -70,6 +72,7 @@ export default function MobileApprovalList() {
   const nav = useNavigate();
   const me = user!.id;
   const { byBox, counts, isLoading } = useApprovalBoxes(me);
+  const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const [box, setBox] = useState<ApprovalBox | '문서함'>('대기');
   const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
@@ -108,8 +111,9 @@ export default function MobileApprovalList() {
   // 4. 사후 열람 확인이 필요한 후열 문서 건수
   const unconfirmedPostReadCount = useMemo(() => {
     const list = byBox['후열'] ?? [];
-    return list.filter((d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)).length;
-  }, [byBox, me]);
+    const unread = unreadPostReadDocIdsFor(recvPostReads, me);
+    return list.filter((d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || unread.has(d.id)).length;
+  }, [byBox, me, recvPostReads]);
 
   // 로컬스토리지 키 설정 (사용자별 안전 격리)
   const STORAGE_KEY = `workfit-approval-extra-tabs-v3-${me}`;

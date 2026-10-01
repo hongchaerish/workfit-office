@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
+import { useAutoMarkPostRead } from '@/features/gw/usePostReadShares';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
@@ -32,6 +33,7 @@ export default function MobileApprovalDetail() {
   const { user } = useAuth();
   const me = user!.id;
   const doc = useApprovalDoc(id);
+  useAutoMarkPostRead(doc?.id ?? '', me);
   const { data: users = [] } = useUsers();
   const { data: forms = [] } = useApprovalForms();
   const form = forms.find((f) => f.code === doc?.docType);
