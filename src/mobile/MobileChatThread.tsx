@@ -8,6 +8,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
+import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
@@ -43,15 +44,7 @@ export function getAvatarStyle(userId: string): { bg: string; text: string } {
 
 /** 방 진입 시 숨김(삭제) 해제 — 데스크톱과 동일 규칙. */
 function unhideRoom(me: string, roomId: string) {
-  try {
-    const key = `workfit-hidden-rooms-${me}`;
-    const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-    if (hidden.includes(roomId)) {
-      localStorage.setItem(key, JSON.stringify(hidden.filter((id) => id !== roomId)));
-    }
-  } catch {
-    /* 무시 */
-  }
+  unhideRooms(me, [roomId]);
 }
 
 /** 모바일 대화창 — 답글·첨부·읽음수·검색·초대·방 관리 지원. */
@@ -345,13 +338,7 @@ export default function MobileChatThread() {
   const onDeleteDirect = () => {
     if (!room) return;
     if (!window.confirm('채팅방을 목록에서 삭제하시겠어요?\n(새로운 대화를 시작하면 이전 대화가 다시 표시됩니다.)')) return;
-    try {
-      const key = `workfit-hidden-rooms-${me}`;
-      const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      if (!hidden.includes(room.id)) localStorage.setItem(key, JSON.stringify([...hidden, room.id]));
-    } catch {
-      /* 무시 */
-    }
+    hideRoom(me, room.id);
     nav('/m');
   };
 

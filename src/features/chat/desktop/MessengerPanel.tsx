@@ -5,6 +5,7 @@ import { Search, X, Paperclip, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
+import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
@@ -114,79 +115,43 @@ export function MessengerPanel() {
     return () => window.removeEventListener('workfit-open-chat-room', consume);
   }, []);
 
+  const hiddenIds = useHiddenRooms(me);
+
+  // [＋]로 숨긴 방을 다시 열면(1:1은 기존 방 재사용) 그 즉시 숨김을 푼다 — 메시지를 안 보내고 나와도 목록에 남게.
   const handleCreated = (id: string) => {
+    unhideRooms(me, [id]);
     setComposing(false);
     setOpenRoomId(id);
   };
 
   const handleHideRoom = (roomId: string) => {
     if (!window.confirm('이 채팅방을 대화 목록에서 숨기시겠습니까?\n(새로운 메시지가 오면 다시 표시됩니다.)')) return;
-    try {
-      const key = `workfit-hidden-rooms-${me}`;
-      const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      if (!hidden.includes(roomId)) {
-        localStorage.setItem(key, JSON.stringify([...hidden, roomId]));
-      }
-    } catch {
-      /* 무시 */
-    }
+    hideRoom(me, roomId);
   };
 
+  // 방에 들어가면(알림 클릭 포함) 숨김 해제
+  useEffect(() => {
+    if (openRoomId) unhideRooms(me, [openRoomId]);
+  }, [openRoomId, me]);
+
+  // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제
+  useEffect(() => {
+    const arrived = hiddenIds.filter((id) => (unreadMap[id] ?? 0) > 0);
+    if (arrived.length > 0) unhideRooms(me, arrived);
+  }, [hiddenIds, unreadMap, me]);
+
   const visibleRooms = useMemo(() => {
-    try {
-      const key = `workfit-hidden-rooms-${me}`;
-      const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      if (hidden.length === 0) {
-        const kw = q.trim().toLowerCase();
-        if (!kw) return rooms;
-        return rooms.filter((r) => getRoomDisplayName(r, me, users).toLowerCase().includes(kw));
-      }
-
-      // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제(Unhide)
-      const unhiddenRooms: string[] = [];
-      const activeHidden = hidden.filter((hid) => {
-        const targetRoom = rooms.find((r) => r.id === hid);
-        if (!targetRoom) return true;
-        const hasUnread = (unreadMap[hid] ?? 0) > 0;
-        if (hasUnread) {
-          unhiddenRooms.push(hid);
-          return false;
-        }
-        return true;
-      });
-
-      if (unhiddenRooms.length > 0) {
-        localStorage.setItem(key, JSON.stringify(activeHidden));
-      }
-
-      const list = rooms.filter((r) => !activeHidden.includes(r.id));
-      const kw = q.trim().toLowerCase();
-      if (!kw) return list;
-      return list.filter((r) => {
-        const display = getRoomDisplayName(r, me, users).toLowerCase();
-        return display.includes(kw);
-      });
-    } catch {
-      return rooms;
-    }
-  }, [rooms, me, q, users, unreadMap]);
+    const list = rooms.filter((r) => !hiddenIds.includes(r.id) || (unreadMap[r.id] ?? 0) > 0);
+    const kw = q.trim().toLowerCase();
+    if (!kw) return list;
+    return list.filter((r) => getRoomDisplayName(r, me, users).toLowerCase().includes(kw));
+  }, [rooms, hiddenIds, me, q, users, unreadMap]);
 
   if (composing) {
     return <NewRoomView me={me} onCancel={() => setComposing(false)} onCreated={handleCreated} />;
   }
 
   if (openRoom) {
-    // 방 진입 시 로컬스토리지 숨김 해제
-    try {
-      const key = `workfit-hidden-rooms-${me}`;
-      const hidden: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
-      if (hidden.includes(openRoom.id)) {
-        localStorage.setItem(key, JSON.stringify(hidden.filter((id) => id !== openRoom.id)));
-      }
-    } catch {
-      /* 무시 */
-    }
-
     return (
       <MessengerThread
         room={openRoom}
@@ -568,17 +533,7 @@ function MessengerThread({
   };
   const onDeleteDirect = () => {
     if (!window.confirm('채팅방을 목록에서 삭제하시겠어요?\n(새로운 대화를 시작하면 이전 대화가 다시 표시됩니다.)')) return;
-    try {
-      const hiddenKey = `workfit-hidden-rooms-${me}`;
-      const hiddenStr = localStorage.getItem(hiddenKey);
-      const hidden = hiddenStr ? JSON.parse(hiddenStr) : [];
-      if (!hidden.includes(room.id)) {
-        hidden.push(room.id);
-        localStorage.setItem(hiddenKey, JSON.stringify(hidden));
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    hideRoom(me, room.id);
     onBack();
   };
 

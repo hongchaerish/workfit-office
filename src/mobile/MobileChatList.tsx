@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Search, Pin, Bell } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
+import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { enablePushForUser } from '@/shared/lib/messaging';
@@ -16,7 +17,6 @@ import MobileUserMenuSheet from './MobileUserMenuSheet';
 
 // 고정/숨김 상태를 사용자별로 안전하게 분리 저장.
 const pinKeyOf = (me: string) => `workfit-pinned-rooms-${me}`;
-const hiddenKeyOf = (me: string) => `workfit-hidden-rooms-${me}`;
 
 
 function loadIds(key: string): string[] {
@@ -56,7 +56,7 @@ export default function MobileChatList() {
     const userPinned = loadIds(pinKeyOf(me));
     return userPinned.length > 0 ? userPinned : loadIds('workfit-pinned-rooms');
   });
-  const [hiddenIds, setHiddenIds] = useState<string[]>(() => loadIds(hiddenKeyOf(me)));
+  const hiddenIds = useHiddenRooms(me);
 
   const leave = useLeaveRoom();
 
@@ -85,26 +85,18 @@ export default function MobileChatList() {
     localStorage.setItem(pinKeyOf(me), JSON.stringify(next));
   };
 
-  const hideRoom = (roomId: string) => {
-    if (hiddenIds.includes(roomId)) return;
-    const next = [...hiddenIds, roomId];
-    setHiddenIds(next);
-    localStorage.setItem(hiddenKeyOf(me), JSON.stringify(next));
-  };
+  const hideRoom = (roomId: string) => hideRoomFor(me, roomId);
+
+  // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제
+  useEffect(() => {
+    const arrived = hiddenIds.filter((id) => (unread[id] ?? 0) > 0);
+    if (arrived.length > 0) unhideRooms(me, arrived);
+  }, [hiddenIds, unread, me]);
 
   const kw = q.trim().toLowerCase();
 
   const sortedRooms = useMemo(() => {
-    // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제(Unhide)
-    let activeHidden = hiddenIds;
-    const unhidden = hiddenIds.filter((hid) => (unread[hid] ?? 0) > 0);
-    if (unhidden.length > 0) {
-      activeHidden = hiddenIds.filter((hid) => !unhidden.includes(hid));
-      setHiddenIds(activeHidden);
-      localStorage.setItem(hiddenKeyOf(me), JSON.stringify(activeHidden));
-    }
-
-    const visible = rooms.filter((r) => !activeHidden.includes(r.id));
+    const visible = rooms.filter((r) => !hiddenIds.includes(r.id) || (unread[r.id] ?? 0) > 0);
     const named = visible.map((r) => ({ ...r, displayName: getRoomDisplayName(r, me, users) }));
     const filtered = kw ? named.filter((r) => r.displayName.toLowerCase().includes(kw)) : named;
     return [...filtered].sort((a, b) => {
@@ -116,7 +108,7 @@ export default function MobileChatList() {
       const bt = b.lastMessage?.at ? new Date(b.lastMessage.at).getTime() : 0;
       return bt - at;
     });
-  }, [rooms, hiddenIds, unread, users, me, kw, pinnedIds, me]);
+  }, [rooms, hiddenIds, unread, users, me, kw, pinnedIds]);
 
   const sheetActions: SheetAction[] = sheetRoom
     ? [
