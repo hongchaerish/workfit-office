@@ -299,7 +299,9 @@ export function matchesBox(
   userId: string,
   box: ApprovalBox,
   userDeptName?: string,
-  absentApproverIds?: string[]
+  absentApproverIds?: string[],
+  /** userId 가 후열(공람) 전달받은 문서 id 집합. 넘기지 않으면 대결 원결재자 건만 후열로 본다. */
+  postReadDocIds?: ReadonlySet<string>
 ): boolean {
   if (doc.status === '삭제') {
     return box === '삭제' && doc.drafterId === userId;
@@ -311,7 +313,9 @@ export function matchesBox(
     case '임시':   return doc.drafterId === userId && doc.status === '임시저장';
     case '수신':   return isReceivedBoxMatch(doc, userId, userDeptName);
     case '참조':   return doc.status !== '임시저장' && doc.steps.some((s) => s.kind === '참조' && s.approverId === userId);
-    case '후열':   return (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && doc.steps.some((s) => s.delegatedFromId === userId);
+    case '후열':
+      return (doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료')
+        && (doc.steps.some((s) => s.delegatedFromId === userId) || postReadDocIds?.has(doc.id) === true);
     case '완료':   return isCompletedBoxMatch(doc, userId);
     case '삭제':   return false;
   }
