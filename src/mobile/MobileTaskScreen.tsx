@@ -31,6 +31,7 @@ import {
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
 import MobileCommonHeader from './MobileCommonHeader';
+import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -407,7 +408,7 @@ export default function MobileTaskScreen() {
                           item.completed ? 'line-through text-ink3' : 'text-ink'
                         }`}
                       >
-                        {item.text}
+                        <WorkPlanInlineText text={item.text} />
                       </span>
                     </div>
 
@@ -557,7 +558,7 @@ export default function MobileTaskScreen() {
                                   it.completed ? 'line-through text-ink3 opacity-70' : 'text-slate-800'
                                 }`}
                               >
-                                {it.text}
+                                <WorkPlanInlineText text={it.text} />
                               </span>
                             </div>
 

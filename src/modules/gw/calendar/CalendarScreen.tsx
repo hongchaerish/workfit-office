@@ -37,6 +37,7 @@ import { Button } from '@/shared/ui/Button';
 import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
 import { Sparkles, CheckCircle2, ListTodo, ExternalLink } from 'lucide-react';
+import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
 
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -735,7 +736,7 @@ function LocalCalendarScreen() {
                           }`}
                           onClick={() => void handleToggleTodo(idx)}
                         >
-                          {item.text}
+                          <WorkPlanInlineText text={item.text} />
                         </span>
                       </div>
                     </div>

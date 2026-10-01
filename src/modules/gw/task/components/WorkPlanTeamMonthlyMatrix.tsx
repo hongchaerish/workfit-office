@@ -26,6 +26,7 @@ import {
 
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
+import { WorkPlanInlineText } from './WorkPlanInlineText';
 
 const WEEKDAYS_KO_MON = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -784,7 +785,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                               </button>
 
                                               <div className="min-w-0 flex-1 break-words">
-                                                <span>{item.text}</span>
+                                                <WorkPlanInlineText text={item.text} />
                                               </div>
                                             </div>
                                           );
@@ -798,7 +799,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                               editTier === 3 ? 'text-ink2/90' : 'text-ink'
                                             }`}
                                           >
-                                            {item.text}
+                                            <WorkPlanInlineText text={item.text} />
                                           </div>
                                         );
                                       })}

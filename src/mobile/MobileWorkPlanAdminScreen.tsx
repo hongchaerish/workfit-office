@@ -20,6 +20,7 @@ import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { workPlanPolicy } from '@/domain/security/policy/workPlanPolicy';
 import MobileCommonHeader from './MobileCommonHeader';
+import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
 
 const pad = (v: number) => String(v).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -267,7 +268,7 @@ export default function MobileWorkPlanAdminScreen() {
                                 : 'text-ink font-medium'
                             }
                           >
-                            {it.text}
+                            <WorkPlanInlineText text={it.text} />
                           </span>
                           {tagMeta && (
                             <span
