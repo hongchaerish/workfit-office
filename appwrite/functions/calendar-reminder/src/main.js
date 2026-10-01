@@ -18,6 +18,7 @@
  * 주입하는 동적 키(x-appwrite-key)만 쓴다 — 관리자 키를 함수에 심지 않는다.
  */
 import { Client, Databases, ID, Query } from 'node-appwrite';
+import { attendeesOf, eventTypeOf, meetingReminderTargets } from './meeting.js';
 
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 const LEAD_MIN = 10;
@@ -87,9 +88,16 @@ async function deptMemberIds(dbs, deptId) {
   return members.documents.map((u) => u.$id);
 }
 
-/** 이 일정을 볼 수 있는 전원(소유자 포함). 공유 알림(calendarEvent.repo.ts)과 같은 규칙 + 소유자. */
+/**
+ * 리마인더 대상.
+ * - 회의: 공개 범위와 무관하게 **주최자 + 참석자만**(전사 공개 회의라도 전 직원에게 보내지 않는다).
+ * - 그 밖의 일정: 소유자 + 참석자 + 공개 범위로 보는 사람(예전 규칙에 참석자 추가).
+ */
 async function recipientsOf(dbs, event) {
-  const ids = new Set([event.ownerUserId]);
+  const meetingTargets = meetingReminderTargets(event);
+  if (meetingTargets) return meetingTargets;
+
+  const ids = new Set([event.ownerUserId, ...attendeesOf(event)]);
   if (event.visibility === 'TEAM' && event.deptId) {
     (await deptMemberIds(dbs, event.deptId)).forEach((id) => ids.add(id));
   } else if (event.visibility === 'PROJECT' && event.projectId) {
@@ -112,7 +120,8 @@ async function recipientsOf(dbs, event) {
  */
 const CREATE_BATCH = 25;
 
-function scopeLabel(visibility) {
+function scopeLabel(visibility, eventType) {
+  if (eventType === 'MEETING') return ' · 회의';
   if (visibility === 'TEAM') return ' · 부서 공유';
   if (visibility === 'PROJECT') return ' · 프로젝트 공유';
   if (visibility === 'COMPANY') return ' · 전사 공개';
@@ -143,7 +152,7 @@ export default async ({ req, res, log, error }) => {
       for (const event of page.documents) {
         const owner = await dbs.getDocument(DB, 'users', event.ownerUserId).catch(() => null);
         const recipients = await recipientsOf(dbs, event);
-        const text = `[${event.title}] ${event.date} ${event.startTime}~${event.endTime} 곧 시작합니다${scopeLabel(event.visibility)}`;
+        const text = `[${event.title}] ${event.date} ${event.startTime}~${event.endTime} 곧 시작합니다${scopeLabel(event.visibility, eventTypeOf(event))}`;
 
         let ok = 0;
         let failed = 0;
