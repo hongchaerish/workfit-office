@@ -41,6 +41,24 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
 
   useEffect(() => { if (open !== 'msg') setMsgNotiView(false); }, [open]);
 
+  /*
+    패널(메신저 등)이 열려 있는 동안 뒤 페이지 스크롤을 잠근다. 메시지 목록 끝까지 굴리면
+    휠이 뒤 화면으로 넘어가 페이지가 같이 움직였다. 스크롤바가 사라지며 화면이 옆으로
+    밀리지 않도록 그 폭만큼 오른쪽 여백을 채운다.
+  */
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    const prev = { overflow: root.style.overflow, paddingRight: root.style.paddingRight };
+    const scrollbarWidth = window.innerWidth - root.clientWidth;
+    root.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) root.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      root.style.overflow = prev.overflow;
+      root.style.paddingRight = prev.paddingRight;
+    };
+  }, [open]);
+
   return (
     <>
       {/* dim */}
@@ -57,7 +75,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
           right: open ? 0 : -(PANEL_W + 12),
           backgroundColor: open === 'gw' ? '#f2faf3' : open === 'bot' ? '#eaf2ff' : open === 'msg' ? '#f2f8fc' : '#f3f6fa'
         }}
-        className="fixed bottom-0 top-0 z-[73] flex flex-col shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
+        className="dock-panel fixed bottom-0 top-0 z-[73] flex flex-col shadow-[-12px_0_40px_rgba(16,24,48,0.25)] transition-[right] duration-300"
       >
         {tool && tool.key === 'gw' && <GroupwarePanel onClose={() => setOpen(null)} />}
         {tool && tool.key !== 'gw' && (

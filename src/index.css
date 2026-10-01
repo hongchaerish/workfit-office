@@ -278,3 +278,9 @@ body {
   border-radius: 0.75rem;
   animation: chat-jump-flash 1.8s ease-out;
 }
+
+/* 도크 패널(메신저 등) 안의 스크롤이 끝에 닿아도 바깥으로 넘어가지 않게 */
+.dock-panel,
+.dock-panel * {
+  overscroll-behavior: contain;
+}
