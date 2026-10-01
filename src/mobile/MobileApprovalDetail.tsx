@@ -34,7 +34,7 @@ export default function MobileApprovalDetail() {
   const me = user!.id;
   const doc = useApprovalDoc(id);
   useAutoMarkPostRead(doc?.id ?? '', me);
-  // 후열(공람)로 전달받은 사람은 문서 전체를 볼 수 있다(웹 ApprovalDocumentView와 같은 규칙).
+  // 후열(공람)로 전달받은 사람은 문서를 열람할 수 있다. 보안 필드는 그대로 가린다(웹 ApprovalDocumentView와 같은 규칙).
   const postReadQuery = useDocPostReads(doc?.id ?? '');
   const isPostReadRecipient = (postReadQuery.data ?? []).some((s) => s.toUserId === me);
   const { data: users = [] } = useUsers();
@@ -141,7 +141,6 @@ export default function MobileApprovalDetail() {
   const canViewSecret = (() => {
     if (!doc) return false;
     if (isExecutive) return true;
-    if (isPostReadRecipient) return true;
     if (doc.status === '완료' && doc.drafterId === me) return true;
     if (doc.steps.some((s) => s.approverId === me && s.kind !== '참조')) return true;
     return false;

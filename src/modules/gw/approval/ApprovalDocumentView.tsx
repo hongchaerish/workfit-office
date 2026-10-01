@@ -159,7 +159,8 @@ export function ApprovalDocumentView({
     userObj?.dept === '대표이사';
 
   /*
-    후열(공람)로 전달받은 사람은 문서 전체를 볼 수 있다 — 공개 범위·보안 등급·보안 필드 무관.
+    후열(공람)로 전달받은 사람은 문서를 열람할 수 있다 — 공개 범위·보안 등급 무관.
+    단, 서식의 보안 필드(isSecret)는 그대로 가린다(canViewSecret에 포함하지 않음).
     관리자가 일부러 보여 주려고 전달한 문서인데 "권한 없음"으로 막히던 논리 오류를 고친다.
     전임자 앞으로 전달된 건은 후임자도 본다(결재함 승계와 같은 규칙).
   */
@@ -250,7 +251,6 @@ export function ApprovalDocumentView({
     if (isPreview) return false; // 미리보기 모드에서는 기안자도 블러/마스킹된 모습 확인 가능하도록 false 반환
     if (!currentUser?.id) return true; // 권한 미전달 시 디폴트 노출 (미리보기 등)
     if (isExecutive) return true; // 대표이사/상무이사 100% 마스킹 해제 허용
-    if (isPostReadRecipient) return true; // 후열 전달받은 사람은 문서 전체 열람
     if (doc.status === '완료' && doc.drafterId === currentUser.id) return true; // 기안자 본인은 완료함 등 완결 상태일 때만 해제
     if (doc.steps.some((s) => s.approverId === currentUser.id && s.kind !== '참조')) return true; // 단순 참조 제외 승인 결재자
     return false;
