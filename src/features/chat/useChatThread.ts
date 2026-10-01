@@ -4,6 +4,7 @@ import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import type { ChatMessage, ReplyPreview } from '@/domain/chatMessage/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_ROOMS_KEY, CHAT_UNREAD_KEY, CHAT_POLL_MS } from './useChatRooms';
+import { buildAttachmentBatch } from './attachmentBatch';
 
 /**
  * 채팅방 대화(스레드) 훅 — 메시지 조회 + 낙관적 전송 + 읽음 처리.
@@ -114,45 +115,6 @@ export function useUpdateMessageReactions(roomId: string) {
   });
 }
 
-/** 첨부 전송 — Storage 업로드 → image/file 메시지 append + 방 lastMessage 갱신. */
-export function useSendAttachment(roomId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ file, senderId, senderName, text = '', replyTo = null }: { file: File; senderId: string; senderName: string; text?: string; replyTo?: ReplyPreview | null }) => {
-      const attachment = await chatMessageRepo.uploadAttachment(roomId, file);
-      const isImage = attachment.mime.startsWith('image/');
-      const at = nowLocalIso();
-      const message: ChatMessage = {
-        id: `${roomId}-${Date.now()}`,
-        roomId,
-        senderId,
-        senderName,
-        text,
-        type: isImage ? 'image' : 'file',
-        attachment,
-        replyTo,
-        approvalPayload: null,
-        at,
-        readBy: [senderId],
-        isEdited: false,
-        reactions: {},
-      };
-      await chatMessageRepo.append(message);
-      await chatRoomRepo.updateLastMessage(roomId, {
-        text: text || (isImage ? '📷 사진' : `📎 ${attachment.name}`),
-        at,
-        senderId,
-      });
-      return message;
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
-      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
-      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
-    },
-  });
-}
-
 /** 방 진입 시 읽음 처리 — 미읽음 배지 클리어. */
 export function useMarkRead() {
   const qc = useQueryClient();
@@ -162,6 +124,35 @@ export function useMarkRead() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
       qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY] });
+    },
+  });
+}
+
+/**
+ * 첨부 여러 개 한 번에 보내기 — 업로드는 동시에, 저장은 같은 시각·증가하는 id로 차례대로.
+ * 사진이 하나씩 떨어져 올라가지 않고 한 묶음(그리드)으로 보이게 한다(buildAttachmentBatch 참고).
+ */
+export function useSendAttachments(roomId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ files, senderId, senderName, text = '', replyTo = null }: { files: File[]; senderId: string; senderName: string; text?: string; replyTo?: ReplyPreview | null }) => {
+      const attachments = await Promise.all(files.map((file) => chatMessageRepo.uploadAttachment(roomId, file)));
+      const at = nowLocalIso();
+      const messages = buildAttachmentBatch({ roomId, senderId, senderName, attachments, text, replyTo, at, baseTime: Date.now() });
+      for (const message of messages) await chatMessageRepo.append(message);
+
+      const last = messages[messages.length - 1];
+      await chatRoomRepo.updateLastMessage(roomId, {
+        text: last.text || (last.type === 'image' ? (attachments.length > 1 ? `📷 사진 ${attachments.length}장` : '📷 사진') : `📎 ${last.attachment?.name ?? '파일'}`),
+        at,
+        senderId,
+      });
+      return messages;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
     },
   });
 }

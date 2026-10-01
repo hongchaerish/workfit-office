@@ -6,7 +6,9 @@ import { Search, Paperclip, FileSignature, FileText, X, Pencil, Download } from 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
+import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
+import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -63,7 +65,7 @@ export default function MobileChatThread() {
   const presenceMap = useAllUserPresences();
   const room = rooms.find((r) => r.id === roomId);
   const send = useSendMessage(roomId);
-  const sendFile = useSendAttachment(roomId);
+  const sendFile = useSendAttachments(roomId);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -280,23 +282,14 @@ export default function MobileChatThread() {
     if (attachedFiles.length > 0) {
       try {
         // 첫 번째 파일은 텍스트 및 답글 정보와 함께 전송
+        // 여러 장을 한 번에 — 하나씩 떨어져 올라가지 않고 한 묶음(그리드)으로 보이게
         await sendFile.mutateAsync({
-          file: attachedFiles[0].file,
+          files: attachedFiles.map((f) => f.file),
           senderId: me,
           senderName: meName,
           text: t,
           replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
         });
-
-        // 나머지 파일들은 빈 텍스트로 순차 전송
-        for (let i = 1; i < attachedFiles.length; i++) {
-          await sendFile.mutateAsync({
-            file: attachedFiles[i].file,
-            senderId: me,
-            senderName: meName,
-            text: '',
-          });
-        }
 
         clearAttachedFiles(attachedFiles);
         setText('');
@@ -462,7 +455,7 @@ export default function MobileChatThread() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
         {processedItems.length === 0 && (
           <div className="py-10 text-center text-[12px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다.' : '대화 내용이 없습니다.'}</div>
         )}
@@ -480,6 +473,8 @@ export default function MobileChatThread() {
           const nextMsg = idx < processedItems.length - 1 ? processedItems[idx + 1].message : null;
 
           const showDateDivider = !prevMsg || !isSameDay(prevMsg.at, m.at);
+          // 같은 사람이 같은 분에 이어 보낸 메시지는 바짝 붙이고 프로필(이름·사진)은 첫 말풍선에만
+          const groupedWithPrev = !showDateDivider && isGroupedWithPrevious(prevMsg, m);
 
           const lastMsgOfGroup = item.type === 'image-bundle' && item.bundleMessages
             ? item.bundleMessages[item.bundleMessages.length - 1]
@@ -488,7 +483,7 @@ export default function MobileChatThread() {
           const showTime = !hideTime;
 
           return (
-            <div key={m.id} id={`msg-${m.id}`} className="space-y-2">
+            <div key={m.id} id={`msg-${m.id}`} className={`space-y-2 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2'}`}>
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-black/5 px-3 py-1 text-[10.5px] text-ink3">
@@ -504,6 +499,7 @@ export default function MobileChatThread() {
                   roomMembers={room?.members ?? []}
                   onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
                   showTime={showTime}
+                  showProfile={!groupedWithPrev}
                   onLongPress={setSheetMessage}
                   onToggleEmoji={handleToggleEmoji}
                 />
@@ -515,6 +511,7 @@ export default function MobileChatThread() {
                   roomMembers={room?.members ?? []}
                   onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
                   showTime={showTime}
+                  showProfile={!groupedWithPrev}
                   isEditing={editingMessageId === m.id}
                   onCancelEdit={() => setEditingMessageId(null)}
                   onLongPress={setSheetMessage}
@@ -758,6 +755,7 @@ function ImageBundleBubble({
   roomMembers,
   onOpenImage,
   showTime,
+  showProfile = true,
   onLongPress,
   onToggleEmoji,
 }: {
@@ -767,6 +765,8 @@ function ImageBundleBubble({
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   showTime: boolean;
+  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
+  showProfile?: boolean;
   onLongPress: (m: ChatMessage) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
 }) {
@@ -808,81 +808,28 @@ function ImageBundleBubble({
   const renderGrid = () => {
     const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
     if (attachments.length === 0) return null;
-    const len = attachments.length;
-
-    if (len === 2) {
-      return (
-        <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-black/10">
-          {attachments.map((att, i) => (
-            <button key={i} onClick={() => onOpenImage(att, attachments)} className="w-full h-full overflow-hidden block">
-              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (len === 3) {
-      return (
-        <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-black/10">
-          <button onClick={() => onOpenImage(attachments[0], attachments)} className="flex-1 h-full overflow-hidden block">
-            <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
-          </button>
-          <div className="flex flex-col gap-1 w-[38%] h-full">
-            <button onClick={() => onOpenImage(attachments[1], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
-              <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
-            </button>
-            <button onClick={() => onOpenImage(attachments[2], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
-              <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    const displayList = attachments.slice(0, 4);
-    const extraCount = attachments.length - 4;
-
-    return (
-      <div className="grid grid-cols-2 gap-1 w-60 h-60 overflow-hidden rounded-xl border border-black/10">
-        {displayList.map((att, i) => {
-          const isLast = i === 3 && extraCount > 0;
-          return (
-            <button
-              key={i}
-              onClick={() => onOpenImage(att, attachments)}
-              className="relative w-full h-full overflow-hidden block"
-            >
-              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
-              {isLast && (
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[16px] font-bold">
-                  +{extraCount}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    );
+    return <ImageBundleGrid attachments={attachments} onOpen={onOpenImage} className="border-black/10" />;
   };
 
-  const bubbleMeta = (
-    <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+  // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
+  const bubbleMeta = (mine && unreadCount > 0) || showTime ? (
+    <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
       {mine && unreadCount > 0 && (
-        <span className="text-[10px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
+        <span className="text-[10px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}
       {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
     </div>
-  );
+  ) : null;
 
   const reactions = m.reactions as Record<string, string[]> | undefined;
 
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[85%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && (
+        {!mine && !showProfile && <div className="w-[30px] shrink-0" />}
+        {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[30px] w-[30px] place-items-center rounded-full text-[12px] font-bold">
               {m.senderName?.[0] ?? '?'}
@@ -891,7 +838,7 @@ function ImageBundleBubble({
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 text-[10.5px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
             <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-black/10 bg-black/[0.03]'}`}>
               <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
@@ -903,9 +850,10 @@ function ImageBundleBubble({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
-            className={`relative flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+            className={`relative flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
           >
             {renderGrid()}
+            {bubbleMeta}
           </div>
           {reactions && Object.keys(reactions).length > 0 && (
             <div className={`mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
@@ -929,7 +877,6 @@ function ImageBundleBubble({
               })}
             </div>
           )}
-          {bubbleMeta}
         </div>
       </div>
     </div>
@@ -943,6 +890,7 @@ function MessageBubble({
   roomMembers,
   onOpenImage,
   showTime,
+  showProfile = true,
   isEditing,
   onCancelEdit,
   onLongPress,
@@ -956,6 +904,8 @@ function MessageBubble({
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   showTime: boolean;
+  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
+  showProfile?: boolean;
   isEditing: boolean;
   onCancelEdit: () => void;
   onLongPress: (msg: ChatMessage) => void;
@@ -1117,7 +1067,8 @@ function MessageBubble({
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && (
+        {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
+        {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
@@ -1126,14 +1077,24 @@ function MessageBubble({
           </div>
         )}
         <div className="min-w-0">
-          {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
             <div className={`mb-1 truncate rounded-md border-l-2 px-2 py-1 text-[10.5px] ${mine ? 'border-white/50 bg-black/[0.08] text-ink2' : 'border-black/20 bg-black/[0.06] text-ink3'}`}>
               <b>{m.replyTo.senderName || '메시지'}</b> {m.replyTo.text}
             </div>
           )}
-          <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+          <div className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
             {body}
+            {((mine && unreadCount > 0) || showTime || m.isEdited) && (
+              // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에
+              <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
+                {mine && unreadCount > 0 && (
+                  <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>{unreadCount}</span>
+                )}
+                {m.isEdited && <span className="text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
+                {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
+              </div>
+            )}
           </div>
           {/* 이모지 반응 배지 목록 */}
           {m.reactions && Object.keys(m.reactions as Record<string, string[]>).length > 0 && (
@@ -1158,17 +1119,6 @@ function MessageBubble({
               })}
             </div>
           )}
-          <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
-            {mine && unreadCount > 0 && (
-              <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>{unreadCount}</span>
-            )}
-            {showTime && (
-              <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>
-            )}
-            {m.isEdited && (
-              <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -1310,75 +1260,6 @@ function isSameDay(dateStr1?: string | null, dateStr2?: string | null): boolean 
   );
 }
 
-function isSameMinute(dateStr1?: string | null, dateStr2?: string | null): boolean {
-  if (!dateStr1 || !dateStr2) return false;
-  const d1 = new Date(dateStr1);
-  const d2 = new Date(dateStr2);
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate() &&
-    d1.getHours() === d2.getHours() &&
-    d1.getMinutes() === d2.getMinutes()
-  );
-}
-
-function fmtDateDivider(dateStr?: string | null): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}`;
-}
-
-export interface RenderMessageItem {
-  type: 'message' | 'image-bundle';
-  message: ChatMessage;
-  bundleMessages?: ChatMessage[];
-}
-
-export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] {
-  const items: RenderMessageItem[] = [];
-  let i = 0;
-  while (i < msgs.length) {
-    const cur = msgs[i];
-    if (cur.type !== 'image' || cur.text || !cur.attachment) {
-      items.push({ type: 'message', message: cur });
-      i++;
-      continue;
-    }
-
-    const bundle: ChatMessage[] = [cur];
-    let j = i + 1;
-    while (j < msgs.length) {
-      const next = msgs[j];
-      if (
-        next.type === 'image' &&
-        !next.text &&
-        next.attachment &&
-        next.senderId === cur.senderId &&
-        isSameMinute(cur.at, next.at)
-      ) {
-        bundle.push(next);
-        j++;
-      } else {
-        break;
-      }
-    }
-
-    if (bundle.length >= 2) {
-      items.push({
-        type: 'image-bundle',
-        message: cur,
-        bundleMessages: bundle,
-      });
-      i = j;
-    } else {
-      items.push({ type: 'message', message: cur });
-      i++;
-    }
-  }
-  return items;
-}
 
 // ─────────────────────────────────────────────────────────────
 // Teams 스타일 전달 모달 (PWA 모바일 전용)
@@ -1795,4 +1676,11 @@ function MobileFileBoxModal({
       </div>
     </div>
   );
+}
+
+function fmtDateDivider(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}`;
 }

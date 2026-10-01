@@ -6,7 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
-import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
+import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
@@ -277,7 +279,7 @@ function MessengerThread({
   const { data: messages = [] } = useChatThread(room.id);
   const { data: rooms = [] } = useChatRooms(me);
   const send = useSendMessage(room.id);
-  const sendFile = useSendAttachment(room.id);
+  const sendFile = useSendAttachments(room.id);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -592,8 +594,9 @@ function MessengerThread({
 
     if (attachedFiles.length > 0) {
       try {
+        // 여러 장을 한 번에 — 하나씩 떨어져 올라가지 않고 한 묶음(그리드)으로 보이게
         await sendFile.mutateAsync({
-          file: attachedFiles[0].file,
+          files: attachedFiles.map((f) => f.file),
           senderId: me,
           senderName: meName,
           text: t,
@@ -601,15 +604,6 @@ function MessengerThread({
             ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo as any) }
             : null,
         });
-
-        for (let i = 1; i < attachedFiles.length; i++) {
-          await sendFile.mutateAsync({
-            file: attachedFiles[i].file,
-            senderId: me,
-            senderName: meName,
-            text: '',
-          });
-        }
 
         clearAttachedFiles(attachedFiles);
         setText('');
@@ -875,7 +869,7 @@ function MessengerThread({
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="menu-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="menu-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
         {processedItems.length === 0 && (
           <div className="py-12 text-center text-[11.5px] text-ink3">{searchQuery ? '검색된 메시지가 없습니다' : '대화 내용이 없습니다'}</div>
         )}
@@ -895,6 +889,8 @@ function MessengerThread({
             const d2 = prevMsg.at ? new Date(prevMsg.at).toDateString() : '';
             return d1 !== d2;
           })();
+          // 같은 사람이 같은 분에 이어 보낸 메시지는 바짝 붙이고 프로필(이름·사진)은 첫 말풍선에만
+          const groupedWithPrev = !showDateDivider && isGroupedWithPrevious(prevMsg, m);
 
           const formatDateDivider = (iso?: string) => {
             if (!iso) return '';
@@ -909,7 +905,7 @@ function MessengerThread({
           };
 
           return (
-            <div key={m.id} id={`msg-${m.id}`} data-msg-ids={(item.bundleMessages ?? [m]).map((x) => x.id).join(' ')} className="space-y-2.5">
+            <div key={m.id} id={`msg-${m.id}`} data-msg-ids={(item.bundleMessages ?? [m]).map((x) => x.id).join(' ')} className={`space-y-2.5 ${idx === 0 ? '' : groupedWithPrev ? 'mt-1' : 'mt-2.5'}`}>
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-panel-alt px-3.5 py-1 text-[10px] font-extrabold text-ink3 tracking-wider shadow-3xs border border-border/40 select-none">
@@ -949,6 +945,7 @@ function MessengerThread({
                     onJumpToMessage={jumpToMessage}
                     onToggleEmoji={handleToggleEmoji}
                     showTime={showTime}
+                    showProfile={!groupedWithPrev}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -973,6 +970,7 @@ function MessengerThread({
                     searchQuery={searchQuery}
                     isSearchActive={searchMatchIds[currentSearchIdx] === m.id}
                     showTime={showTime}
+                    showProfile={!groupedWithPrev}
                     onContextMenu={(e) => {
                       if (m.type === 'system') return;
                       e.preventDefault();
@@ -1298,6 +1296,7 @@ function ImageBundleBubble({
   onContextMenu,
   onToggleEmoji,
   showTime = true,
+  showProfile = true,
 }: {
   bundle: ChatMessage[];
   me: string;
@@ -1310,6 +1309,8 @@ function ImageBundleBubble({
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
   showTime?: boolean;
+  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
+  showProfile?: boolean;
 }) {
   const m = bundle[0];
   const presenceMap = useAllUserPresences();
@@ -1327,79 +1328,27 @@ function ImageBundleBubble({
   const renderGrid = () => {
     const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
     if (attachments.length === 0) return null;
-    const len = attachments.length;
-
-    if (len === 2) {
-       return (
-         <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-border">
-           {attachments.map((att, i) => (
-             <button key={i} onClick={() => onOpenImage(att, attachments)} className="w-full h-full overflow-hidden block cursor-zoom-in">
-               <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
-             </button>
-           ))}
-         </div>
-       );
-     }
-
-     if (len === 3) {
-       return (
-         <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-border">
-           <button onClick={() => onOpenImage(attachments[0], attachments)} className="flex-1 h-full overflow-hidden block cursor-zoom-in">
-             <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
-           </button>
-           <div className="flex flex-col gap-1 w-[38%] h-full">
-             <button onClick={() => onOpenImage(attachments[1], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block cursor-zoom-in">
-               <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
-             </button>
-             <button onClick={() => onOpenImage(attachments[2], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block cursor-zoom-in">
-               <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
-             </button>
-           </div>
-         </div>
-       );
-     }
-
-     const displayList = attachments.slice(0, 4);
-     const extraCount = attachments.length - 4;
-
-     return (
-       <div className="grid grid-cols-2 gap-1 w-60 h-60 overflow-hidden rounded-xl border border-border">
-         {displayList.map((att, i) => {
-           const isLast = i === 3 && extraCount > 0;
-           return (
-             <button
-               key={i}
-               onClick={() => onOpenImage(att, attachments)}
-               className="relative w-full h-full overflow-hidden block cursor-zoom-in"
-             >
-               <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
-               {isLast && (
-                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[16px] font-bold">
-                   +{extraCount}
-                 </div>
-               )}
-             </button>
-           );
-         })}
-       </div>
-     );
+    return <ImageBundleGrid attachments={attachments} onOpen={onOpenImage} className="border-border" />;
   };
 
-  const bubbleMeta = (
-    <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+  // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 붙인다 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
+  const hasMeta = (mine && unreadCount > 0) || showTime;
+  const bubbleMeta = hasMeta ? (
+    <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
       {mine && unreadCount > 0 && (
-        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
+        <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}
       {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
     </div>
-  );
+  ) : null;
 
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && (
+        {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
+        {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
@@ -1408,7 +1357,7 @@ function ImageBundleBubble({
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
             <button
               type="button"
@@ -1424,10 +1373,11 @@ function ImageBundleBubble({
             </button>
           )}
           <div
-            className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+            className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
             onContextMenu={onContextMenu}
           >
             {renderGrid()}
+            {bubbleMeta}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 onClick={() => onReply(m)}
@@ -1460,7 +1410,6 @@ function ImageBundleBubble({
               })}
             </div>
           )}
-          {bubbleMeta}
         </div>
       </div>
     </div>
@@ -1483,6 +1432,7 @@ function MessageBubble({
   searchQuery = '',
   isSearchActive = false,
   showTime = true,
+  showProfile = true,
 }: {
   m: ChatMessage;
   me: string;
@@ -1500,6 +1450,8 @@ function MessageBubble({
   searchQuery?: string;
   isSearchActive?: boolean;
   showTime?: boolean;
+  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
+  showProfile?: boolean;
 }) {
   const [editVal, setEditVal] = useState(m.text);
   const editMsg = useEditMessage(m.roomId);
@@ -1629,24 +1581,25 @@ function MessageBubble({
     );
   }
 
-  const bubbleMeta = (
-    <div className={`mt-0.5 flex items-center gap-1.5 ${mine ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+  // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 붙인다 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
+  const hasMeta = (mine && unreadCount > 0) || showTime || m.isEdited;
+  const bubbleMeta = hasMeta ? (
+    <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
       {mine && unreadCount > 0 && (
-        <span className="text-[9.5px] font-extrabold leading-none" style={{ color: '#1890ff' }}>
+        <span className="text-[9.5px] font-extrabold" style={{ color: '#1890ff' }}>
           {unreadCount}
         </span>
       )}
+      {m.isEdited && <span className="text-[8.5px] font-medium text-ink3/80 select-none">(수정됨)</span>}
       {showTime && <span className="text-[9.5px] tabular-nums text-ink3">{fmtBubbleTime(m.at)}</span>}
-      {m.isEdited && (
-        <span className="text-[8.5px] text-ink3/80 font-medium select-none">(수정됨)</span>
-      )}
     </div>
-  );
+  ) : null;
 
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex max-w-[82%] gap-2 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!mine && (
+        {!mine && !showProfile && <div className="w-[26px] shrink-0" />}
+        {!mine && showProfile && (
           <div className="relative shrink-0 self-end">
             <span style={{ backgroundColor: getAvatarStyle(m.senderId || '').bg, color: getAvatarStyle(m.senderId || '').text }} className="grid h-[26px] w-[26px] place-items-center rounded-full text-[11px] font-bold">
               {m.senderName?.[0] ?? '?'}
@@ -1655,7 +1608,7 @@ function MessageBubble({
           </div>
         )}
         <div className="group min-w-0">
-          {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
+          {!mine && group && showProfile && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
             <button
               type="button"
@@ -1671,9 +1624,10 @@ function MessageBubble({
             </button>
           )}
           <div
-            className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
+            className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
           >
             {body}
+            {bubbleMeta}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 onClick={() => onReply(m)}
@@ -1706,7 +1660,6 @@ function MessageBubble({
               })}
             </div>
           )}
-          {bubbleMeta}
         </div>
       </div>
     </div>
@@ -2100,68 +2053,6 @@ function InviteView({ room, meName, onCancel, onDone }: { room: ChatRoom; meName
   );
 }
 
-function isSameMinute(dateStr1?: string | null, dateStr2?: string | null): boolean {
-  if (!dateStr1 || !dateStr2) return false;
-  const d1 = new Date(dateStr1);
-  const d2 = new Date(dateStr2);
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate() &&
-    d1.getHours() === d2.getHours() &&
-    d1.getMinutes() === d2.getMinutes()
-  );
-}
-
-export interface RenderMessageItem {
-  type: 'message' | 'image-bundle';
-  message: ChatMessage;
-  bundleMessages?: ChatMessage[];
-}
-
-export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] {
-  const items: RenderMessageItem[] = [];
-  let i = 0;
-  while (i < msgs.length) {
-    const cur = msgs[i];
-    if (cur.type !== 'image' || cur.text || !cur.attachment) {
-      items.push({ type: 'message', message: cur });
-      i++;
-      continue;
-    }
-
-    const bundle: ChatMessage[] = [cur];
-    let j = i + 1;
-    while (j < msgs.length) {
-      const next = msgs[j];
-      if (
-        next.type === 'image' &&
-        !next.text &&
-        next.attachment &&
-        next.senderId === cur.senderId &&
-        isSameMinute(cur.at, next.at)
-      ) {
-        bundle.push(next);
-        j++;
-      } else {
-        break;
-      }
-    }
-
-    if (bundle.length >= 2) {
-      items.push({
-        type: 'image-bundle',
-        message: cur,
-        bundleMessages: bundle,
-      });
-      i = j;
-    } else {
-      items.push({ type: 'message', message: cur });
-      i++;
-    }
-  }
-  return items;
-}
 
 // ─────────────────────────────────────────────────────────────
 // Teams 스타일 전달 모달 (데스크톱 웹 메신저 전용)

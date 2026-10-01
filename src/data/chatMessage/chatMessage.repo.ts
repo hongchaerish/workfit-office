@@ -234,7 +234,8 @@ export const chatMessageRepo = {
   /** 특정 방의 메시지를 시간 오름차순으로. */
   async listByRoom(roomId: string): Promise<ChatMessage[]> {
     const rows = await backend.loadAll();
-    return rows.filter((m) => m.roomId === roomId).sort((a, b) => a.at.localeCompare(b.at));
+    // 같은 시각(초 단위)에 저장된 묶음은 id 순서로 — 사진 묶음 순서가 섞이지 않게
+    return rows.filter((m) => m.roomId === roomId).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true }));
   },
 
   /** 방별 미읽음 수(도출) — 내가 보내지 않았고 readBy 에 내가 없는 메시지 수. */
