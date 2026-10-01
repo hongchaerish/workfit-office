@@ -1,7 +1,6 @@
 import type { WorkPlanRequest } from '@/domain/workPlan/workPlanRequest.schema';
 import { notificationRepo } from '@/data/notification/notification.repo';
 import { workPlanRepo } from './workPlan.repo';
-import { syncWorkPlanToCalendar } from '@/domain/workPlan/workPlanCalendarBridge';
 
 const STORAGE_KEY = 'workfit_workplan_requests_v1';
 
@@ -93,25 +92,20 @@ export class WorkPlanRequestRepo {
       const newItemText = `[요청: ${req.requesterName}] ${tagPrefix}${timePrefix}${req.title}${memoSuffix}`;
 
       const targetActor = { userId: req.targetUserId, active: true };
-      let savedPlan;
 
       if (existingPlan) {
         const updatedContent = `${existingPlan.content.trim()}\n${newItemText}`;
-        savedPlan = await workPlanRepo.update(targetActor, existingPlan.id, {
+        await workPlanRepo.update(targetActor, existingPlan.id, {
           date: req.date,
           content: updatedContent,
         });
       } else {
-        savedPlan = await workPlanRepo.create(targetActor, {
+        await workPlanRepo.create(targetActor, {
           date: req.date,
           content: newItemText,
         });
       }
 
-      // 캘린더 동기화
-      if (savedPlan) {
-        await syncWorkPlanToCalendar(targetActor, savedPlan).catch(() => {});
-      }
     } catch (e) {
       console.error('[WorkPlanRequestRepo] 업무계획 반영 실패:', e);
     }

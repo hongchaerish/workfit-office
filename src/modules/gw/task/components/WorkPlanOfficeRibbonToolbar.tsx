@@ -22,8 +22,6 @@ export interface WorkPlanOfficeRibbonToolbarProps {
   actor: User;
   content: string;
   onContentChange: (next: string | ((prev: string) => string)) => void;
-  shareToCalendar?: boolean;
-  onShareToCalendarChange?: (next: boolean) => void;
   todayEvents?: CalendarEvent[];
   isSaving: boolean;
   conflictError: string | null;

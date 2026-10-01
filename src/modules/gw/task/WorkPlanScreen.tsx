@@ -13,7 +13,7 @@ import {
   useRemoveWorkPlan,
   useUpdateWorkPlan,
 } from '@/features/workPlan/useWorkPlans';
-import { syncWorkPlanToCalendar, cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
+import { cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalendarBridge';
 import { toggleWorkPlanItem, getEditableContent, mergeCheckedMeta } from '@/domain/workPlan/engine';
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
@@ -81,7 +81,6 @@ export default function WorkPlanScreen() {
 
   const [editingTarget, setEditingTarget] = useState<{ date: string; plan?: WorkPlan; targetUser?: User } | null>(null);
   const [editingContent, setEditingContent] = useState<string>('');
-  const [shareToCalendar, setShareToCalendar] = useState<boolean>(true);
   const [isSavingPlan, setIsSavingPlan] = useState<boolean>(false);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -369,7 +368,6 @@ function sortWorkPlanUsers(
       date: string,
       content: string,
       existingPlanId?: string,
-      shareToCalendar = true,
       targetUser?: User,
       expectedUpdatedAt?: string,
     ) => {
@@ -384,28 +382,20 @@ function sortWorkPlanUsers(
         return;
       }
 
-      const saved = existingPlanId
-        ? await update.mutateAsync({
+      await (existingPlanId
+        ? update.mutateAsync({
             actor: actorParam,
             id: existingPlanId,
             draft: { date, content },
             expectedUpdatedAt,
           })
-        : await create.mutateAsync({
+        : create.mutateAsync({
             actor: actorParam,
             draft: { date, content, ownerUserId: ownerId },
-          });
-
-      if (saved) {
-        await syncWorkPlanToCalendar(
-          { userId: ownerId, active: true, deptId },
-          saved,
-          shareToCalendar,
-        );
-      }
+          }));
       setNotice('업무계획을 저장했습니다.');
     },
-    [actor, create, update, deptId],
+    [actor, create, update],
   );
 
   const removePlan = useCallback(
@@ -429,7 +419,7 @@ function sortWorkPlanUsers(
       if (!actor || plan.ownerUserId !== actor.id) return;
       const nextContent = toggleWorkPlanItem(plan.content, itemIdx);
       const targetUser = users.find((u) => u.id === plan.ownerUserId);
-      await savePlan(plan.date, nextContent, plan.id, true, targetUser, plan.updatedAt);
+      await savePlan(plan.date, nextContent, plan.id, targetUser, plan.updatedAt);
     },
     [actor?.id, users, savePlan],
   );
@@ -554,8 +544,6 @@ function sortWorkPlanUsers(
           actor={actor}
           content={editingContent}
           onContentChange={setEditingContent}
-          shareToCalendar={shareToCalendar}
-          onShareToCalendarChange={setShareToCalendar}
           todayEvents={editingDateEvents}
           isSaving={isSavingPlan}
           conflictError={conflictError}
@@ -572,7 +560,6 @@ function sortWorkPlanUsers(
                     editingTarget.date,
                     '',
                     undefined,
-                    shareToCalendar,
                     editingTarget.targetUser,
                     undefined,
                   );
@@ -582,7 +569,6 @@ function sortWorkPlanUsers(
                   editingTarget.date,
                   editingContent.trim(),
                   editingTarget.plan?.id,
-                  shareToCalendar,
                   editingTarget.targetUser,
                   forceOverwrite ? undefined : editingTarget.plan?.updatedAt,
                 );
@@ -656,7 +642,6 @@ function sortWorkPlanUsers(
                 currentTarget.date,
                 mergedContent,
                 currentTarget.plan?.id,
-                shareToCalendar,
                 currentTarget.targetUser,
                 currentTarget.plan?.updatedAt,
               );
@@ -689,7 +674,6 @@ function sortWorkPlanUsers(
           setEditingTarget({ date, plan, targetUser: member });
           // __c__: 완료 메타 줄은 textarea에 노출되지 않도록 제거
           setEditingContent(plan ? getEditableContent(plan.content) : '');
-          setShareToCalendar(true);
           setConflictError(null);
         }}
         onOpenConfig={() => setIsConfigOpen(true)}

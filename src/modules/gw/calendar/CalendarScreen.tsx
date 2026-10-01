@@ -30,7 +30,6 @@ import {
   addWorkPlanItem,
   getWorkPlanTagMeta,
 } from '@/domain/workPlan/engine';
-import { syncWorkPlanToCalendar } from '@/domain/workPlan/workPlanCalendarBridge';
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
@@ -391,19 +390,12 @@ function LocalCalendarScreen() {
   const handleToggleTodo = useCallback(async (idx: number) => {
     if (!selectedDayWorkPlan || !actor) return;
     const nextContent = toggleWorkPlanItem(selectedDayWorkPlan.content, idx);
-    const updated = await updateWorkPlan.mutateAsync({
+    await updateWorkPlan.mutateAsync({
       actor: { userId: actor.id, active: actor.status === '사용' },
       id: selectedDayWorkPlan.id,
       draft: { date: selectedDayWorkPlan.date, content: nextContent },
     });
-    if (updated) {
-      await syncWorkPlanToCalendar(
-        { userId: actor.id, active: actor.status === '사용', deptId },
-        updated,
-        true,
-      );
-    }
-  }, [selectedDayWorkPlan, actor, updateWorkPlan, deptId]);
+  }, [selectedDayWorkPlan, actor, updateWorkPlan]);
 
   const [quickTodoText, setQuickTodoText] = useState('');
   const [quickTodoTag, setQuickTodoTag] = useState('');
@@ -412,26 +404,18 @@ function LocalCalendarScreen() {
     const currentContent = selectedDayWorkPlan?.content ?? '';
     const nextContent = addWorkPlanItem(currentContent, quickTodoText.trim(), quickTodoTag || undefined);
     const actorParam = { userId: actor.id, active: actor.status === '사용' };
-    const updated = selectedDayWorkPlan
-      ? await updateWorkPlan.mutateAsync({
+    await (selectedDayWorkPlan
+      ? updateWorkPlan.mutateAsync({
           actor: actorParam,
           id: selectedDayWorkPlan.id,
           draft: { date: selectedDate, content: nextContent },
         })
-      : await createWorkPlan.mutateAsync({
+      : createWorkPlan.mutateAsync({
           actor: actorParam,
           draft: { date: selectedDate, content: nextContent },
-        });
-
-    if (updated) {
-      await syncWorkPlanToCalendar(
-        { userId: actor.id, active: actor.status === '사용', deptId },
-        updated,
-        true,
-      );
-    }
+        }));
     setQuickTodoText('');
-  }, [quickTodoText, quickTodoTag, selectedDayWorkPlan, selectedDate, actor, createWorkPlan, updateWorkPlan, deptId]);
+  }, [quickTodoText, quickTodoTag, selectedDayWorkPlan, selectedDate, actor, createWorkPlan, updateWorkPlan]);
 
   const loading = authLoading || usersQuery.isLoading || eventsQuery.isLoading || myWorkPlansQuery.isLoading;
 
