@@ -25,6 +25,8 @@ import { userRepo } from '@/data/user/user.repo';
 import { departmentRepo } from '@/data/department/department.repo';
 import { absenceRepo } from '@/data/absence/absence.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
+import { approvalPostReadRepo } from '@/data/approvalPostRead/approvalPostRead.repo';
+import { postReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 
 /**
  * 전자결재 문서 Repository — 채번(counters) + **순수 엔진**(domain/approvalDoc/engine)
@@ -471,7 +473,10 @@ export const approvalDocRepo = {
         .sort(byRecent);
     }
 
-    return rows.filter((d) => matchesBox(d, userId, box, userDeptNameOrId)).sort(byRecent);
+    const postReadDocIds = box === '후열'
+      ? postReadDocIdsFor(await approvalPostReadRepo.listByRecipients([userId]).catch(() => []), userId)
+      : undefined;
+    return rows.filter((d) => matchesBox(d, userId, box, userDeptNameOrId, undefined, postReadDocIds)).sort(byRecent);
   },
 
   /** 임시저장 신규 작성 — 채번 + status='임시저장'. */
