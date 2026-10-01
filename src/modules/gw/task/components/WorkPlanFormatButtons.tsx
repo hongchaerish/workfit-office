@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
-import { Bold, Underline, Strikethrough, Highlighter, Palette, ChevronDown } from 'lucide-react';
+import { CheckSquare, Bold, Underline, Strikethrough, Highlighter, Palette, ChevronDown } from 'lucide-react';
 import { WORK_PLAN_COLORS, WORK_PLAN_COLOR_LABELS, type WorkPlanColor } from '@/domain/workPlan/richText';
 
 const COLOR_NAMES = Object.keys(WORK_PLAN_COLORS) as WorkPlanColor[];
 
 /**
- * 리본의 서식 버튼 묶음 — 굵게·밑줄·취소선·형광펜·글자색.
+ * 리본의 서식 버튼 묶음 — 체크박스·굵게·밑줄·취소선·형광펜·글자색.
  * 칸 편집기(`WorkPlanRichEditor`)가 넘겨준 편집기에 명령을 보내고, 커서 위치의 서식을 눌린 상태로 보여 준다.
  * 글자색은 저장 표기(`{red}…{/}`)로 되돌릴 수 있는 정해진 색만 고르게 한다.
  */
@@ -17,6 +17,7 @@ export function WorkPlanFormatButtons({ editor }: { editor: Editor | null }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: ed }) => ({
+      task: ed?.isActive('taskItem') ?? false,
       bold: ed?.isActive('bold') ?? false,
       underline: ed?.isActive('underline') ?? false,
       strike: ed?.isActive('strike') ?? false,
@@ -35,6 +36,8 @@ export function WorkPlanFormatButtons({ editor }: { editor: Editor | null }) {
 
   const disabled = !editor;
   const buttons = [
+    // 현재 줄(여러 줄 선택 시 선택한 줄 전부)을 체크박스 ↔ 일반 줄로 전환
+    { key: 'task', label: '체크박스 (Ctrl+Shift+9)', icon: CheckSquare, active: state?.task, run: () => editor?.chain().focus().toggleTaskList().run() },
     { key: 'bold', label: '굵게 (Ctrl+B)', icon: Bold, active: state?.bold, run: () => editor?.chain().focus().toggleBold().run() },
     { key: 'underline', label: '밑줄 (Ctrl+U)', icon: Underline, active: state?.underline, run: () => editor?.chain().focus().toggleUnderline().run() },
     { key: 'strike', label: '취소선 (Ctrl+Shift+S)', icon: Strikethrough, active: state?.strike, run: () => editor?.chain().focus().toggleStrike().run() },

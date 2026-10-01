@@ -14,13 +14,37 @@ import { contentToEditorDoc, editorDocToContent } from '@/domain/workPlan/richTe
  * 줄 안 줄바꿈(Shift+Enter)은 끈다 — 텍스트로 되돌릴 방법이 없어서다.
  */
 
-/** 줄 맨 앞에 `- `를 치면 할 일 항목이 된다. 예전 텍스트 입력 습관(`- 할 일`)을 그대로 살린다. */
+/**
+ * 할 일 항목.
+ * - 줄 맨 앞에 `- `를 치면 할 일이 된다. 저장 형식에서 `-`로 시작하는 줄은 어차피 할 일로
+ *   읽히므로, 편집 중 모습과 저장 후 모습을 맞추려고 남겨 둔다.
+ * - 체크박스를 빼는 키는 "항목을 목록 밖 일반 줄로 꺼내기"로 통일한다. 기본 동작은 Backspace가
+ *   윗 항목과 합쳐 버려서 체크박스 없이 들여쓰기만 남은 줄이 생겼다.
+ */
 const WorkPlanTaskItem = TaskItem.extend({
   addInputRules() {
     return [
       ...(this.parent?.() ?? []),
       wrappingInputRule({ find: /^\s*([-*])\s$/, type: this.type, getAttributes: () => ({ checked: false }) }),
     ];
+  },
+  addKeyboardShortcuts() {
+    const cursorAtItemStart = () => {
+      const { empty, $from } = this.editor.state.selection;
+      return empty && $from.parentOffset === 0 && $from.node(-1)?.type === this.type;
+    };
+    return {
+      ...this.parent?.(),
+      // 빈 할 일에서 Enter → 목록을 끝내고 일반 줄로. 내용이 있으면 다음 할 일을 이어 만든다.
+      Enter: () => {
+        if (cursorAtItemStart() && this.editor.state.selection.$from.parent.content.size === 0) {
+          return this.editor.commands.liftListItem(this.name);
+        }
+        return this.editor.commands.splitListItem(this.name);
+      },
+      // 할 일 맨 앞에서 Backspace → 체크박스만 빼고 글자는 들여쓰기 없는 일반 줄로 남긴다.
+      Backspace: () => (cursorAtItemStart() ? this.editor.commands.liftListItem(this.name) : false),
+    };
   },
 }).configure({ nested: false });
 

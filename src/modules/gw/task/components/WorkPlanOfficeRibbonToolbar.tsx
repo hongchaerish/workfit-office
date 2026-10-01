@@ -6,7 +6,6 @@ import { WorkPlanConfigModal } from './WorkPlanConfigModal';
 import { WorkPlanFormatButtons } from './WorkPlanFormatButtons';
 import type { Editor } from '@tiptap/react';
 import {
-  CheckSquare,
   Sparkles,
   Trash2,
   ChevronDown,
@@ -65,15 +64,6 @@ export function WorkPlanOfficeRibbonToolbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // [📋 - 체크박스 할 일 추가]
-  const handleAddTodoItem = () => {
-    onContentChange((prev) => {
-      const trimmed = prev.trimEnd();
-      const newLine = '- ';
-      return trimmed ? `${trimmed}\n${newLine}` : newLine;
-    });
-  };
-
   // [✨ 루틴 템플릿 적용]
   const handleApplyTemplate = (tplContent: string) => {
     const cleanContent = stripMarkdownAndTags(tplContent);
@@ -114,19 +104,8 @@ export function WorkPlanOfficeRibbonToolbar({
 
           <div className="h-4 w-px bg-border mx-0.5" />
 
-          {/* 0) 서식: 굵게·밑줄·취소선·형광펜·글자색 */}
+          {/* 1) 서식: 체크박스·굵게·밑줄·취소선·형광펜·글자색 */}
           <WorkPlanFormatButtons editor={editor} />
-
-          {/* 1) 📋 - 체크박스 할 일 삽입 버튼 */}
-          <button
-            type="button"
-            onClick={handleAddTodoItem}
-            className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-panel px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft/30 transition-all cursor-pointer shadow-2xs"
-            title="칸 안에 '- 체크박스 할 일' 항목을 삽입합니다."
-          >
-            <CheckSquare size={12} className="text-teal" />
-            <span>- 체크박스 할 일 추가</span>
-          </button>
 
           {/* 2) ✨ 자주 쓰는 루틴 템플릿 드롭다운 */}
           <div className="relative" ref={templateMenuRef}>
