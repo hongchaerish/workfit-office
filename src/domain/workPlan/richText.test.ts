@@ -120,3 +120,31 @@ test('글자 그대로 입력한 서식 기호는 저장 후에도 글자로 남
 test('역슬래시 이스케이프: 서식 기호 앞 역슬래시는 글자로 읽고, 그 외 역슬래시는 그대로 둔다', () => {
   assert.deepEqual(parseInlineMarks('\\*\\*굵게 아님\\*\\* C:\\temp'), [{ text: '**굵게 아님** C:\\temp', marks: {} }]);
 });
+
+test('editorDocToContent: -·*·[ ] 로 시작하는 일반 문단은 역슬래시를 붙여 일반 줄로 저장', () => {
+  const doc: EditorNode = {
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [text('- 일반 줄')] },
+      { type: 'paragraph', content: [text('  * 별표')] },
+      { type: 'paragraph', content: [text('[ ] 대괄호')] },
+      { type: 'paragraph', content: [text('[회의] 태그는 그대로')] },
+    ],
+  };
+  assert.equal(editorDocToContent(doc), '\\- 일반 줄\n\\  * 별표\n\\[ ] 대괄호\n[회의] 태그는 그대로');
+});
+
+test('contentToEditorDoc: 역슬래시로 시작하는 줄은 역슬래시를 떼고 일반 문단으로', () => {
+  assert.deepEqual(contentToEditorDoc('\\- 일반 줄'), {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [text('- 일반 줄')] }],
+  });
+  const src = '\\- 일반 줄\n- [ ] 할 일\n\\[ ] 글';
+  assert.equal(editorDocToContent(contentToEditorDoc(src)), src);
+});
+
+test('줄 맨 앞의 글자 그대로 ** 도 일반 줄로 왕복한다', () => {
+  const doc: EditorNode = { type: 'doc', content: [{ type: 'paragraph', content: [text('**굵게 아님')] }] };
+  const stored = editorDocToContent(doc);
+  assert.deepEqual(contentToEditorDoc(stored), doc);
+});

@@ -179,6 +179,10 @@ function paragraph(text: string): EditorNode {
 }
 
 const CHECKBOX_LINE = /^([-*]\s*)?\[([ xX])\]\s*(.*)$/;
+/** 할 일 표기처럼 보이는 일반 줄의 시작(`-`·`*`·`[ ]`). 저장할 때 앞에 역슬래시를 붙인다. */
+const LOOKS_LIKE_TASK = /^\s*(?:[-*]|\[[ xX]\])/;
+/** 그렇게 붙인 역슬래시 — 편집기로 읽어 들일 때 뗀다. */
+const PLAIN_LINE_ESCAPE = /^(\s*)\\(?=\s*(?:[-*]|\[[ xX]\]))/;
 const HYPHEN_LINE = /^[-*]\s*(.*)$/;
 
 /** 저장된 업무계획 본문 → 편집기 문서. 체크 상태는 `- [x]`와 체크 메타 양쪽에서 읽는다. */
@@ -204,7 +208,7 @@ export function contentToEditorDoc(content: string): EditorNode {
       return;
     }
     taskList = null;
-    blocks.push(paragraph(line));
+    blocks.push(paragraph(line.replace(PLAIN_LINE_ESCAPE, '$1')));
   });
 
   return { type: 'doc', content: blocks };
@@ -247,7 +251,9 @@ export function editorDocToContent(doc: EditorNode): string {
         lines.push(`- [${item.attrs?.checked ? 'x' : ' '}]${text ? ` ${text}` : ''}`);
       }
     } else {
-      lines.push(inlineText(block));
+      // '-'로 시작하는 일반 줄이 다시 읽을 때 할 일이 되지 않게 역슬래시를 붙인다.
+      const line = inlineText(block);
+      lines.push(LOOKS_LIKE_TASK.test(line) ? `\\${line}` : line);
     }
   }
   return lines.join('\n');

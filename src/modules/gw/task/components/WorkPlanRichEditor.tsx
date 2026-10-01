@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { EditorContent, useEditor, wrappingInputRule, type Editor } from '@tiptap/react';
+import { EditorContent, Extension, useEditor, type Editor } from '@tiptap/react';
+import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Highlight from '@tiptap/extension-highlight';
@@ -16,17 +17,14 @@ import { contentToEditorDoc, editorDocToContent } from '@/domain/workPlan/richTe
 
 /**
  * 할 일 항목.
- * - 줄 맨 앞에 `- `를 치면 할 일이 된다. 저장 형식에서 `-`로 시작하는 줄은 어차피 할 일로
- *   읽히므로, 편집 중 모습과 저장 후 모습을 맞추려고 남겨 둔다.
+ * - 체크박스는 리본 버튼·Ctrl+Shift+9로만 만든다. `- `·`[ ] ` 입력 자동 전환은 끈다 —
+ *   '-'로 시작하는 메모 줄을 쓰려다 체크박스가 되는 일이 없게.
  * - 체크박스를 빼는 키는 "항목을 목록 밖 일반 줄로 꺼내기"로 통일한다. 기본 동작은 Backspace가
  *   윗 항목과 합쳐 버려서 체크박스 없이 들여쓰기만 남은 줄이 생겼다.
  */
 const WorkPlanTaskItem = TaskItem.extend({
   addInputRules() {
-    return [
-      ...(this.parent?.() ?? []),
-      wrappingInputRule({ find: /^\s*([-*])\s$/, type: this.type, getAttributes: () => ({ checked: false }) }),
-    ];
+    return [];
   },
   addKeyboardShortcuts() {
     const cursorAtItemStart = () => {
@@ -48,6 +46,40 @@ const WorkPlanTaskItem = TaskItem.extend({
   },
 }).configure({ nested: false });
 
+/**
+ * 체크박스 목록 바로 아래 일반 줄 맨 앞에서 Backspace → 윗줄(마지막 할 일) 끝으로 합친다. 빈 줄이면 지우기만.
+ * 기본 동작은 이 줄을 윗 목록에 다시 감싸 체크박스를 되살렸다.
+ */
+const BackspaceIntoTaskAbove = Extension.create({
+  name: 'workPlanBackspaceIntoTaskAbove',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Backspace: ({ editor }) => {
+        const { empty, $from } = editor.state.selection;
+        if (!empty || $from.parentOffset !== 0 || $from.depth !== 1 || $from.parent.type.name !== 'paragraph') return false;
+        const index = $from.index(0);
+        if (index === 0 || editor.state.doc.child(index - 1).type.name !== 'taskList') return false;
+
+        const paraStart = $from.before(1);
+        // 목록 끝(paraStart) ← 할 일 끝 ← 문단 끝 ← 문단 내용 끝: 세 칸 앞이 마지막 할 일의 글 끝
+        const joinPos = paraStart - 3;
+        return editor
+          .chain()
+          .command(({ tr }) => {
+            const para = tr.doc.nodeAt(paraStart);
+            if (!para) return false;
+            tr.delete(paraStart, paraStart + para.nodeSize);
+            tr.insert(joinPos, para.content);
+            tr.setSelection(TextSelection.create(tr.doc, joinPos));
+            return true;
+          })
+          .run();
+      },
+    };
+  },
+});
+
 const EXTENSIONS = [
   StarterKit.configure({
     heading: false,
@@ -66,6 +98,7 @@ const EXTENSIONS = [
   }),
   TaskList,
   WorkPlanTaskItem,
+  BackspaceIntoTaskAbove,
   Highlight,
   TextStyle,
   Color,

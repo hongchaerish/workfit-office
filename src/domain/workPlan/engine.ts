@@ -142,6 +142,19 @@ export function parseWorkPlanItems(content: string): WorkPlanItem[] {
       };
     }
 
+    // 0. 역슬래시로 시작하는 줄은 '-'·'*'·'[ ]'로 시작해도 일반 줄이다.
+    //    편집기에서 쓴 일반 줄이 다시 읽을 때 할 일로 바뀌지 않도록 저장 시 붙인다(richText.editorDocToContent).
+    //    역슬래시 하나만 떼고 나머지는 그대로 둔다 — 줄 안 서식 이스케이프(\*\*)는 렌더링에서 푼다.
+    if (/^\\\s*(?:[-*]|\[[ xX]\])/.test(trimmed)) {
+      return {
+        id: `item-${lineIdx}`,
+        raw: line,
+        text: trimmed.slice(1).trim(),
+        completed: false,
+        isChecklist: false,
+      };
+    }
+
     // 1. 명시적 마크다운 체크박스 문법 감지 (- [ ] / - [x] / [ ] / [x])
     const checkMatch = trimmed.match(/^([-*]\s*)?\[([ xX])\]\s*(.*)$/);
     if (checkMatch) {
