@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, Paperclip, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
+import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useChatThread, useSendMessage, useSendAttachment, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
@@ -403,6 +403,18 @@ function MessengerThread({
   }, [messages]);
 
   const [showMemberList, setShowMemberList] = useState(false);
+  const kick = useKickMember();
+  /** 단체방(그룹)에서만 내보내기 — 부서방은 인사 정보로 참여자가 자동 동기화되어 내보내도 되돌아온다. */
+  const canKick = room.type === 'group';
+  const onKick = async (targetId: string, targetName: string) => {
+    if (kick.isPending) return;
+    if (!window.confirm(`${targetName}님을 이 대화방에서 내보내시겠어요?\n대화 내용은 보존됩니다.`)) return;
+    try {
+      await kick.mutateAsync({ roomId: room.id, targetId, targetName, kickerName: meName });
+    } catch {
+      window.alert('내보내는 중 오류가 발생했습니다.');
+    }
+  };
   const memberDetails = useMemo(() => {
     return room.members
       .map((mId) => users.find((u) => u.id === mId))
@@ -780,9 +792,22 @@ function MessengerThread({
                     <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
                     <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
                   </div>
-                  {p && (
-                    <PresenceBadge presence={p} showMessage={true} size="xs" />
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {p && (
+                      <PresenceBadge presence={p} showMessage={true} size="xs" />
+                    )}
+                    {canKick && m.id !== me && (
+                      <button
+                        type="button"
+                        onClick={() => onKick(m.id, m.name)}
+                        disabled={kick.isPending}
+                        title={`${m.name}님 내보내기`}
+                        className="cursor-pointer rounded-md border border-danger/30 px-1.5 py-0.5 text-[10px] font-bold text-danger hover:bg-danger/10 disabled:cursor-default disabled:opacity-50"
+                      >
+                        내보내기
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

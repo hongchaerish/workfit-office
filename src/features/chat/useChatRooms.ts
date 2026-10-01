@@ -117,6 +117,39 @@ export function useLeaveRoom() {
 }
 
 /**
+ * 단체방 내보내기 — 참여자 누구나 다른 참여자를 내보낼 수 있다.
+ * 초대·이름 변경과 같이 "○○님이 △△님을 내보냈습니다" 시스템 메시지를 남긴다. 대화는 보존.
+ */
+export function useKickMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roomId, targetId, targetName, kickerName }: { roomId: string; targetId: string; targetName: string; kickerName: string }) => {
+      await chatMessageRepo.append({
+        id: `${roomId}-sys-${Date.now()}`,
+        roomId,
+        senderId: '',
+        senderName: '',
+        text: `${kickerName}님이 ${targetName}님을 내보냈습니다`,
+        type: 'system',
+        attachment: null,
+        replyTo: null,
+        approvalPayload: null,
+        at: nowLocalIso(),
+        readBy: [],
+        isEdited: false,
+        reactions: {},
+      });
+      await chatRoomRepo.leave(roomId, targetId);
+    },
+    onSuccess: (_data, { roomId }) => {
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
+      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
+    },
+  });
+}
+
+/**
  * 방 삭제(소프트/아카이브) — 관리자 전용. 목록에서 숨기되 대화(chatMessages)는 보존.
  * 삭제 이력을 보존 로그에 남기도록 시스템 메시지도 추가(어드민 감사용).
  */
