@@ -19,6 +19,14 @@ import {
   useAllApprovals,
 } from '@/features/gw/useApprovals';
 import {
+  useReceivedPostReads,
+  useDocPostReads,
+  useSharePostRead,
+  useAutoMarkPostRead,
+  useLegacyPostReadImport,
+} from '@/features/gw/usePostReadShares';
+import { postReadDocIdsFor, unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
+import {
   activeSteps,
   currentApproverIds,
   getPredecessorsOf,
@@ -84,6 +92,13 @@ export default function ApprovalScreen() {
   const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
 
   const preds = useMemo(() => getPredecessorsOf(me), [me]);
+
+  // 후열(공람) 전달 — 본인 + 전임자 앞 전달을 한 번에 읽어 사용자별로 나눠 쓴다.
+  const { isOperator: isOp, isAdmin: isAdm } = usePermission();
+  useLegacyPostReadImport(me, isOp || isAdm);
+  const { data: recvPostReads = [] } = useReceivedPostReads([me, ...preds]);
+  const postReadIdsOf = (uid: string) => postReadDocIdsFor(recvPostReads, uid);
+  const myUnreadPostReadIds = useMemo(() => unreadPostReadDocIdsFor(recvPostReads, me), [recvPostReads, me]);
 
   const activePendingCount = useMemo(() => {
     const list = byBox['대기'] ?? [];
@@ -254,7 +269,7 @@ export default function ApprovalScreen() {
     // 1. 본인의 기본 문서 목록
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-    let combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId));
+    let combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
 
     // 2. 전임자들의 문서 목록을 가져와 병합
     preds.forEach((predId) => {
@@ -263,7 +278,7 @@ export default function ApprovalScreen() {
       const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
       const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
 
-      const predDocs = allDocs.filter((d) => matchesBox(d, predId, box as ApprovalBox, predDeptNameOrId));
+      const predDocs = allDocs.filter((d) => matchesBox(d, predId, box as ApprovalBox, predDeptNameOrId, undefined, postReadIdsOf(predId)));
       combined = [...combined, ...predDocs];
     });
 
@@ -271,7 +286,7 @@ export default function ApprovalScreen() {
     const uniqueMap = new Map<string, ApprovalDoc>();
     combined.forEach((d) => uniqueMap.set(d.id, d));
     return Array.from(uniqueMap.values()).sort(byRecent);
-  }, [box, allDocs, me, preds, org, userObj, users]);
+  }, [box, allDocs, me, preds, org, userObj, users, recvPostReads]);
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
@@ -610,7 +625,7 @@ export default function ApprovalScreen() {
                   const label = bInfo.label;
 
                   const unconfirmedPostReadCount = (byBox['후열'] ?? []).filter(
-                    (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt)
+                    (d) => d.steps.some((s) => s.delegatedFromId === me && !s.postReadAt) || myUnreadPostReadIds.has(d.id)
                   ).length;
 
                   // 배지 개수 산출
@@ -635,14 +650,14 @@ export default function ApprovalScreen() {
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-                    let combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId));
+                    let combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
 
                     preds.forEach((predId) => {
                       const predUser = org.userById(predId) || users.find((u) => u.id === predId);
                       if (!predUser) return;
                       const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
                       const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
-                      const predDocs = allDocs.filter((d) => matchesBox(d, predId, b as ApprovalBox, predDeptNameOrId));
+                      const predDocs = allDocs.filter((d) => matchesBox(d, predId, b as ApprovalBox, predDeptNameOrId, undefined, postReadIdsOf(predId)));
                       combined = [...combined, ...predDocs];
                     });
 
@@ -1255,22 +1270,12 @@ function DocDetail({
   const [showForwardPostReadModal, setShowForwardPostReadModal] = useState(false);
   const [forwardTargetUserId, setForwardTargetUserId] = useState('');
   const [forwardMemo, setForwardMemo] = useState('');
-  const postReadStorageKey = `workfit_post_read_shares_${me || 'guest'}`;
-  const [postReadShareList, setPostReadShareList] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem(postReadStorageKey) || localStorage.getItem('workfit_post_read_shares');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // 전달 기록은 DB(approvalPostReadShares)에 둔다 — 수신자·다른 PC에서도 같은 이력이 보인다.
+  const { data: docShares = [] } = useDocPostReads(doc.id);
+  const sharePostReadM = useSharePostRead();
+  useAutoMarkPostRead(doc.id, me);
 
-  const docShares = useMemo(
-    () => postReadShareList.filter((s) => s.docId === doc.id),
-    [postReadShareList, doc.id],
-  );
-
-  const handleSendPostRead = () => {
+  const handleSendPostRead = async () => {
     if (!canForwardPostRead) {
       alert('후열 전달 기능은 시스템관리자(operator)만 사용할 수 있습니다.');
       return;
@@ -1280,33 +1285,28 @@ function DocDetail({
       return;
     }
     const targetUser = org.userById(forwardTargetUserId) || users.find((u) => u.id === forwardTargetUserId);
-    const newShare = {
-      id: `prs-${Date.now()}`,
-      docId: doc.id,
-      docNo: doc.docNo,
-      docTitle: doc.title,
-      fromUserId: me,
-      fromUserName: org.userById(me)?.name || '기안자',
-      toUserId: forwardTargetUserId,
-      toUserName: targetUser?.name || forwardTargetUserId,
-      toUserDept: targetUser?.dept || '',
-      memo: forwardMemo.trim(),
-      sentAt: new Date().toISOString(),
-      isRead: false,
-    };
-
-    const updated = [newShare, ...postReadShareList];
-    setPostReadShareList(updated);
     try {
-      localStorage.setItem(postReadStorageKey, JSON.stringify(updated));
-    } catch {
-      // ignore
+      const { notified } = await sharePostReadM.mutateAsync({
+        doc: { id: doc.id, docNo: doc.docNo, title: doc.title },
+        fromUserId: me,
+        fromUserName: org.userById(me)?.name || '관리자',
+        toUserId: forwardTargetUserId,
+        toUserName: targetUser?.name || forwardTargetUserId,
+        toUserDept: targetUser?.dept || '',
+        memo: forwardMemo,
+      });
+      alert(
+        notified
+          ? `${targetUser?.name || '해당 사용자'} 님에게 후열(공람) 문서로 전달되었습니다.`
+          : `${targetUser?.name || '해당 사용자'} 님에게 전달은 완료되었으나 알림 발송에 실패했습니다.`,
+      );
+      setShowForwardPostReadModal(false);
+      setForwardTargetUserId('');
+      setForwardMemo('');
+    } catch (e) {
+      // 모달과 입력값을 그대로 두어 다시 시도할 수 있게 한다.
+      alert(`후열 전달에 실패했습니다: ${e instanceof Error ? e.message : String(e)}`);
     }
-
-    alert(`${targetUser?.name || '해당 사용자'} 님에게 후열(공람) 문서로 성공적으로 전달되었습니다.`);
-    setShowForwardPostReadModal(false);
-    setForwardTargetUserId('');
-    setForwardMemo('');
   };
 
 
@@ -1718,6 +1718,12 @@ function DocDetail({
                     <span>전달자: {share.fromUserName}</span>
                     <span>·</span>
                     <span className="font-mono">{share.sentAt?.slice(0, 16).replace('T', ' ')}</span>
+                    <span>·</span>
+                    {share.readAt ? (
+                      <span className="font-semibold text-teal">확인함 ({share.readAt.slice(0, 16).replace('T', ' ')})</span>
+                    ) : (
+                      <span className="font-semibold text-amber-600">미확인</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1934,6 +1940,9 @@ function DocDetail({
                       </option>
                     ))}
                 </select>
+                {forwardTargetUserId && docShares.some((s) => s.toUserId === forwardTargetUserId && !s.readAt) && (
+                  <p className="mt-1.5 text-[11px] font-semibold text-amber-600">이미 전달되어 아직 확인하지 않은 사용자입니다. 다시 전달하면 알림이 한 번 더 갑니다.</p>
+                )}
               </div>
 
               <div>
@@ -1958,7 +1967,8 @@ function DocDetail({
                 <button
                   type="button"
                   onClick={handleSendPostRead}
-                  className="rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90"
+                  disabled={sharePostReadM.isPending}
+                  className="rounded-xl bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90 disabled:opacity-50"
                 >
                   후열 전달하기
                 </button>
