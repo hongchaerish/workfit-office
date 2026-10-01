@@ -6,6 +6,7 @@ import {
   parseInlineMarks,
   serializeInlineSegments,
   stripInlineMarks,
+  toEditableText,
   type EditorNode,
 } from './richText';
 
@@ -102,4 +103,20 @@ test('editorDocToContent: 할 일·문단·서식·글자색을 줄 텍스트로
 test('왕복 변환: 텍스트 → 편집기 → 텍스트가 같은 내용을 낸다', () => {
   const src = '[보고] **실적** 정리\n- [ ] {blue}거래처{/} 방문\n- [x] ~~견적서~~ 발송\n\n메모';
   assert.equal(editorDocToContent(contentToEditorDoc(src)), src);
+});
+
+test('toEditableText: 체크 메타를 - [x] 표기로 풀고 메타 줄은 없앤다', () => {
+  assert.equal(toEditableText('- 첫째\n- 둘째\n메모\n__c__:1'), '- [ ] 첫째\n- [x] 둘째\n메모');
+  assert.equal(toEditableText(toEditableText('- [x] **완료**')), '- [x] **완료**');
+});
+
+test('글자 그대로 입력한 서식 기호는 저장 후에도 글자로 남는다', () => {
+  const literal = [{ text: 'C++ and C++ / a==b / 2**3**4 / {red}x{/} / 경로 C:\\temp\\', marks: {} }];
+  const stored = serializeInlineSegments(literal);
+  assert.deepEqual(parseInlineMarks(stored), literal);
+  assert.equal(stripInlineMarks(stored), literal[0].text);
+});
+
+test('역슬래시 이스케이프: 서식 기호 앞 역슬래시는 글자로 읽고, 그 외 역슬래시는 그대로 둔다', () => {
+  assert.deepEqual(parseInlineMarks('\\*\\*굵게 아님\\*\\* C:\\temp'), [{ text: '**굵게 아님** C:\\temp', marks: {} }]);
 });

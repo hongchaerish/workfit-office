@@ -10,6 +10,7 @@ import { getEditableContent, parseWorkPlanItems } from './engine';
  *   굵게 `**글**` · 밑줄 `++글++` · 취소선 `~~글~~` · 형광펜 `==글==` · 글자색 `{red}글{/}`
  *
  * 닫히지 않은 표기나 모르는 색 이름은 글자 그대로 둔다 — "2**3" 같은 평범한 글이 깨지지 않게.
+ * 편집기에서 글자로 친 표기("C++ and C++")는 저장할 때 역슬래시로 이스케이프한다(`C\+\+`).
  */
 
 export const WORK_PLAN_COLORS = {
@@ -50,8 +51,11 @@ const TOGGLE_TOKENS: Array<[string, ToggleMark]> = [
   ['~~', 'strike'],
   ['==', 'highlight'],
 ];
+const COLOR_TOKEN_START = new RegExp(`\\{(?=(?:${Object.keys(WORK_PLAN_COLORS).join('|')}|/)\\})`, 'g');
 const COLOR_OPEN = new RegExp(`^\\{(${Object.keys(WORK_PLAN_COLORS).join('|')})\\}`);
 const COLOR_CLOSE = '{/}';
+/** 역슬래시로 이스케이프할 수 있는 글자. 그 밖의 역슬래시(C:	emp)는 글자 그대로다. */
+const ESCAPABLE = '\\*+~={';
 
 function sameMarks(a: InlineMarks, b: InlineMarks): boolean {
   return a.bold === b.bold && a.underline === b.underline && a.strike === b.strike
@@ -74,6 +78,11 @@ function parseInto(src: string, marks: InlineMarks, out: InlineSegment[]): void 
   };
 
   while (i < src.length) {
+    if (src[i] === '\\' && i + 1 < src.length && ESCAPABLE.includes(src[i + 1])) {
+      plain += src[i + 1];
+      i += 2;
+      continue;
+    }
     let matched = false;
 
     for (const [token, mark] of TOGGLE_TOKENS) {
@@ -113,11 +122,19 @@ export function parseInlineMarks(text: string): InlineSegment[] {
   return out;
 }
 
+/** 글자로 쓴 표기 기호가 다시 읽을 때 서식으로 둔갑하지 않게 이스케이프한다. */
+function escapeLiteral(text: string): string {
+  return text
+    .replace(/\\(?=[\\*+~={]|$)/g, '\\\\')
+    .replace(/\*\*|\+\+|~~|==/g, (m) => `\\${m[0]}\\${m[1]}`)
+    .replace(COLOR_TOKEN_START, '\\{');
+}
+
 /** 서식 구간을 표기로 되돌린다. 바깥부터 글자색 → 형광펜 → 굵게 → 밑줄 → 취소선. */
 export function serializeInlineSegments(segments: InlineSegment[]): string {
   return segments
     .map(({ text, marks }) => {
-      let s = text;
+      let s = escapeLiteral(text);
       if (marks.strike) s = `~~${s}~~`;
       if (marks.underline) s = `++${s}++`;
       if (marks.bold) s = `**${s}**`;
@@ -234,4 +251,12 @@ export function editorDocToContent(doc: EditorNode): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * 편집을 시작할 때 쓰는 본문 — 체크 메타(`__c__`)로만 기록된 완료 상태를 `- [x]` 표기로 풀어 둔다.
+ * 편집기는 이 형태를 그대로 내보내므로, 아무것도 안 고친 채 닫았는지 비교할 기준도 된다.
+ */
+export function toEditableText(content: string): string {
+  return editorDocToContent(contentToEditorDoc(content));
 }
