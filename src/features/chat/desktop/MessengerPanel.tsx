@@ -1333,7 +1333,7 @@ function ImageBundleBubble({
        return (
          <div className="grid grid-cols-2 gap-1 w-52 h-28 overflow-hidden rounded-xl border border-border">
            {attachments.map((att, i) => (
-             <button key={i} onClick={() => onOpenImage(att, attachments)} className="w-full h-full overflow-hidden block">
+             <button key={i} onClick={() => onOpenImage(att, attachments)} className="w-full h-full overflow-hidden block cursor-zoom-in">
                <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
              </button>
            ))}
@@ -1344,14 +1344,14 @@ function ImageBundleBubble({
      if (len === 3) {
        return (
          <div className="flex gap-1 w-64 h-40 overflow-hidden rounded-xl border border-border">
-           <button onClick={() => onOpenImage(attachments[0], attachments)} className="flex-1 h-full overflow-hidden block">
+           <button onClick={() => onOpenImage(attachments[0], attachments)} className="flex-1 h-full overflow-hidden block cursor-zoom-in">
              <img src={attachments[0].url} alt={attachments[0].name} className="w-full h-full object-cover" />
            </button>
            <div className="flex flex-col gap-1 w-[38%] h-full">
-             <button onClick={() => onOpenImage(attachments[1], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+             <button onClick={() => onOpenImage(attachments[1], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block cursor-zoom-in">
                <img src={attachments[1].url} alt={attachments[1].name} className="w-full h-full object-cover" />
              </button>
-             <button onClick={() => onOpenImage(attachments[2], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block">
+             <button onClick={() => onOpenImage(attachments[2], attachments)} className="w-full h-[calc(50%-2px)] overflow-hidden block cursor-zoom-in">
                <img src={attachments[2].url} alt={attachments[2].name} className="w-full h-full object-cover" />
              </button>
            </div>
@@ -1370,7 +1370,7 @@ function ImageBundleBubble({
              <button
                key={i}
                onClick={() => onOpenImage(att, attachments)}
-               className="relative w-full h-full overflow-hidden block"
+               className="relative w-full h-full overflow-hidden block cursor-zoom-in"
              >
                <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
                {isLast && (
@@ -1578,7 +1578,7 @@ function MessageBubble({
   } else if (m.type === 'image' && att) {
     body = (
       <div className="flex flex-col gap-1.5" onContextMenu={onContextMenu}>
-        <button onClick={() => onOpenImage(att, [att])} title="크게 보기" className="block overflow-hidden rounded-xl border border-border">
+        <button onClick={() => onOpenImage(att, [att])} title="크게 보기" className="block cursor-zoom-in overflow-hidden rounded-xl border border-border">
           <img src={att.url} alt={att.name} className="max-h-52 w-auto max-w-full object-cover" />
         </button>
         {m.text && (
@@ -1597,9 +1597,9 @@ function MessageBubble({
         <button
           type="button"
           onClick={() => downloadAttachment(att)}
-          title="다운로드"
+          title={`${att.name} 다운로드`}
           style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-          className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+          className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] transition-[filter] hover:brightness-95 select-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         >
           <span className="text-[18px]">📄</span>
           <span className="min-w-0">
@@ -1830,7 +1830,7 @@ function ImageViewer({
           type="button"
           onClick={() => downloadAttachment(att)}
           title="다운로드"
-          className="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-[15px] hover:bg-white/25"
+          className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-white/15 text-[15px] hover:bg-white/25"
         >
           ⤓
         </button>
