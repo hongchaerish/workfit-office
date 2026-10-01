@@ -268,3 +268,13 @@ body {
 .workplan-rich-editor strong {
   font-weight: 700;
 }
+
+/* 메신저 — 답장 인용 클릭 시 원본 메시지 잠깐 강조 */
+@keyframes chat-jump-flash {
+  0%, 60% { background-color: rgb(78 168 222 / 0.22); }
+  100% { background-color: transparent; }
+}
+.chat-jump-highlight {
+  border-radius: 0.75rem;
+  animation: chat-jump-flash 1.8s ease-out;
+}

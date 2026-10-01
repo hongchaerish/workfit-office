@@ -386,6 +386,20 @@ function MessengerThread({
 
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  /** 답장 인용을 누르면 원본 메시지로 이동해 잠깐 강조한다. 사진 묶음 속 메시지도 묶음 위치로 찾는다. */
+  const jumpToMessage = useCallback((messageId: string) => {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-msg-ids~="${CSS.escape(messageId)}"]`);
+    if (!el) {
+      window.alert(searchQuery ? '원본 메시지가 검색 결과에 없습니다. 검색어를 지우고 다시 눌러 주세요.' : '원본 메시지를 찾을 수 없습니다.');
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('chat-jump-highlight');
+    void el.offsetWidth; // 같은 메시지를 연달아 눌러도 강조 애니메이션이 다시 돌게
+    el.classList.add('chat-jump-highlight');
+    window.setTimeout(() => el.classList.remove('chat-jump-highlight'), 1800);
+  }, [searchQuery]);
+
   const [currentSearchIdx, setCurrentSearchIdx] = useState(0);
   const [showFileBox, setShowFileBox] = useState(false);
 
@@ -895,7 +909,7 @@ function MessengerThread({
           };
 
           return (
-            <div key={m.id} id={`msg-${m.id}`} className="space-y-2.5">
+            <div key={m.id} id={`msg-${m.id}`} data-msg-ids={(item.bundleMessages ?? [m]).map((x) => x.id).join(' ')} className="space-y-2.5">
               {showDateDivider && (
                 <div className="my-3 flex justify-center">
                   <span className="rounded-full bg-panel-alt px-3.5 py-1 text-[10px] font-extrabold text-ink3 tracking-wider shadow-3xs border border-border/40 select-none">
@@ -932,6 +946,7 @@ function MessengerThread({
                     roomMembers={room.members}
                     onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
                     onReply={setReplyTo}
+                    onJumpToMessage={jumpToMessage}
                     onToggleEmoji={handleToggleEmoji}
                     showTime={showTime}
                     onContextMenu={(e) => {
@@ -950,6 +965,7 @@ function MessengerThread({
                     roomMembers={room.members}
                     onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
                     onReply={setReplyTo}
+                    onJumpToMessage={jumpToMessage}
                     isEditing={editingMsgId === m.id}
                     onStartEdit={() => setEditingMsgId(m.id)}
                     onCancelEdit={() => setEditingMsgId(null)}
@@ -1278,6 +1294,7 @@ function ImageBundleBubble({
   roomMembers,
   onOpenImage,
   onReply,
+  onJumpToMessage,
   onContextMenu,
   onToggleEmoji,
   showTime = true,
@@ -1288,6 +1305,8 @@ function ImageBundleBubble({
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   onReply: (m: ChatMessage) => void;
+  /** 답장 인용 클릭 → 원본 메시지로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
   showTime?: boolean;
@@ -1391,10 +1410,18 @@ function ImageBundleBubble({
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
-            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full cursor-pointer rounded-md border-l-2 px-2 py-1 text-left transition-[filter] hover:brightness-95 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}
+            >
               <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
               <div className="truncate text-[10.5px] text-ink3">{m.replyTo.text}</div>
-            </div>
+            </button>
           )}
           <div
             className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
@@ -1447,6 +1474,7 @@ function MessageBubble({
   roomMembers,
   onOpenImage,
   onReply,
+  onJumpToMessage,
   isEditing,
   onStartEdit: _onStartEdit,
   onCancelEdit,
@@ -1462,6 +1490,8 @@ function MessageBubble({
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   onReply: (m: ChatMessage) => void;
+  /** 답장 인용 클릭 → 원본 메시지로 이동 */
+  onJumpToMessage?: (messageId: string) => void;
   isEditing: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
@@ -1627,10 +1657,18 @@ function MessageBubble({
         <div className="group min-w-0">
           {!mine && group && <div className="mb-0.5 text-[10px] text-ink3">{m.senderName}</div>}
           {m.replyTo && (
-            <div className={`mb-1 rounded-md border-l-2 px-2 py-1 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onJumpToMessage?.(m.replyTo!.id);
+              }}
+              title="원본 메시지로 이동"
+              className={`mb-1 block w-full cursor-pointer rounded-md border-l-2 px-2 py-1 text-left transition-[filter] hover:brightness-95 ${mine ? 'border-amber/70 bg-black/[0.06]' : 'border-border-hi bg-panel-alt'}`}
+            >
               <div className="text-[9.5px] font-bold text-ink2">{m.replyTo.senderName || '메시지'}</div>
               <div className="truncate text-[10.5px] text-ink3">{m.replyTo.text}</div>
-            </div>
+            </button>
           )}
           <div
             className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
