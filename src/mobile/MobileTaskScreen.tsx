@@ -32,6 +32,12 @@ import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
 import MobileCommonHeader from './MobileCommonHeader';
 import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
+import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
+import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
+import { useDepartments } from '@/features/department/useDepartments';
+import { resolveDeptId } from '@/domain/department/engine';
+import { isMeeting } from '@/domain/calendarEvent/meeting';
+import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -66,6 +72,21 @@ export default function MobileTaskScreen() {
 
   const createPlan = useCreateWorkPlan();
   const updatePlan = useUpdateWorkPlan();
+
+  // 회의 — 업무계획 본문이 아니라 캘린더 일정 1건 + 참석자로 등록한다(웹 업무계획과 같은 규칙).
+  const departmentsQuery = useDepartments();
+  const calendarActor = useMemo(
+    () => ({ userId: user?.id ?? '__anonymous__', active: user?.status === '사용', deptId: resolveDeptId(departmentsQuery.data ?? [], user?.dept) }),
+    [user, departmentsQuery.data],
+  );
+  const dayEventsQuery = useCalendarEvents(calendarActor, { from: selectedDateStr, to: selectedDateStr }, Boolean(user));
+  const myMeetings = useMemo(
+    () => (dayEventsQuery.data ?? []).filter(
+      (e) => isMeeting(e) && (e.ownerUserId === user?.id || e.attendeeUserIds.includes(user?.id ?? '')),
+    ),
+    [dayEventsQuery.data, user],
+  );
+  const [meetingModal, setMeetingModal] = useState<{ event?: CalendarEvent } | null>(null);
 
   // 선택 날짜의 내 업무계획
   const myTodayPlan = useMemo(() => {
@@ -315,6 +336,33 @@ export default function MobileTaskScreen() {
               />
             </div>
           )}
+
+          {/* 내 회의(주최·참석) + 회의 등록 */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-purple-700">회의 {myMeetings.length > 0 ? `${myMeetings.length}건` : ''}</span>
+              <button
+                type="button"
+                onClick={() => setMeetingModal({})}
+                className="rounded-full border border-purple-500/40 bg-purple-500/10 px-2.5 py-0.5 text-[10.5px] font-bold text-purple-700 active:scale-95"
+              >
+                + 회의 등록
+              </button>
+            </div>
+            {myMeetings.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMeetingModal({ event: m })}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-2.5 py-1.5 text-left active:scale-[0.99]"
+              >
+                <span className="min-w-0 truncate text-[11.5px] font-bold text-ink">{m.title.replace(/^[(회의|미팅)]s*/, '')}</span>
+                <span className="shrink-0 text-[10px] text-ink3">
+                  {m.allDay ? '종일' : `${m.startTime}~${m.endTime}`} · {m.ownerUserId === user?.id ? '주최' : '참석'}
+                </span>
+              </button>
+            ))}
+          </div>
 
           {/* 신규 할 일 추가 입력 폼 */}
           <div className="rounded-xl bg-slate-50 p-2.5 border border-border/60 space-y-2">
@@ -609,6 +657,24 @@ export default function MobileTaskScreen() {
           )}
         </div>
       </div>
+      {meetingModal && user && (
+        <CalendarEventModal
+          actor={calendarActor}
+          initialDate={selectedDateStr}
+          event={meetingModal.event}
+          initialEventType="MEETING"
+          myProjects={[]}
+          deptName={user.dept || null}
+          ownerName={
+            meetingModal.event && meetingModal.event.ownerUserId !== user.id
+              ? (usersQuery.data ?? []).find((u) => u.id === meetingModal.event!.ownerUserId)?.name ?? null
+              : null
+          }
+          onClose={() => setMeetingModal(null)}
+          onSaved={() => setMeetingModal(null)}
+          onRemoved={() => setMeetingModal(null)}
+        />
+      )}
     </div>
   );
 }
