@@ -163,7 +163,16 @@ const backend = createCrudBackend<CalendarEvent>({
   stripFields: ['eventType', 'attendeeUserIds'],
 });
 
-const loadAll = (): Promise<CalendarEvent[]> => backend.loadAll();
+/*
+  읽을 때 항상 메모의 [CAL_META]를 풀어 둔다. Appwrite·Firestore는 backend의 parse가 이미 풀지만,
+  메모리 드라이버는 저장된 원본(인코딩된 메모)을 그대로 돌려줘서 메모에 태그가 보이고,
+  그 행을 고쳐 저장하면 옛 참석자 목록이 되살아났다. 이미 풀린 행에 다시 적용해도 그대로다.
+*/
+const loadAll = async (): Promise<CalendarEvent[]> =>
+  (await backend.loadAll()).map((row) => {
+    const parsed = calendarEventSchema.safeParse(decodeEventFromStorage(row));
+    return parsed.success ? parsed.data : row;
+  });
 const persist = (row: CalendarEvent): Promise<void> => backend.save(encodeEventForStorage(row));
 const drop = (id: string): Promise<void> => backend.remove(id);
 
