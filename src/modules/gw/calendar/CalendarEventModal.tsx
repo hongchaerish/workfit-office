@@ -11,10 +11,15 @@ import {
 } from '@/domain/calendarEvent/schema';
 import type { WorkProject } from '@/domain/workProject/schema';
 import {
+  useCalendarEvents,
   useCreateCalendarEvent,
+  useJoinMeeting,
+  useLeaveMeeting,
   useRemoveCalendarEvent,
   useUpdateCalendarEvent,
 } from '@/features/calendar/useCalendarEvents';
+import { MEETING_DEFAULT_VISIBILITY, canJoinMeeting, findSimilarMeetings, isMeeting } from '@/domain/calendarEvent/meeting';
+import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useUsers } from '@/features/user/useUsers';
 import { usePermission } from '@/features/auth/usePermission';
 import { Button } from '@/shared/ui/Button';
@@ -36,6 +41,8 @@ interface CalendarEventModalProps {
   initialTitle?: string;
   initialEventType?: CalendarEventType;
   initialAttendees?: string[];
+  /** 새 일정의 공개 범위 기본값. 회의는 넘기지 않아도 전사 공개가 기본이다. */
+  initialVisibility?: CalendarVisibility;
   /** 내가 참여 중인 프로젝트. 프로젝트 공유 대상으로 고를 수 있다. */
   myProjects: WorkProject[];
   /** 내 부서 이름. 부서 공유가 어디로 가는지 화면에 밝히는 데 쓴다. */
@@ -62,6 +69,7 @@ export default function CalendarEventModal({
   initialTitle,
   initialEventType,
   initialAttendees,
+  initialVisibility,
   myProjects,
   deptName,
   ownerName,
@@ -85,11 +93,15 @@ export default function CalendarEventModal({
   const canEdit = !isApprovalEvent && (!event || event.ownerUserId === actor.userId);
   const [title, setTitle] = useState(event?.title ?? initialTitle ?? '');
   const [date, setDate] = useState(event?.date ?? initialDate);
-  const [allDay, setAllDay] = useState(event?.allDay ?? true);
+  // 회의는 보통 시간이 정해져 있어 새로 만들 때 시간 일정으로 시작한다.
+  const [allDay, setAllDay] = useState(event?.allDay ?? initialEventType !== 'MEETING');
   const [startTime, setStartTime] = useState(event?.startTime ?? '09:00');
   const [endTime, setEndTime] = useState(event?.endTime ?? '10:00');
   const [memo, setMemo] = useState(event?.memo ?? '');
-  const [visibility, setVisibility] = useState<CalendarVisibility>(event?.visibility ?? 'PRIVATE');
+  // 회의는 전사에 보이는 것이 기본(알림은 참석자에게만 — domain/calendarEvent/meeting.ts).
+  const [visibility, setVisibility] = useState<CalendarVisibility>(
+    event?.visibility ?? initialVisibility ?? (initialEventType === 'MEETING' ? MEETING_DEFAULT_VISIBILITY : 'PRIVATE'),
+  );
   const [eventType, setEventType] = useState<CalendarEventType>(
     event?.eventType ?? initialEventType ?? (event?.visibility === 'COMPANY' ? 'COMPANY_EVENT' : 'GENERAL'),
   );
@@ -104,7 +116,52 @@ export default function CalendarEventModal({
   const createEvent = useCreateCalendarEvent();
   const updateEvent = useUpdateCalendarEvent();
   const removeEvent = useRemoveCalendarEvent();
-  const pending = createEvent.isPending || updateEvent.isPending || removeEvent.isPending;
+  const joinMeeting = useJoinMeeting();
+  const leaveMeeting = useLeaveMeeting();
+  const pending = createEvent.isPending || updateEvent.isPending || removeEvent.isPending || joinMeeting.isPending || leaveMeeting.isPending;
+
+  /*
+    같은 회의 중복 방지 — 새 회의를 적는 동안 같은 날·시간이 겹치고 제목이 비슷한 회의를 찾아
+    "참석자로 합류"를 제안한다. 자동으로 합치지는 않는다(판정이 틀릴 수 있어 고르는 건 사람).
+  */
+  const lookForSimilar = !event && eventType === 'MEETING' && isValidCalendarDate(date);
+  const dayEventsQuery = useCalendarEvents(actor, lookForSimilar ? { from: date, to: date } : undefined, lookForSimilar);
+  const similarMeetings = useMemo(() => {
+    if (!lookForSimilar || title.trim().length < 2) return [];
+    return findSimilarMeetings(dayEventsQuery.data ?? [], {
+      date,
+      title,
+      allDay,
+      startTime: allDay ? null : startTime,
+      endTime: allDay ? null : endTime,
+    });
+  }, [lookForSimilar, dayEventsQuery.data, date, title, allDay, startTime, endTime]);
+
+  const nameOfUser = (userId: string) => allUsers.find((u) => u.id === userId)?.name ?? userId;
+  const isMeetingEvent = Boolean(event && isMeeting(event));
+  const canJoin = Boolean(event && canJoinMeeting(actor.userId, event));
+  const amAttendee = Boolean(event?.attendeeUserIds.includes(actor.userId));
+
+  const join = async (target: CalendarEvent) => {
+    setError('');
+    try {
+      const joined = await joinMeeting.mutateAsync({ actor, id: target.id });
+      onSaved(joined as CalendarEvent);
+    } catch (caught) {
+      setError(errorText(caught, '회의에 합류하지 못했습니다.'));
+    }
+  };
+
+  const leave = async () => {
+    if (!event || !window.confirm(`‘${event.title}’ 회의 참석을 취소하시겠습니까?`)) return;
+    setError('');
+    try {
+      const left = await leaveMeeting.mutateAsync({ actor, id: event.id });
+      onSaved(left as CalendarEvent);
+    } catch (caught) {
+      setError(errorText(caught, '참석을 취소하지 못했습니다.'));
+    }
+  };
 
   /* 소속이 없으면 부서 공유가 아무에게도 안 닿는다. 고르게 두지 않고 이유를 밝힌다. */
   const canShareToTeam = Boolean(actor.deptId);
@@ -230,7 +287,19 @@ export default function CalendarEventModal({
             </Button>
           </>
         ) : (
-          <Button onClick={onClose}>닫기</Button>
+          <>
+            {isMeetingEvent && canJoin && (
+              <Button variant="primary" onClick={() => event && void join(event)} disabled={pending}>
+                참석자로 합류
+              </Button>
+            )}
+            {isMeetingEvent && amAttendee && (
+              <Button variant="danger" onClick={() => void leave()} disabled={pending}>
+                참석 취소
+              </Button>
+            )}
+            <Button onClick={onClose}>닫기</Button>
+          </>
         )
       }
     >
@@ -271,6 +340,9 @@ export default function CalendarEventModal({
                       if (isCompany) {
                         setVisibility('COMPANY');
                       }
+                      if (typeKey === 'MEETING' && !event && visibility === 'PRIVATE') {
+                        setVisibility(MEETING_DEFAULT_VISIBILITY);
+                      }
                     }}
                     className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11.5px] font-bold transition-all ${
                       isSelected
@@ -298,6 +370,11 @@ export default function CalendarEventModal({
               <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold text-teal">
                 <Sparkles size={12} />
                 <span>사내행사는 전 직원 공통 캘린더에 공개 표시되며 전체 임직원에게 알림이 전송됩니다.</span>
+              </p>
+            )}
+            {eventType === 'MEETING' && (
+              <p className="mt-1 text-[10.5px] font-semibold text-purple-600">
+                회의는 참석자에게만 알림이 가고, 시작 10분 전에는 주최자와 참석자에게 알려 드립니다.
               </p>
             )}
             {!canManageCompanyEvent && (
@@ -517,6 +594,32 @@ export default function CalendarEventModal({
           ) : (
             <div className="rounded-lg border border-border/80 bg-panel-alt/40 px-3 py-2 text-[10.5px] leading-relaxed text-ink3">
               🔒 <strong>프라이버시 보호</strong>: 근로기준법 및 사내 규정에 따라 휴가(연차)의 구체적인 사유는 공개되지 않으며 부재 여부만 표시됩니다.
+            </div>
+          )}
+
+          {similarMeetings.length > 0 && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-[11px]">
+              <div className="mb-1.5 font-bold text-amber-700">비슷한 회의가 이미 있습니다 — 새로 만들지 않고 참석자로 합류할 수 있어요</div>
+              <div className="space-y-1.5">
+                {similarMeetings.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between gap-2 rounded-md bg-panel px-2.5 py-1.5">
+                    <div className="min-w-0">
+                      <div className="truncate font-bold text-ink">{m.title}</div>
+                      <div className="text-[10px] text-ink3">
+                        {m.allDay ? '종일' : `${m.startTime}~${m.endTime}`} · 주최 {nameOfUser(m.ownerUserId)} · 참석 {m.attendeeUserIds.length}명
+                      </div>
+                    </div>
+                    {canJoinMeeting(actor.userId, m) ? (
+                      <Button size="sm" variant="primary" onClick={() => void join(m)} disabled={pending}>
+                        참석자로 합류
+                      </Button>
+                    ) : (
+                      <span className="shrink-0 text-[10px] font-semibold text-teal">이미 포함됨</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1.5 text-[10px] text-ink3">다른 회의라면 아래 [저장]으로 새로 등록하세요.</div>
             </div>
           )}
 

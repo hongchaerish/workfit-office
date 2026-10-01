@@ -17,6 +17,8 @@ import { cleanupWorkPlanCalendarEvents } from '@/domain/workPlan/workPlanCalenda
 import { toggleWorkPlanItem, mergeCheckedMeta } from '@/domain/workPlan/engine';
 import { toEditableText } from '@/domain/workPlan/richText';
 import type { Editor } from '@tiptap/react';
+import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
@@ -88,6 +90,8 @@ export default function WorkPlanScreen() {
   const [cellEditor, setCellEditor] = useState<Editor | null>(null);
   /** 같은 칸 저장이 겹치지 않게(Ctrl+Enter 직후 blur 등) 진행 중 여부를 동기적으로 들고 있는다. */
   const savingCellRef = useRef(false);
+  /** 회의 등록·상세 창 — 회의는 캘린더 일정 1건 + 참석자(업무계획 본문에 쓰지 않는다). */
+  const [meetingModal, setMeetingModal] = useState<{ date: string; event?: CalendarEvent } | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -551,6 +555,7 @@ function sortWorkPlanUsers(
           content={editingContent}
           onContentChange={setEditingContent}
           editor={cellEditor}
+          onAddMeeting={() => setMeetingModal({ date: editingTarget.date })}
           todayEvents={editingDateEvents}
           isSaving={isSavingPlan}
           conflictError={conflictError}
@@ -693,10 +698,37 @@ function sortWorkPlanUsers(
         onOpenConfig={() => setIsConfigOpen(true)}
         onToggleItem={handleToggleItem}
         onEditorReady={setCellEditor}
+        onOpenMeeting={(event) => setMeetingModal({ date: event.date, event })}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }
       />
+
+      {/* 회의 등록·상세 */}
+      {meetingModal && (
+        <CalendarEventModal
+          actor={calendarActor}
+          initialDate={meetingModal.date}
+          event={meetingModal.event}
+          initialEventType="MEETING"
+          myProjects={[]}
+          deptName={actor.dept || null}
+          ownerName={
+            meetingModal.event && meetingModal.event.ownerUserId !== actor.id
+              ? users.find((u) => u.id === meetingModal.event!.ownerUserId)?.name ?? null
+              : null
+          }
+          onClose={() => setMeetingModal(null)}
+          onSaved={() => {
+            setMeetingModal(null);
+            setNotice('회의를 저장했습니다. 참석자 칸과 캘린더에 함께 표시됩니다.');
+          }}
+          onRemoved={() => {
+            setMeetingModal(null);
+            setNotice('회의를 삭제했습니다.');
+          }}
+        />
+      )}
 
       {/* 루틴 템플릿 및 태그 관리 모달 */}
       <WorkPlanConfigModal

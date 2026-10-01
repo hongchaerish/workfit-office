@@ -86,3 +86,13 @@ export function useRemoveCalendarEvent() {
     id: string;
   }) => calendarEventRepo.remove(actor, id));
 }
+
+/** 회의에 참석자로 합류(본인만). */
+export function useJoinMeeting() {
+  return useCalendarEventMutation(({ actor, id }: { actor: CalendarEventActor; id: string }) => calendarEventRepo.joinAsAttendee(actor, id));
+}
+
+/** 회의 참석 취소(본인만). */
+export function useLeaveMeeting() {
+  return useCalendarEventMutation(({ actor, id }: { actor: CalendarEventActor; id: string }) => calendarEventRepo.leaveAsAttendee(actor, id));
+}

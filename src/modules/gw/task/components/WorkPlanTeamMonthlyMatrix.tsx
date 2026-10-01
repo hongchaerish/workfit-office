@@ -13,6 +13,7 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules, isDateInSchedule } from '@/domain/approvalDoc/scheduleEngine';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
+import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { isWorkPlanDerivedEvent } from '@/domain/workPlan/workPlanCalendarBridge';
 import {
   ChevronLeft,
@@ -69,6 +70,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onToggleItem?: (plan: WorkPlan, itemIdx: number) => void;
   /** 칸 편집기 인스턴스 전달 — 상단 리본의 서식 버튼이 쓴다. */
   onEditorReady?: (editor: Editor | null) => void;
+  /** 회의 칩 클릭 → 회의 상세(주최자는 수정, 참석자는 참석 취소, 그 밖의 사람은 합류) */
+  onOpenMeeting?: (event: CalendarEvent) => void;
 }
 
 export function WorkPlanTeamMonthlyMatrix({
@@ -86,6 +89,7 @@ export function WorkPlanTeamMonthlyMatrix({
   onOpenConfig,
   onToggleItem,
   onEditorReady,
+  onOpenMeeting,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
   const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
@@ -214,6 +218,8 @@ export function WorkPlanTeamMonthlyMatrix({
           label: string;
           badgeClass: string;
           timeStr?: string;
+          /** 캘린더 회의 칩이면 원본 일정 */
+          event?: CalendarEvent;
         }>
       >
     >();
@@ -287,6 +293,7 @@ export function WorkPlanTeamMonthlyMatrix({
           label,
           badgeClass,
           timeStr,
+          event: ev,
         });
       }
     }
@@ -627,8 +634,13 @@ export function WorkPlanTeamMonthlyMatrix({
                                     {projectedItems.map((pItem) => (
                                       <div
                                         key={pItem.id}
-                                        className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold border shadow-2xs ${pItem.badgeClass}`}
-                                        title={`${pItem.label} (${pItem.timeStr || '종일'})`}
+                                        role={pItem.event ? 'button' : undefined}
+                                        onClick={pItem.event ? (e) => {
+                                          e.stopPropagation(); // 칸 편집이 열리지 않게
+                                          onOpenMeeting?.(pItem.event!);
+                                        } : undefined}
+                                        className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold border shadow-2xs ${pItem.badgeClass} ${pItem.event ? 'cursor-pointer hover:brightness-95' : ''}`}
+                                        title={pItem.event ? `${pItem.label} (${pItem.timeStr || '종일'}) — 눌러서 회의 보기` : `${pItem.label} (${pItem.timeStr || '종일'})`}
                                       >
                                         <span className="truncate">{pItem.label}</span>
                                         {pItem.timeStr && (

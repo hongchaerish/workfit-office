@@ -6,6 +6,7 @@ import { WorkPlanFormatButtons } from './WorkPlanFormatButtons';
 import type { Editor } from '@tiptap/react';
 import {
   Sparkles,
+  Users,
   Trash2,
   ChevronDown,
   Save,
@@ -29,6 +30,8 @@ export interface WorkPlanOfficeRibbonToolbarProps {
   onSave: (forceOverwrite?: boolean) => Promise<void>;
   onDelete?: () => Promise<void>;
   onClose: () => void;
+  /** [회의 등록] — 캘린더에 회의 1건 + 참석자로 등록(업무계획 본문에는 쓰지 않음) */
+  onAddMeeting?: () => void;
 }
 
 export function WorkPlanOfficeRibbonToolbar({
@@ -43,6 +46,7 @@ export function WorkPlanOfficeRibbonToolbar({
   onSave,
   onDelete,
   onClose,
+  onAddMeeting,
 }: WorkPlanOfficeRibbonToolbarProps) {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
 
@@ -104,7 +108,20 @@ export function WorkPlanOfficeRibbonToolbar({
           {/* 1) 서식: 체크박스·굵게·밑줄·취소선·형광펜·글자색 */}
           <WorkPlanFormatButtons editor={editor} />
 
-          {/* 2) ✨ 자주 쓰는 루틴 템플릿 드롭다운 */}
+          {/* 2) 회의 등록 — 참석자 전원의 칸과 캘린더에 회의 1건으로 표시 */}
+          {onAddMeeting && (
+            <button
+              type="button"
+              onClick={onAddMeeting}
+              title="회의를 캘린더에 1건으로 등록하고 참석자를 지정합니다. 참석자 칸에도 자동으로 표시됩니다."
+              className="flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold text-purple-700 transition-all hover:bg-purple-500/20 cursor-pointer shadow-2xs dark:text-purple-300"
+            >
+              <Users size={12} />
+              <span>회의 등록</span>
+            </button>
+          )}
+
+          {/* 3) ✨ 자주 쓰는 루틴 템플릿 드롭다운 */}
           <div className="relative" ref={templateMenuRef}>
             <button
               type="button"
