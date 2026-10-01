@@ -98,8 +98,8 @@ function LocalCalendarScreen() {
   const [notice, setNotice] = useState('');
   /** 내 일정 / 팀 일정. 열람 범위가 없으면 아래에서 내 일정으로 고정된다. */
   const [tab, setTab] = useState<'me' | 'team'>('me');
-  /** 관련 일정 세부 필터 (전체, 내 일정, 참여 회의·일정, 사내행사, 부서·프로젝트) */
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'attendee' | 'company' | 'team'>('all');
+  /** 관련 일정 세부 필터 (전체, 내 일정, 참여 회의·일정, 사내행사) */
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'attendee' | 'company'>('all');
   /** 팀 일정의 부서 필터. ALL_DEPTS면 범위 전체(관리자는 전 직원, 팀장은 맡은 부서 전부). */
   const [teamDeptSel, setTeamDeptSel] = useState(ALL_DEPTS);
   const usersQuery = useUsers();
@@ -349,7 +349,6 @@ function LocalCalendarScreen() {
       if (scopeFilter === 'mine') return event.ownerUserId === actor.id;
       if (scopeFilter === 'attendee') return isAttendeeEvent({ userId: actor.id, deptId, projectIds: access.projectIds ?? [], active: actor.status === '사용' }, event);
       if (scopeFilter === 'company') return isCompanyEvent(event);
-      if (scopeFilter === 'team') return event.visibility === 'TEAM' || event.visibility === 'PROJECT';
       return true;
     });
   }, [rawEvents, isTeam, scopeFilter, actor, deptId, access.projectIds]);
@@ -764,7 +763,6 @@ function LocalCalendarScreen() {
                   ['mine', '내 일정', ''],
                   ['attendee', '참여 회의·일정', ''],
                   ['company', '사내행사', ''],
-                  ['team', '부서·프로젝트', ''],
                 ] as const).map(([key, label, icon]) => (
                   <button
                     key={key}
