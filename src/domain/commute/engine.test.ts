@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEFAULT_COMMUTE_POLICY, type CommutePolicy } from '@/domain/commutePolicy/schema';
-import { evaluateCommuteRecord, requiredWorkSpan, type ApprovedLeaveInfo } from './engine';
+import { approvedLeaveSpans, evaluateCommuteRecord, requiredWorkSpan, type ApprovedLeaveInfo } from './engine';
 
 // 회사 근무시간(2026-10 기준): 08:30~17:30, 점심 11:30~12:30
 const policy: CommutePolicy = {
@@ -152,4 +152,12 @@ test('오전반차 날은 12:30에 근무가 시작된다', () => {
 test('종일 휴가·외근·출장 날은 출근해야 하는 시간대가 없다', () => {
   assert.equal(requiredWorkSpan(policy, [leave('연차')]), null);
   assert.equal(requiredWorkSpan(policy, [OUTSIDE]), null);
+});
+
+// ── 승인 휴가의 부재 시간대 (상태표시 등) ──
+
+test('연차는 종일 휴가로, 반차는 해당 시간대로 돌려준다', () => {
+  assert.deepEqual(approvedLeaveSpans(policy, [leave('연차')]), { fullDay: true, windows: [[510, 690], [750, 1050]] });
+  assert.deepEqual(approvedLeaveSpans(policy, [leave('오전반차')]), { fullDay: false, windows: [[510, 690]] });
+  assert.deepEqual(approvedLeaveSpans(policy, [OUTSIDE]), { fullDay: false, windows: [] });
 });

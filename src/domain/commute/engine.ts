@@ -64,7 +64,7 @@ export interface ApprovedLeaveInfo {
 
 
 /** 하루 기준 분 단위 시간 구간 [시작, 끝) */
-type Window = [number, number];
+export type Window = [number, number];
 
 /** 정책의 근무 구간 — 출근~점심 시작, 점심 끝~퇴근 (점심 제외 실근무 타임라인) */
 function workSegments(policy: CommutePolicy): Window[] {
@@ -160,6 +160,19 @@ function requiredWindows(segments: Window[], absence: Window[]): Window[] {
 }
 
 const toList = (v?: ApprovedLeaveInfo | ApprovedLeaveInfo[]) => (v ? (Array.isArray(v) ? v : [v]) : []);
+
+/**
+ * 승인 휴가의 부재 시간대(분, 병합). 연차 등 종일 휴가가 있으면 `fullDay`.
+ * 외근·출장은 휴가가 아니므로 포함하지 않는다. 상태표시 등에서 '지금 휴가 중인지' 판정에 쓴다.
+ */
+export function approvedLeaveSpans(
+  policy: CommutePolicy,
+  entries: ApprovedLeaveInfo[],
+): { fullDay: boolean; windows: Window[] } {
+  const leaves = entries.filter((e) => (e.category ?? 'LEAVE') === 'LEAVE');
+  const fullDay = leaves.some((e) => !isHalfDayLeave(e.leaveType, e.docTitle) && !isQuarterDayLeave(e.leaveType, e.docTitle));
+  return { fullDay, windows: mergeWindows(leaves.flatMap((e) => absenceWindowsOf(e, policy))) };
+}
 
 /**
  * 그날 출근해야 하는 시간대(분) — 휴가 부재 구간을 뺀 첫 시작~마지막 끝.

@@ -171,7 +171,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('userId', 64, true),
       EN('status', ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE']),
       S('message', 255),
-      S('updatedAt', 40),
+      S('updatedAt', 40), // 사용자가 상태를 직접 바꾼 시각
+      S('lastSeenAt', 40), // 마지막 접속 신호(하트비트) — 상태표시 '업무중/오프라인' 판정
     ],
     indexes: [IX('userId', ['userId'])],
   },

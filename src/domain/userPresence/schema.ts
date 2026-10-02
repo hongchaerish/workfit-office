@@ -84,6 +84,8 @@ export const userPresenceSchema = z.object({
   status: z.enum(USER_PRESENCE_STATUSES).default('ONLINE'),
   message: z.string().max(80).default(''),
   updatedAt: z.string(),
+  /** 사용자가 상태를 직접 바꾼 시각(updatedAt)과 별개인 마지막 접속 신호 시각 */
+  lastSeenAt: z.string().nullable().optional(),
 });
 
 export type UserPresence = z.infer<typeof userPresenceSchema>;

@@ -309,6 +309,22 @@ export const calendarEventRepo = {
   },
 
   /**
+   * 그날의 회의 시간대 — 상태표시('회의중') 전용. 주최자·참석자와 시간만 담고 제목·메모 등은
+   * 돌려주지 않는다(비공개 회의도 "회의 중"이라는 사실만 드러난다). 종일 회의는 시간대가 없어 뺀다.
+   */
+  async listMeetingSlots(date: string): Promise<Array<{ date: string; startTime: string; endTime: string; userIds: string[] }>> {
+    const rows = await loadAll();
+    return sortEvents(rows.filter((event) => event.date === date && isMeeting(event)))
+      .filter((event) => !event.allDay && event.startTime && event.endTime)
+      .map((event) => ({
+        date: event.date,
+        startTime: event.startTime!,
+        endTime: event.endTime!,
+        userIds: [event.ownerUserId, ...event.attendeeUserIds.filter((id) => id !== event.ownerUserId)],
+      }));
+  },
+
+  /**
    * 관리자 종합 조회 — 지정한 소유자들의 일정 전부(공개 범위 무관).
    *
    * **호출 전에 열람 범위 판정(`resolveCalendarSupervisor`)을 통과했어야 한다.** 여기는

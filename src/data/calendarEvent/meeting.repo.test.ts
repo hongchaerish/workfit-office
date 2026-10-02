@@ -65,3 +65,11 @@ test('주최자가 참석자를 추가하면 새로 추가된 사람에게만 �
   assert.equal(await inviteCount('U006'), before006 + 1);
   assert.equal(await inviteCount('U012'), before012 + 1);
 });
+
+test('회의 시간대 목록: 날짜의 회의만, 주최자·참석자와 시간만 담는다 (제목 등은 빼고)', async () => {
+  const date = '2026-10-07';
+  await calendarEventRepo.create(host, meeting({ title: '비공개 회의', date, visibility: 'PRIVATE', attendeeUserIds: ['U012'], startTime: '14:00', endTime: '15:00' }));
+  await calendarEventRepo.create(host, meeting({ title: '일반 일정', date, eventType: 'GENERAL', attendeeUserIds: [] }));
+  const slots = await calendarEventRepo.listMeetingSlots(date);
+  assert.deepEqual(slots, [{ date, startTime: '14:00', endTime: '15:00', userIds: ['U011', 'U012'] }]);
+});
