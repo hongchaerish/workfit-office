@@ -7,7 +7,8 @@ import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
-import { currentApproverIds, getPredecessorsOf, getReadRejectedDocIds, markRejectedDocAsRead } from '@/domain/approvalDoc/engine';
+import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
@@ -78,7 +79,8 @@ export default function MobileApprovalList() {
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
-  const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
+  // 안읽음(대기·참조·수신·반려·후열) — 웹과 같은 DB 기록·같은 규칙
+  const unreadState = useApprovalUnread(me, byBox, isLoading);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchBoxFilter, setSearchBoxFilter] = useState<'all' | ApprovalBox | '문서함'>('all');
   const org = useOrgTree();
@@ -103,10 +105,7 @@ export default function MobileApprovalList() {
   }, [byBox]);
 
   // 3. 아직 열람하지 않은 반려 문서 건수
-  const unreadRejectedCount = useMemo(() => {
-    const list = byBox['반려'] ?? [];
-    return list.filter((d) => !readRejectedIds.has(d.id)).length;
-  }, [byBox, readRejectedIds]);
+  const unreadRejectedCount = unreadState.unreadCount('반려');
 
   // 4. 사후 열람 확인이 필요한 후열 문서 건수
   const unconfirmedPostReadCount = useMemo(() => {
@@ -431,6 +430,9 @@ export default function MobileApprovalList() {
             >
               <span className="inline-flex items-center gap-1">
                 {b.label}
+                {b.key !== '반려' && unreadState.unreadCount(b.key as ApprovalBox) > 0 && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" title={`안읽음 ${unreadState.unreadCount(b.key as ApprovalBox)}건`} />
+                )}
                 {cnt > 0 && (
                   <span
                     className={`grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9.5px] font-extrabold text-white ${
@@ -572,12 +574,9 @@ export default function MobileApprovalList() {
                 <ApprovalRow
                   key={d.id}
                   doc={d}
-                  isUnread={box === '반려' && !readRejectedIds.has(d.id)}
+                  isUnread={unreadState.isUnreadAnywhere(d.id)}
                   onOpen={() => {
-                    if (d.status === '반려' && me) {
-                      markRejectedDocAsRead(me, d.id);
-                      setReadRejectedIds((prev) => new Set(prev).add(d.id));
-                    }
+                    unreadState.markRead(d.id);
                     nav(`/m/approval/${d.id}`);
                   }}
                 />
@@ -598,12 +597,9 @@ export default function MobileApprovalList() {
                 <ApprovalRow
                   key={d.id}
                   doc={d}
-                  isUnread={box === '반려' && !readRejectedIds.has(d.id)}
+                  isUnread={unreadState.isUnreadInBox(box, d.id)}
                   onOpen={() => {
-                    if (box === '반려' && me) {
-                      markRejectedDocAsRead(me, d.id);
-                      setReadRejectedIds((prev) => new Set(prev).add(d.id));
-                    }
+                    unreadState.markRead(d.id);
                     nav(`/m/approval/${d.id}`);
                   }}
                 />
@@ -716,7 +712,7 @@ function ApprovalRow({ doc, onOpen, isUnread }: { doc: ApprovalDoc; onOpen: () =
         </span>
         {isUnread && (
           <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200 animate-pulse">
-            미열람
+            안읽음
           </span>
         )}
         <span className="ml-auto shrink-0 text-[10px] tabular-nums text-ink3">{doc.docNo}</span>

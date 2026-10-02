@@ -346,6 +346,14 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('toUserId', ['toUserId']), IX('docId', ['docId'])],
   },
   {
+    // 전자결재 읽음 기록 — 한 사람·한 문서당 한 행, 처음 읽은 시각만(안읽음 표시의 원천).
+    // 문서 $id = safeDocId(`${userId}__${docId}`). docId '__baseline__' 행은 처음 적용 기준선 표시.
+    id: 'approvalReads',
+    name: '결재 문서 읽음 기록',
+    attributes: [S('userId', 64, true), S('docId', 64, true), S('readAt', 40, true)],
+    indexes: [IX('userId', ['userId'])],
+  },
+  {
     id: 'backupPolicies',
     name: '백업정책',
     attributes: [S('id', 64, true), S('name', 128, true), S('cycle', 32), S('keep', 32), S('after', 32), S('size', 32), BOOL('on', false)],

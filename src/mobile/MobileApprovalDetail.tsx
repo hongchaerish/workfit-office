@@ -6,6 +6,7 @@ import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalDoc, useDecideStep } from '@/features/gw/useApprovals';
 import { useAutoMarkPostRead, useDocPostReads } from '@/features/gw/usePostReadShares';
+import { useMarkApprovalReadOnOpen } from '@/features/gw/useApprovalUnread';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
@@ -32,6 +33,8 @@ export default function MobileApprovalDetail() {
   const nav = useNavigate();
   const { user } = useAuth();
   const me = user!.id;
+  // 문서를 열면 읽음으로 기록(안읽음 표시 해제) — 알림으로 바로 들어온 경우 포함
+  useMarkApprovalReadOnOpen(me, id);
   const doc = useApprovalDoc(id);
   useAutoMarkPostRead(doc?.id ?? '', me);
   // 후열(공람)로 전달받은 사람은 문서를 열람할 수 있다. 보안 필드는 그대로 가린다(웹 ApprovalDocumentView와 같은 규칙).

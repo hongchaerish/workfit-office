@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
+import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -34,8 +35,6 @@ import {
   matchesBox,
   byRecent,
   getEffectiveRecipients,
-  getReadRejectedDocIds,
-  markRejectedDocAsRead,
   isCompletedBoxMatch,
   isDrafterBoxMatch,
   isRejectedBoxMatch,
@@ -86,6 +85,8 @@ export default function ApprovalScreen() {
   const { data: users = [] } = useUsers();
 
   const { byBox, isLoading } = useApprovalBoxes(me);
+  // 안읽음(대기·참조·수신·반려·후열) — 읽음 기록은 DB, 규칙은 domain/approvalDoc/unread
+  const unreadState = useApprovalUnread(me, byBox, isLoading);
   const { data: allDocs = [] } = useAllApprovals();
   const [params] = useSearchParams();
   const location = useLocation();
@@ -132,10 +133,6 @@ export default function ApprovalScreen() {
     nextUrl.searchParams.set('box', box);
     nextUrl.searchParams.set('doc', d.docNo || d.id);
     window.history.replaceState(null, '', nextUrl.toString());
-    if (box === '반려' && me) {
-      markRejectedDocAsRead(me, d.id);
-      setReadRejectedIds((prev) => new Set(prev).add(d.id));
-    }
   };
 
   const handleSelectDocById = (targetDocId: string) => {
@@ -237,20 +234,11 @@ export default function ApprovalScreen() {
     setSearchQuery('');
   };
 
-  // 반려함 문서 읽음(열람) 관리
-  const [readRejectedIds, setReadRejectedIds] = useState<Set<string>>(() => getReadRejectedDocIds(me));
+  // 문서를 열면(선택해 상세가 보이면) 읽음으로 기록 — 한 번 읽으면 끝
+  const { markRead } = unreadState;
   useEffect(() => {
-    setReadRejectedIds(getReadRejectedDocIds(me));
-  }, [me]);
-
-  useEffect(() => {
-    if (selId && box === '반려' && me) {
-      if (!readRejectedIds.has(selId)) {
-        markRejectedDocAsRead(me, selId);
-        setReadRejectedIds((prev) => new Set(prev).add(selId));
-      }
-    }
-  }, [selId, box, me, readRejectedIds]);
+    if (selId) markRead(selId);
+  }, [selId, markRead]);
 
 
 
@@ -669,7 +657,7 @@ export default function ApprovalScreen() {
                     } else if (b === '반려') {
                       badgeCount = Array.from(uniqueIds)
                         .map(id => combined.find(d => d.id === id)!)
-                        .filter((d) => !readRejectedIds.has(d.id))
+                        .filter((d) => unreadState.isUnreadDoc(d))
                         .length;
                     } else if (b === '대기') {
                       badgeCount = activePendingCount;
@@ -708,6 +696,11 @@ export default function ApprovalScreen() {
 
                       <span className="flex items-center gap-1.5">
                         <span>{label}</span>
+                        {b !== '반려' && b !== '문서함' && unreadState.unreadCount(b as ApprovalBox) > 0 && (
+                          <span className="rounded-full bg-red-500/10 px-1.5 text-[9.5px] font-extrabold text-red-600" title="아직 열어보지 않은 문서">
+                            새 {unreadState.unreadCount(b as ApprovalBox)}
+                          </span>
+                        )}
                       </span>
                       {hasBadge && b !== '문서함' && (
                         <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 text-[10px] font-bold ${badgeClass}`}>
@@ -1019,17 +1012,17 @@ export default function ApprovalScreen() {
                         <div className="flex flex-col gap-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <DocTypeIcon type={d.docType} size={14} className="text-ink3 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{d.title}</span>
+                            <span className={`min-w-0 flex-1 truncate text-[12.5px] text-ink ${unreadState.isUnreadInBox(box, d.id) ? 'font-extrabold' : 'font-semibold'}`}>{d.title}</span>
                             {isRecentCompleted && (
                               <span className="flex items-center gap-1 bg-teal/10 text-teal text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
                                 <span className="h-1.5 w-1.5 rounded-full bg-teal"></span>
                                 최근 완료
                               </span>
                             )}
-                            {box === '반려' && !readRejectedIds.has(d.id) && (
+                            {unreadState.isUnreadInBox(box, d.id) && (
                               <span className="flex items-center gap-1 bg-rose-500/10 text-rose-600 text-[9.5px] px-1.5 py-0.5 rounded-full font-bold shrink-0">
                                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                                미열람
+                                안읽음
                               </span>
                             )}
                             <DocStatusBadge doc={d} me={me} />

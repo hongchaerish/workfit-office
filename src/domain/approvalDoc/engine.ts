@@ -213,7 +213,10 @@ export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
 
 const REJECTED_READ_STORAGE_PREFIX = 'workfit_read_rejected_docs:';
 
-/** 사용자가 열람한 반려 문서 ID 세트 조회 */
+/**
+ * 예전에 이 브라우저에 남긴 반려 문서 열람 기록 — 읽기 전용.
+ * 열람 기록은 이제 DB(approvalReads)에 남긴다. 이 값은 안읽음 기준선을 처음 남길 때 한 번 옮겨 담는 데만 쓴다.
+ */
 export function getReadRejectedDocIds(userId: string): Set<string> {
   if (!userId || typeof window === 'undefined') return new Set();
   try {
@@ -224,17 +227,6 @@ export function getReadRejectedDocIds(userId: string): Set<string> {
   }
 }
 
-/** 반려 문서 열람 처리 (읽음 기록) */
-export function markRejectedDocAsRead(userId: string, docId: string): void {
-  if (!userId || !docId || typeof window === 'undefined') return;
-  try {
-    const set = getReadRejectedDocIds(userId);
-    if (!set.has(docId)) {
-      set.add(docId);
-      localStorage.setItem(`${REJECTED_READ_STORAGE_PREFIX}${userId}`, JSON.stringify(Array.from(set)));
-    }
-  } catch {}
-}
 
 /** 레거시 시행처(executionDepts, execution)까지 포함한 수신처(recipients) 유효 목록 도출 */
 export function getEffectiveRecipients(doc: ApprovalDoc): ApprovalRecipient[] {
