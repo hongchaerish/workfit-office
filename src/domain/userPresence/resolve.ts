@@ -1,17 +1,21 @@
 import type { CommutePolicy } from '@/domain/commutePolicy/schema';
 import { approvedLeaveSpans, timeToMinutes, type ApprovedLeaveInfo } from '@/domain/commute/engine';
-import type { UserPresenceStatus } from './schema';
+import { MANUAL_PRESENCE_STATUSES, type UserPresenceStatus } from './schema';
 
-/** 접속 신호가 이 시간 안에 있으면 접속 중(업무중)으로 본다. */
+/** 접속 신호(창이 열려 있음)가 이 시간 안에 있으면 접속 중으로 본다. 창을 닫으면 이 시간 뒤 오프라인. */
 export const ONLINE_WINDOW_MS = 3 * 60 * 1000;
+/** 접속 중이라도 키보드·마우스 입력이 이 시간 넘게 없으면 자리비움. */
+export const AWAY_AFTER_MS = 20 * 60 * 1000;
 
 export interface StoredPresence {
   status: UserPresenceStatus;
   message: string;
   /** 사용자가 상태를 직접 바꾼 시각 */
   updatedAt: string;
-  /** 마지막 접속 신호(하트비트) 시각 */
+  /** 마지막 접속 신호(창이 열려 있음) 시각 */
   lastSeenAt?: string | null;
+  /** 마지막 키보드·마우스 활동 시각. 없으면(예전 클라이언트) 활동 중으로 본다 */
+  lastActiveAt?: string | null;
 }
 
 export interface PresenceMeeting {
@@ -94,10 +98,13 @@ function autoStatusAt(inputs: PresenceInputs, date: string, minutes: number): Au
  * 화면에 보일 근무 상태를 정한다 — 웹·PWA·메신저 공용 단일 규칙.
  *
  * 우선순위: ① 승인 휴가(반차는 해당 시간대만) ② 승인 외근·출장 ③ 참석 회의 시간
- * ④ 오늘 직접 정한 상태 ⑤ 접속 여부(최근 3분 신호 → 업무중, 아니면 오프라인).
+ * ④ 오늘 직접 정한 상태 ⑤ 접속 여부 — 창이 열려 있으면(최근 3분 신호) 업무중, 그중 입력이
+ * 20분 넘게 없으면 자리비움, 창을 닫았으면 오프라인.
  * 직접 정한 상태와 자동 상태가 겹치면 **더 최근 것이 이긴다** — 외근일에 복귀해 업무중으로
  * 바꾸면 업무중, 아침에 집중근무로 해 둔 뒤 회의가 시작되면 회의중.
- * 직접 정한 '업무중'은 "자리에 있음"이라는 뜻이라, 실제 표시는 접속 여부를 따른다.
+ * 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인뿐이다(외근·회의·휴가는 결재·캘린더로만).
+ * 직접 정한 업무중은 "자리에 있음"이라는 뜻이라 접속 여부를 따르고, 자리비움·집중근무는 창이
+ * 열려 있을 때만 보인다(창을 닫으면 오프라인). 직접 정한 오프라인은 창이 열려 있어도 유지된다.
  */
 export function resolvePresence(inputs: PresenceInputs): ResolvedPresence {
   const { stored, now } = inputs;
@@ -106,17 +113,22 @@ export function resolvePresence(inputs: PresenceInputs): ResolvedPresence {
   const connected = Boolean(
     stored?.lastSeenAt && now.getTime() - new Date(stored.lastSeenAt).getTime() <= ONLINE_WINDOW_MS,
   );
+  const lastActive = stored?.lastActiveAt ? new Date(stored.lastActiveAt).getTime() : null;
+  const idle = lastActive !== null && now.getTime() - lastActive > AWAY_AFTER_MS;
   const connection: ResolvedPresence = {
-    status: connected ? 'ONLINE' : 'OFFLINE',
+    status: connected ? (idle ? 'AWAY' : 'ONLINE') : 'OFFLINE',
     message: connected ? stored?.message ?? '' : '',
     source: 'CONNECTION',
   };
 
   const manualAt = stored?.updatedAt ? new Date(stored.updatedAt) : null;
-  const manualToday = Boolean(manualAt && !Number.isNaN(manualAt.getTime()) && kstParts(manualAt).date === date);
+  const manualToday = Boolean(
+    manualAt && !Number.isNaN(manualAt.getTime()) && kstParts(manualAt).date === date &&
+    stored && MANUAL_PRESENCE_STATUSES.includes(stored.status),
+  );
   const manual: ResolvedPresence | null =
     stored && manualToday
-      ? stored.status === 'ONLINE'
+      ? stored.status === 'ONLINE' || (!connected && stored.status !== 'OFFLINE')
         ? connection
         : { status: stored.status, message: stored.message, source: 'MANUAL' }
       : null;

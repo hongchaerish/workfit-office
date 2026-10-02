@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useAllApprovals } from '@/features/gw/useApprovals';
@@ -7,7 +7,8 @@ import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { calendarEventRepo } from '@/data/calendarEvent/calendarEvent.repo';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { buildApprovalDayIndex } from '@/domain/commute/approvalDayIndex';
-import { resolvePresence, type PresenceMeeting, type StoredPresence } from '@/domain/userPresence/resolve';
+import { AWAY_AFTER_MS, resolvePresence, type PresenceMeeting, type StoredPresence } from '@/domain/userPresence/resolve';
+import { startActivityTracking } from './activityTracker';
 import {
   USER_PRESENCE_STATUSES,
   type UserPresence,
@@ -26,7 +27,7 @@ const COLLECTION_ID = 'user_presences';
 const CACHE_KEY = 'workfit:user_presence_stored';
 /** 화면의 '지금'을 다시 계산하는 주기 — 회의·반차 시작/끝, 접속 만료를 반영 */
 const CLOCK_MS = 30 * 1000;
-/** 내 접속 신호 주기(화면이 보일 때만) */
+/** 내 접속 신호 주기(창이 열려 있는 동안) */
 const HEARTBEAT_MS = 60 * 1000;
 
 const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -58,6 +59,7 @@ function parseStored(doc: Record<string, unknown>): { userId: string; stored: St
       message: String(doc.message || ''),
       updatedAt: String(doc.updatedAt || ''),
       lastSeenAt: doc.lastSeenAt ? String(doc.lastSeenAt) : null,
+      lastActiveAt: doc.lastActiveAt ? String(doc.lastActiveAt) : null,
     },
   };
 }
@@ -76,6 +78,7 @@ async function writeMyDoc(userId: string, patch: Partial<StoredPresence>) {
       message: '',
       updatedAt: '',
       lastSeenAt: null,
+      lastActiveAt: null,
       ...patch,
     });
   }
@@ -138,24 +141,37 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, []);
 
-  // 내 접속 신호 — 화면이 보일 때만 1분마다, 다시 보이면 즉시
+  // 내 접속 신호 — 창이 열려 있는 동안(가려져 있어도) 1분마다 '창 열림'과 '마지막 활동 시각'을 보낸다.
+  // 창을 닫으면 신호가 끊겨 3분 뒤 오프라인, 활동이 20분 없으면 자리비움으로 보인다.
+  const storedRef = useRef(stored);
+  storedRef.current = stored;
   useEffect(() => {
     if (!myId || user?.status !== '사용') return;
+    let lastActive = Date.now(); // 창을 연 것 자체가 활동
+    let lastSentActive = 0;
     const beat = () => {
-      if (document.visibilityState !== 'visible') return;
-      const lastSeenAt = new Date().toISOString();
+      if (tracker.isSystemActive()) lastActive = Date.now();
+      // 탭이 여러 개면 다른 탭이 보낸 더 최근 활동을 덮어쓰지 않는다
+      const otherTab = storedRef.current[myId]?.lastActiveAt;
+      const active = Math.max(lastActive, otherTab ? new Date(otherTab).getTime() || 0 : 0);
+      const patch = { lastSeenAt: new Date().toISOString(), lastActiveAt: new Date(active).toISOString() };
+      lastSentActive = active;
       setStored((prev) => {
         const mine = prev[myId] ?? { status: 'ONLINE', message: '', updatedAt: '' };
-        return { ...prev, [myId]: { ...mine, lastSeenAt } };
+        return { ...prev, [myId]: { ...mine, ...patch } };
       });
-      writeMyDoc(myId, { lastSeenAt }).catch((err) => console.warn('[userPresence] 접속 신호 저장 실패:', err));
+      writeMyDoc(myId, patch).catch((err) => console.warn('[userPresence] 접속 신호 저장 실패:', err));
     };
+    const tracker = startActivityTracking((at) => {
+      lastActive = Math.max(lastActive, at);
+      // 오래 쉬다 돌아오면(자리비움으로 보일 수 있는 상태) 1분을 기다리지 않고 바로 알린다
+      if (at - lastSentActive > AWAY_AFTER_MS / 2) beat();
+    });
     beat();
     const id = setInterval(beat, HEARTBEAT_MS);
-    document.addEventListener('visibilitychange', beat);
     return () => {
       clearInterval(id);
-      document.removeEventListener('visibilitychange', beat);
+      tracker.stop();
     };
   }, [myId, user?.status]);
 
@@ -192,7 +208,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         policy,
         now,
       });
-      out[userId] = { userId, status: r.status, message: r.message, updatedAt: s?.updatedAt ?? '', lastSeenAt: s?.lastSeenAt ?? null };
+      out[userId] = { userId, status: r.status, message: r.message, updatedAt: s?.updatedAt ?? '', lastSeenAt: s?.lastSeenAt ?? null, lastActiveAt: s?.lastActiveAt ?? null };
     }
     return out;
   }, [stored, approvalIndex, users, meetingSlots, policy, now]);

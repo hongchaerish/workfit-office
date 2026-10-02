@@ -8,9 +8,15 @@ import { z } from 'zod';
  * - MEETING: 회의중
  * - FOCUS: 집중근무 (방해금지)
  * - LEAVE: 휴가 (부재중)
+ * - AWAY: 자리비움 (창은 열려 있으나 키보드·마우스 입력이 20분 없음)
  */
-export const USER_PRESENCE_STATUSES = ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE'] as const;
+export const USER_PRESENCE_STATUSES = ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE', 'AWAY'] as const;
 export type UserPresenceStatus = (typeof USER_PRESENCE_STATUSES)[number];
+
+/**
+ * 사용자가 프로필에서 직접 고를 수 있는 상태. 외근·출장·회의중·휴가는 전자결재·캘린더로만 정해진다.
+ */
+export const MANUAL_PRESENCE_STATUSES: readonly UserPresenceStatus[] = ['ONLINE', 'AWAY', 'FOCUS', 'OFFLINE'];
 
 export interface UserPresenceMeta {
   code: UserPresenceStatus;
@@ -77,6 +83,15 @@ export const USER_PRESENCE_META: Record<UserPresenceStatus, UserPresenceMeta> = 
     icon: '🏖️',
     desc: '연차·반차 부재 중',
   },
+  AWAY: {
+    code: 'AWAY',
+    label: '자리비움',
+    dotColor: 'bg-yellow-400',
+    bgTone: 'bg-yellow-400/10 border-yellow-400/40 text-yellow-700 dark:text-yellow-300',
+    textColor: 'text-yellow-700 dark:text-yellow-300',
+    icon: '🟡',
+    desc: '잠시 자리를 비움',
+  },
 };
 
 export const userPresenceSchema = z.object({
@@ -86,6 +101,8 @@ export const userPresenceSchema = z.object({
   updatedAt: z.string(),
   /** 사용자가 상태를 직접 바꾼 시각(updatedAt)과 별개인 마지막 접속 신호 시각 */
   lastSeenAt: z.string().nullable().optional(),
+  /** 마지막 키보드·마우스 활동 시각 — 자리비움 판정 */
+  lastActiveAt: z.string().nullable().optional(),
 });
 
 export type UserPresence = z.infer<typeof userPresenceSchema>;

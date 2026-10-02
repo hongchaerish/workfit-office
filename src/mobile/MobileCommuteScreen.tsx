@@ -286,25 +286,26 @@ export default function MobileCommuteScreen() {
             </button>
             <button
               type="button"
-              onClick={() => handleQuickStatus('MEETING', '회의 중')}
+              onClick={() => handleQuickStatus('FOCUS', '')}
               className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
-                presence.status === 'MEETING'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-panel-alt text-ink2 hover:bg-blue-500/10 hover:text-blue-600'
-              }`}
-            >
-              💼 회의 중
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickStatus('OUTSIDE', '외근/식사')}
-              className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
-                presence.status === 'OUTSIDE'
+                presence.status === 'FOCUS'
                   ? 'bg-amber-500 text-white shadow-xs'
                   : 'bg-panel-alt text-ink2 hover:bg-amber-500/10 hover:text-amber-600'
               }`}
             >
-              ☕ 외근/식사
+              🎯 집중 근무
+            </button>
+            {/* 외근·회의·휴가는 전자결재·캘린더로만 정해진다 — 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인 */}
+            <button
+              type="button"
+              onClick={() => handleQuickStatus('AWAY', '')}
+              className={`rounded-xl py-2 text-[11px] font-bold transition-all ${
+                presence.status === 'AWAY'
+                  ? 'bg-yellow-400 text-white shadow-xs'
+                  : 'bg-panel-alt text-ink2 hover:bg-yellow-400/10 hover:text-yellow-700'
+              }`}
+            >
+              ☕ 자리비움
             </button>
             <button
               type="button"

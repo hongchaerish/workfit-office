@@ -90,3 +90,38 @@ test('어제 직접 정한 상태는 오늘 적용되지 않는다', () => {
   const stored = { status: 'FOCUS' as const, message: '', updatedAt: kst('2026-10-01 15:00').toISOString(), lastSeenAt: kst(`${D} 09:59`).toISOString() };
   assert.equal(resolveAt(`${D} 10:00`, { stored }).status, 'ONLINE');
 });
+
+// ── 자리비움 (창은 열려 있으나 키보드·마우스 입력이 20분 없음) ──
+
+const open = (activeAt: string | null, status: 'ONLINE' | 'FOCUS' | 'AWAY' | 'OUTSIDE' | 'MEETING' | 'LEAVE' = 'ONLINE', setAt = `${D} 07:00`) => ({
+  status,
+  message: '',
+  updatedAt: kst(setAt).toISOString(),
+  lastSeenAt: kst(`${D} 09:59`).toISOString(),
+  lastActiveAt: activeAt ? kst(activeAt).toISOString() : null,
+});
+
+test('창이 열려 있고 20분 안에 입력이 있으면 업무중, 20분 넘게 없으면 자리비움이다', () => {
+  assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:41`) }).status, 'ONLINE');
+  assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:39`) }).status, 'AWAY');
+});
+
+test('활동 기록이 없는 예전 클라이언트는 창이 열려 있으면 업무중으로 본다', () => {
+  assert.equal(resolveAt(`${D} 10:00`, { stored: open(null) }).status, 'ONLINE');
+});
+
+test('직접 고른 업무중도 입력이 20분 없으면 자리비움이다', () => {
+  assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:30`, 'ONLINE', `${D} 09:00`) }).status, 'AWAY');
+});
+
+test('직접 고른 자리비움·집중근무는 창이 열려 있을 때만 보이고 창을 닫으면 오프라인이다', () => {
+  assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:59`, 'AWAY', `${D} 09:00`) }).status, 'AWAY');
+  const closed = { ...open(`${D} 09:00`, 'FOCUS', `${D} 08:50`), lastSeenAt: kst(`${D} 09:00`).toISOString() };
+  assert.equal(resolveAt(`${D} 10:00`, { stored: closed }).status, 'OFFLINE');
+});
+
+test('외근·회의중·휴가는 직접 설정으로 인정하지 않는다 (결재·캘린더로만 정해짐)', () => {
+  for (const status of ['OUTSIDE', 'MEETING', 'LEAVE'] as const) {
+    assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:59`, status, `${D} 09:00`) }).status, 'ONLINE');
+  }
+});

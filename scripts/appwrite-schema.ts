@@ -169,10 +169,11 @@ const COLLECTIONS: CollectionDef[] = [
     name: '사용자 실시간 근무 상태',
     attributes: [
       S('userId', 64, true),
-      EN('status', ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE']),
+      EN('status', ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING', 'FOCUS', 'LEAVE', 'AWAY']),
       S('message', 255),
       S('updatedAt', 40), // 사용자가 상태를 직접 바꾼 시각
-      S('lastSeenAt', 40), // 마지막 접속 신호(하트비트) — 상태표시 '업무중/오프라인' 판정
+      S('lastSeenAt', 40), // 마지막 접속 신호(창이 열려 있음) — 오프라인 판정
+      S('lastActiveAt', 40), // 마지막 키보드·마우스 활동 — 자리비움 판정
     ],
     indexes: [IX('userId', ['userId'])],
   },
@@ -1218,6 +1219,17 @@ async function existingAttrKeys(dbs: Databases, dbId: string, collId: string): P
 
 async function ensureAttribute(dbs: Databases, dbId: string, collId: string, a: AttrDef, have: Set<string>) {
   if (have.has(a.key)) {
+    // enum 은 값 목록이 늘어날 수 있다 — 정의에 새 값이 있으면 기존 값을 지우지 않고 추가만 한다.
+    if (a.kind === 'enum') {
+      const cur = (await dbs.getAttribute(dbId, collId, a.key)) as Models.AttributeEnum;
+      const missing = a.elements.filter((el) => !cur.elements.includes(el));
+      if (missing.length > 0) {
+        // xdefault 는 생략할 수 없다(기본값이 없으면 null 을 명시)
+        await dbs.updateEnumAttribute(dbId, collId, a.key, [...cur.elements, ...missing], cur.required, (cur.default ?? null) as unknown as string);
+        console.log(`  ✓ attr "${a.key}" enum 값 추가: ${missing.join(', ')}`);
+        return;
+      }
+    }
     console.log(`  • attr "${a.key}" 존재 — 건너뜀`);
     return;
   }

@@ -5,7 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import {
   USER_PRESENCE_META,
-  USER_PRESENCE_STATUSES,
+  MANUAL_PRESENCE_STATUSES,
   type UserPresenceStatus,
 } from '@/domain/userPresence/schema';
 import {
@@ -149,7 +149,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
         </div>
 
         <div className="space-y-5 px-5 py-4">
-          {/* 근무·활동 상태 선택기 (웹 USER_PRESENCE_STATUSES 6종 프리셋 완벽 동기화) */}
+          {/* 근무·활동 상태 선택기 — 직접 고를 수 있는 상태만(외근·회의·휴가는 전자결재·캘린더로 자동) */}
           <div>
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-[12.5px] font-bold text-slate-700 dark:text-slate-200">
@@ -158,7 +158,7 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
               <span className="text-[11px] text-slate-400">선택 시 즉시 적용</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {USER_PRESENCE_STATUSES.map((st) => {
+              {MANUAL_PRESENCE_STATUSES.map((st) => {
                 const item = USER_PRESENCE_META[st];
                 const isSelected = presence.status === st;
                 return (

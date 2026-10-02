@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
-import { USER_PRESENCE_META, USER_PRESENCE_STATUSES, type UserPresenceStatus } from '@/domain/userPresence/schema';
+import { MANUAL_PRESENCE_STATUSES, USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
 import { User as UserIcon, Settings, Globe, MessageSquare } from 'lucide-react';
 
 interface UserMenuProps {
@@ -129,8 +129,9 @@ export function UserMenu({ onClose }: UserMenuProps) {
         {/* Teams/Discord 스타일 실시간 상태 선택기 */}
         <div className="border-b border-border bg-panel-alt/30 p-2.5">
           <div className="mb-2 px-1 text-[10.5px] font-bold text-ink3">현재 근무·활동 상태</div>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {USER_PRESENCE_STATUSES.map((st) => {
+          {/* 직접 고를 수 있는 상태만 — 외근·회의·휴가는 전자결재·캘린더로 자동 표시된다 */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {MANUAL_PRESENCE_STATUSES.map((st) => {
               const item = USER_PRESENCE_META[st];
               const isSelected = presence.status === st;
               return (
