@@ -7,6 +7,8 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { correctSelection, resolveSelectedDoc } from './selection';
+import { arrangeList, docPosition, type ListOrder } from './listView';
+import { UNREAD_TRACKED_BOXES } from '@/domain/approvalDoc/unread';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -247,7 +249,9 @@ export default function ApprovalScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchApproveConfirm, setShowBatchApproveConfirm] = useState(false);
   const [batchComment, setBatchComment] = useState('');
-  const [isListCollapsed, setIsListCollapsed] = useState(false);
+  // 목록 툴바 — 정렬·안읽음만 보기
+  const [listOrder, setListOrder] = useState<ListOrder>('recent');
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   const batchDecide = useBatchDecideStep();
   const batchRestore = useBatchRestoreFromTrash();
@@ -453,18 +457,40 @@ export default function ApprovalScreen() {
   }, [filteredList, selId, allDocs]);
 
 
+  // 지금 보이는 목록 — 툴바의 정렬·안읽음만 보기 반영(안읽음은 추적 결재함에서만)
+  const isTrackedBox = (UNREAD_TRACKED_BOXES as readonly string[]).includes(box);
+  const displayedList = arrangeList(filteredList, {
+    order: listOrder,
+    unreadOnly: unreadOnly && isTrackedBox,
+    isUnread: (id) => unreadState.isUnreadInBox(box, id),
+  });
+  const position = selDoc ? docPosition(displayedList, selDoc.id) : null;
+
+  /** 내가(또는 전임자로서) 지금 승인할 수 있는 문서 — 일괄 승인 대상 */
+  const isApprovable = (d: ApprovalDoc) => {
+    if (box !== '대기' || todoFilter === 'progress') return false;
+    const approvers = currentApproverIds(d);
+    return approvers.includes(me) || approvers.some(id => preds.includes(id));
+  };
+  /** 체크박스 선택 가능 — 일괄 승인·복원 대상이거나, 읽음 처리할 수 있는 문서 */
   const isDocSelectable = (d: ApprovalDoc) => {
     if (box === '삭제') return true;
-    if (box === '대기') {
-      if (todoFilter === 'progress') return false;
-      const approvers = currentApproverIds(d);
-      return approvers.includes(me) || approvers.some(id => preds.includes(id));
-    }
-    return false;
+    if (box === '대기') return isApprovable(d) || unreadState.isUnreadInBox(box, d.id);
+    return isTrackedBox;
   };
 
   // 다중 선택 처리 헬퍼
-  const selectableList = useMemo(() => filteredList.filter(isDocSelectable), [filteredList, box, todoFilter]);
+  const selectableList = displayedList.filter(isDocSelectable);
+  // 선택 중 일괄 승인할 수 있는 것·안읽은 것만 각 동작의 대상이다(승인 못 하는 문서를 승인 요청하지 않게)
+  const approvableSelectedIds = selectedIds.filter((id) => {
+    const d = filteredList.find((x) => x.id === id);
+    return Boolean(d && isApprovable(d));
+  });
+  const unreadSelectedIds = selectedIds.filter((id) => unreadState.isUnreadInBox(box, id));
+  const handleMarkSelectedRead = () => {
+    unreadSelectedIds.forEach((id) => unreadState.markRead(id));
+    setSelectedIds([]);
+  };
   const isAllSelected = selectableList.length > 0 && selectedIds.length === selectableList.length;
   const toggleSelectAll = () => {
     if (isAllSelected) {
@@ -482,10 +508,10 @@ export default function ApprovalScreen() {
 
   // 일괄 승인 실행
   const handleBatchApprove = async () => {
-    if (selectedIds.length === 0) return;
+    if (approvableSelectedIds.length === 0) return;
     try {
       await batchDecide.mutateAsync({
-        docIds: selectedIds,
+        docIds: approvableSelectedIds,
         userId: me,
         comment: batchComment.trim() || '일괄 승인 처리되었습니다.',
       });
@@ -526,7 +552,7 @@ export default function ApprovalScreen() {
   if (!user) return <div className="p-10 text-center text-[13px] text-ink3">로그인이 필요합니다.</div>;
 
   return (
-    <div className={`w-full px-6 pt-2 pb-6 ${isListCollapsed ? 'min-w-[920px]' : 'min-w-[1240px]'}`}>
+    <div className="w-full px-6 pt-2 pb-6 min-w-[920px]">
       <div className="flex gap-4 items-start w-full">
         {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
         <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
@@ -712,154 +738,206 @@ export default function ApprovalScreen() {
               <h1 className="text-[20px] font-extrabold tracking-tight text-ink">전자결재</h1>
             </div>
 
-            {/* ── 상단 문서 검색 인풋 & 결과 드롭다운 (가로 너비 유동적 100% 활용) ── */}
-            <div ref={searchContainerRef} className="relative flex-1 min-w-0">
-              <div className="relative w-full">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
+          </div>
+
+          {/* 목록 툴바(목록·상세 위 전체 너비): 선택·일괄 동작 | 검색 | 안읽음만·정렬 */}
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-panel px-3.5 py-2 shadow-sm text-[12px] font-bold text-ink2">
+            <div className="flex items-center gap-2 shrink-0">
+              {selectableList.length > 0 && (
                 <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setIsSearchOpen(true);
-                  }}
-                  onFocus={() => setIsSearchOpen(true)}
-                  placeholder="결재 문서명, 문서번호, 기안자 검색..."
-                  className="w-full rounded-lg border border-border bg-panel-alt/50 hover:bg-panel pl-8.5 pr-8 py-1.5 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel focus:ring-1 focus:ring-teal/30 transition-all shadow-2xs"
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5"
+                  title="전체 선택/해제"
                 />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setIsSearchOpen(false);
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-
-              {/* 검색 결과 드롭다운 */}
-              {isSearchOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[400px] overflow-y-auto rounded-xl border border-border bg-panel shadow-2xl p-1.5 space-y-1 backdrop-blur-md animate-fadeIn">
-                  {/* 드롭다운 내부 상단 문서함 필터 탭 칩 */}
-                  <div className="flex items-center justify-between gap-1 overflow-x-auto px-2 py-1.5 border-b border-border/60 bg-panel-alt/30 rounded-t-lg">
-                    <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
-                      <span className="text-[10.5px] font-bold text-ink3 shrink-0 mr-1">문서함 필터:</span>
-                      {[
-                        { k: 'all', l: '전체' },
-                        { k: '대기', l: '결재대기' },
-                        { k: '상신', l: '기안/상신' },
-                        { k: '완료', l: '결재완료' },
-                        { k: '반려', l: '반려' },
-                        { k: '참조', l: '참조' },
-                        { k: '수신', l: '수신' },
-                        { k: '부서', l: '부서' },
-                        { k: '임시', l: '임시저장' },
-                      ].map((tab) => (
-                        <button
-                          key={tab.k}
-                          type="button"
-                          onClick={() => setSearchBoxFilter(tab.k as any)}
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold transition-all shrink-0 cursor-pointer ${
-                            searchBoxFilter === tab.k
-                              ? 'bg-teal text-white shadow-2xs'
-                              : 'bg-panel border border-border text-ink3 hover:text-ink hover:border-teal/40'
-                          }`}
-                        >
-                          {tab.l}
-                        </button>
-                      ))}
-                    </div>
-                    <span className="text-[9.5px] text-ink3 shrink-0 ml-2">ESC 닫기</span>
-                  </div>
-
-                  <div className="px-2 py-0.5 text-[10px] font-bold text-ink3 flex items-center justify-between">
-                    <span>
-                      {searchBoxFilter !== 'all' ? `[${searchBoxFilter}함] ` : ''}
-                      {searchQuery.trim() ? `검색 결과 (${searchResults.length}건)` : '최근 문서'}
-                    </span>
-                    <span className="text-[9.5px] text-ink3">결과를 클릭하면 해당 문서로 이동합니다</span>
-                  </div>
-
-                  {searchResults.map((d) => (
+              )}
+              {selectedIds.length > 0 ? (
+                <div className="flex items-center gap-1.5 animate-fadeIn">
+                  <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
+                    {selectedIds.length}개 선택
+                  </span>
+                  {box === '대기' && approvableSelectedIds.length > 0 && (
                     <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => handleSelectSearchedDoc(d)}
-                      className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors cursor-pointer hover:bg-teal-soft/40 ${
-                        selId === d.id ? 'bg-teal-soft/60 border border-teal/20' : ''
-                      }`}
+                      onClick={() => setShowBatchApproveConfirm(true)}
+                      className="rounded-lg bg-gradient-to-r from-teal to-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm hover:shadow-md transition-all cursor-pointer"
                     >
-                      <div className="pt-0.5 shrink-0">
-                        <DocTypeIcon type={d.docType} size={15} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <DocStatusBadge doc={d} me={me} />
-                          <span className="truncate text-[11.5px] font-bold text-ink hover:text-teal transition-colors">
-                            {d.title}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-ink3 truncate">
-                          <span className="font-mono text-ink2">{d.docNo || '임시문서'}</span>
-                          <span>·</span>
-                          <span>{d.drafterName} ({d.drafterDept || d.docType})</span>
-                          <span>·</span>
-                          <span>{d.createdAt ? d.createdAt.slice(0, 10) : ''}</span>
-                        </div>
-                      </div>
+                      일괄 승인 {approvableSelectedIds.length}
                     </button>
-                  ))}
-
-                  {searchResults.length === 0 && (
-                    <div className="py-6 text-center text-[11.5px] text-ink3">
-                      선택된 문서함에 검색 조건과 일치하는 결재 문서가 없습니다.
-                    </div>
+                  )}
+                  {box === '삭제' && (
+                    <>
+                      <button
+                        onClick={handleBatchRestore}
+                        className="rounded-lg bg-gradient-to-r from-emerald-500 to-teal px-2.5 py-1 text-[11px] font-bold text-white shadow-sm hover:shadow-md transition-all cursor-pointer"
+                      >
+                        일괄 복원
+                      </button>
+                      <button
+                        onClick={handleBatchPermanentDelete}
+                        className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-500 hover:text-white transition-all cursor-pointer"
+                      >
+                        영구 삭제
+                      </button>
+                    </>
+                  )}
+                  {isTrackedBox && unreadSelectedIds.length > 0 && (
+                    <button
+                      onClick={handleMarkSelectedRead}
+                      className="rounded-lg border border-border bg-panel px-2.5 py-1 text-[11px] font-bold text-ink2 hover:border-teal hover:text-teal transition-all cursor-pointer"
+                    >
+                      읽음 처리 {unreadSelectedIds.length}
+                    </button>
                   )}
                 </div>
+              ) : (
+                <span>
+                  {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
+                  <span className="text-ink3"> · {displayedList.length}</span>
+                </span>
               )}
             </div>
 
-            {selDoc && (
-            <button
-              type="button"
-              onClick={() => setIsListCollapsed(!isListCollapsed)}
-              className="rounded-lg border border-teal/30 bg-white dark:bg-panel px-3 py-1.5 text-[11.5px] font-extrabold text-teal hover:border-teal hover:bg-teal-soft/20 transition-all shadow-2xs hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <span>{isListCollapsed ? '▶' : '◀'}</span>
-              <span>{isListCollapsed ? '목록 펼치기' : '목록 접기'}</span>
-            </button>
+          {/* 검색 — 결과는 지금처럼 드롭다운 */}
+          <div ref={searchContainerRef} className="relative flex-1 min-w-0">
+            <div className="relative w-full">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink3" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchOpen(true);
+                }}
+                onFocus={() => setIsSearchOpen(true)}
+                placeholder="결재 문서명, 문서번호, 기안자 검색..."
+                className="w-full rounded-lg border border-border bg-panel-alt/50 hover:bg-panel pl-8.5 pr-8 py-1.5 text-[12px] text-ink placeholder:text-ink3 outline-none focus:border-teal focus:bg-panel focus:ring-1 focus:ring-teal/30 transition-all shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setIsSearchOpen(false);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* 검색 결과 드롭다운 */}
+            {isSearchOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-[400px] overflow-y-auto rounded-xl border border-border bg-panel shadow-2xl p-1.5 space-y-1 backdrop-blur-md animate-fadeIn">
+                {/* 드롭다운 내부 상단 문서함 필터 탭 칩 */}
+                <div className="flex items-center justify-between gap-1 overflow-x-auto px-2 py-1.5 border-b border-border/60 bg-panel-alt/30 rounded-t-lg">
+                  <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
+                    <span className="text-[10.5px] font-bold text-ink3 shrink-0 mr-1">문서함 필터:</span>
+                    {[
+                      { k: 'all', l: '전체' },
+                      { k: '대기', l: '결재대기' },
+                      { k: '상신', l: '기안/상신' },
+                      { k: '완료', l: '결재완료' },
+                      { k: '반려', l: '반려' },
+                      { k: '참조', l: '참조' },
+                      { k: '수신', l: '수신' },
+                      { k: '부서', l: '부서' },
+                      { k: '임시', l: '임시저장' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.k}
+                        type="button"
+                        onClick={() => setSearchBoxFilter(tab.k as any)}
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold transition-all shrink-0 cursor-pointer ${
+                          searchBoxFilter === tab.k
+                            ? 'bg-teal text-white shadow-2xs'
+                            : 'bg-panel border border-border text-ink3 hover:text-ink hover:border-teal/40'
+                        }`}
+                      >
+                        {tab.l}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[9.5px] text-ink3 shrink-0 ml-2">ESC 닫기</span>
+                </div>
+
+                <div className="px-2 py-0.5 text-[10px] font-bold text-ink3 flex items-center justify-between">
+                  <span>
+                    {searchBoxFilter !== 'all' ? `[${searchBoxFilter}함] ` : ''}
+                    {searchQuery.trim() ? `검색 결과 (${searchResults.length}건)` : '최근 문서'}
+                  </span>
+                  <span className="text-[9.5px] text-ink3">결과를 클릭하면 해당 문서로 이동합니다</span>
+                </div>
+
+                {searchResults.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => handleSelectSearchedDoc(d)}
+                    className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors cursor-pointer hover:bg-teal-soft/40 ${
+                      selId === d.id ? 'bg-teal-soft/60 border border-teal/20' : ''
+                    }`}
+                  >
+                    <div className="pt-0.5 shrink-0">
+                      <DocTypeIcon type={d.docType} size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <DocStatusBadge doc={d} me={me} />
+                        <span className="truncate text-[11.5px] font-bold text-ink hover:text-teal transition-colors">
+                          {d.title}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-ink3 truncate">
+                        <span className="font-mono text-ink2">{d.docNo || '임시문서'}</span>
+                        <span>·</span>
+                        <span>{d.drafterName} ({d.drafterDept || d.docType})</span>
+                        <span>·</span>
+                        <span>{d.createdAt ? d.createdAt.slice(0, 10) : ''}</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+
+                {searchResults.length === 0 && (
+                  <div className="py-6 text-center text-[11.5px] text-ink3">
+                    선택된 문서함에 검색 조건과 일치하는 결재 문서가 없습니다.
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
+
+            <div className="flex items-center gap-2 shrink-0">
+              {isTrackedBox && (
+                <button
+                  type="button"
+                  onClick={() => setUnreadOnly((v) => !v)}
+                  className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${unreadOnly ? 'border-rose-500 bg-rose-500 text-white' : 'border-border text-ink3 hover:text-ink hover:border-rose-400'}`}
+                  title="안읽은 문서만 보기"
+                >
+                  안읽음만
+                </button>
+              )}
+              <select
+                value={listOrder}
+                onChange={(e) => setListOrder(e.target.value as ListOrder)}
+                className="rounded-lg border border-border bg-panel px-2 py-1 text-[11px] font-bold text-ink2 cursor-pointer outline-none focus:border-teal"
+                title="정렬"
+              >
+                <option value="recent">최신순</option>
+                <option value="oldest">오래된순</option>
+              </select>
+            </div>
+          </div>
+
           <div className="flex items-start gap-4">
-            {/* 중: 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 320px(목록 접기 시 숨김) */}
-            {(!isListCollapsed || !selDoc) && (
-              <div className={`overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm self-start animate-fadeIn sticky top-[8px] ${selDoc ? 'w-[320px] shrink-0' : 'flex-1'}`}>
-                {/* 목록 헤더 */}
-
-                <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
-                  <div className="flex items-center gap-2">
-                    {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        onChange={toggleSelectAll}
-                        className="rounded border-border text-teal focus:ring-teal cursor-pointer h-3.5 w-3.5 animate-fadeIn"
-                        title="전체 선택/해제"
-                      />
-                    )}
-                    <span>
-                      {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
-                      <span className="text-ink3">· {filteredList.length}</span>
-                    </span>
-
-
-                  </div>
-                </div>
+            {/* 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 340px(여러 문서를 빠르게 넘겨보기 좋게 분할 유지) */}
+            {(
+              <div className={`min-w-0 flex flex-col self-start ${selDoc ? 'w-[340px] shrink-0 sticky top-[8px]' : 'flex-1'}`}>
+              <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm animate-fadeIn">
 
                 {box === '상신' && (
                   <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
@@ -972,8 +1050,10 @@ export default function ApprovalScreen() {
                 {/* 목록 데이터 영역 */}
                 <div>
                   {isLoading && <div className="py-10 text-center text-[12px] text-ink3">불러오는 중…</div>}
-                  {!isLoading && filteredList.length === 0 && <div className="py-14 text-center text-[12px] text-ink3">문서가 없습니다.</div>}
-                  {filteredList.map((d: ApprovalDoc) => {
+                  {!isLoading && displayedList.length === 0 && (
+                    <div className="py-14 text-center text-[12px] text-ink3">{unreadOnly && isTrackedBox ? '안읽은 문서가 없습니다.' : '문서가 없습니다.'}</div>
+                  )}
+                  {displayedList.map((d: ApprovalDoc) => {
                     const isRecentCompleted = d.status === '완료' && d.completedAt && (Date.now() - new Date(d.completedAt).getTime() < 24 * 60 * 60 * 1000);
                     const isChecked = selectedIds.includes(d.id);
 
@@ -1027,64 +1107,45 @@ export default function ApprovalScreen() {
                   })}
                 </div>
 
-                {/* 목록 하단 풋터 액션 바 (선택 항목 존재 시 목록 바로 아래에 조밀하게 표시) */}
-                {((box === '대기' && todoFilter !== 'progress') || box === '삭제') && selectedIds.length > 0 && (
-                  <div className="border-t border-border bg-panel-alt/60 p-2.5 flex items-center justify-between animate-fadeIn">
-                    <span className="text-[11px] font-extrabold text-teal bg-teal/10 border border-teal/20 px-2 py-0.5 rounded-md">
-                      {selectedIds.length}개 선택됨
-                    </span>
-
-                    {box === '대기' && (
-                      <button
-                        onClick={() => setShowBatchApproveConfirm(true)}
-                        className="group relative inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal to-emerald-600 text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-teal/20 hover:shadow-md hover:shadow-teal/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                      >
-                        <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>일괄 승인</span>
-                      </button>
-                    )}
-
-                    {box === '삭제' && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={handleBatchRestore}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal text-white rounded-lg text-[11.5px] font-bold shadow-sm shadow-emerald-500/20 hover:shadow-md hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                        >
-                          <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          <span>일괄 복원</span>
-                        </button>
-                        <button
-                          onClick={handleBatchPermanentDelete}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/20 hover:border-rose-500 rounded-lg text-[11.5px] font-bold shadow-xs hover:shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all duration-150"
-                        >
-                          <svg className="w-3.5 h-3.5 stroke-[2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          <span>영구 삭제</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+              </div>
               </div>
             )}
 
-            {/* 우: 상세 — 문서를 눌렀을 때만 */}
+            {/* 상세 — 문서를 눌렀을 때만, 목록 오른쪽 */}
             {selDoc && (
-            <div className="rounded-xl border border-border bg-panel flex-1 min-w-[680px] shadow-sm">
-              <div className="flex justify-end border-b border-border px-3 py-1.5">
+            <div className="rounded-xl border border-border bg-panel flex-1 min-w-0 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5">
                 <button
                   type="button"
                   onClick={handleCloseDoc}
                   title="상세 닫기 — 목록만 보기"
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-bold text-ink2 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
                 >
                   ✕ 닫기
                 </button>
+                {position && position.index > 0 && (
+                  <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-ink3">
+                    <span className="tabular-nums" data-testid="doc-position">{position.index} / {position.total}</span>
+                    <button
+                      type="button"
+                      disabled={!position.prevId}
+                      onClick={() => { const d = displayedList.find((x) => x.id === position.prevId); if (d) handleSelectDoc(d); }}
+                      title="이전 문서"
+                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!position.nextId}
+                      onClick={() => { const d = displayedList.find((x) => x.id === position.nextId); if (d) handleSelectDoc(d); }}
+                      title="다음 문서"
+                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-ink2 hover:bg-panel-alt disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
               </div>
                 <DocDetail
                   key={selDoc.id}
@@ -1110,7 +1171,7 @@ export default function ApprovalScreen() {
           title="일괄 결재 승인 확인"
           description={
             <div className="space-y-1 text-amber-700 dark:text-amber-300 font-semibold">
-              <p>선택하신 <span className="font-extrabold underline">{selectedIds.length}건</span>의 결재 문서를 일괄 승인하시겠습니까?</p>
+              <p>선택하신 <span className="font-extrabold underline">{approvableSelectedIds.length}건</span>의 결재 문서를 일괄 승인하시겠습니까?</p>
               <p className="text-[11.5px] font-normal text-amber-600 dark:text-amber-400">
                 ※ 일괄 승인 처리 후에는 결재를 취소하거나 이전 상태로 되돌릴 수 없습니다.
               </p>
