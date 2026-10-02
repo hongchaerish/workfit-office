@@ -263,7 +263,9 @@ class DataUrlAdapter implements StorageAdapter {
 // ─────────────────────────────────────────────────────────────
 type Driver = 's3' | 'firebase' | 'appwrite' | 'dataurl';
 
-const APPWRITE_BUCKET = (import.meta.env.VITE_APPWRITE_BUCKET_ID as string | undefined) ?? 'workfiles';
+// 테스트(node)에서는 import.meta.env 가 통째로 undefined 라 바로 읽으면 모듈 로드에서 터진다(dbDriver.ts·appwrite.ts 와 같은 가드).
+const env: Record<string, string | undefined> = import.meta.env ?? {};
+const APPWRITE_BUCKET = env.VITE_APPWRITE_BUCKET_ID ?? 'workfiles';
 
 /**
  * 기본 드라이버 선택 순서: Firebase → Appwrite → data URL.
@@ -273,7 +275,7 @@ const APPWRITE_BUCKET = (import.meta.env.VITE_APPWRITE_BUCKET_ID as string | und
  * Appwrite가 붙어 있으면 반드시 그쪽을 쓴다.
  */
 function selectAdapter(): StorageAdapter {
-  const driver = (import.meta.env.VITE_STORAGE_DRIVER as Driver | undefined)
+  const driver = (env.VITE_STORAGE_DRIVER as Driver | undefined)
     ?? (isFirebaseConfigured ? 'firebase' : isAppwriteConfigured ? 'appwrite' : 'dataurl');
 
   switch (driver) {
@@ -282,8 +284,8 @@ function selectAdapter(): StorageAdapter {
       console.warn('[storage] VITE_STORAGE_DRIVER=appwrite 이지만 Appwrite 미설정 → data URL 폴백');
       return new DataUrlAdapter();
     case 's3': {
-      const signUrl = import.meta.env.VITE_STORAGE_SIGN_URL as string | undefined;
-      const signToken = import.meta.env.VITE_STORAGE_SIGN_TOKEN as string | undefined;
+      const signUrl = env.VITE_STORAGE_SIGN_URL;
+      const signToken = env.VITE_STORAGE_SIGN_TOKEN;
       if (signUrl) return new S3StorageAdapter(signUrl, signToken);
       console.warn('[storage] VITE_STORAGE_DRIVER=s3 이지만 VITE_STORAGE_SIGN_URL 미설정 → data URL 폴백');
       return new DataUrlAdapter();

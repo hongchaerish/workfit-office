@@ -10,6 +10,7 @@ import {
   type Attachment,
 } from '@/domain/chatMessage/schema';
 import { CHAT_MESSAGE_SEED } from '@/data/seeds/chatMessage.seed';
+import { applyDeletion, canDeleteMessage, DELETE_DENIED_MESSAGE, scrubReplyPreviews } from '@/domain/chatMessage/deletion';
 
 /**
  * 채팅 메시지 Repository — DB 접근을 캡슐화하는 유일한 계층.
@@ -128,6 +129,8 @@ class AppwriteBackend implements ChatMessageBackend {
       replyTo: m.replyTo ? JSON.stringify(m.replyTo) : null,
       approvalPayload: m.approvalPayload ? JSON.stringify(m.approvalPayload) : null,
       reactions: m.reactions ? JSON.stringify(m.reactions) : null,
+      // 삭제 정보는 삭제된 메시지에만 싣는다 — 속성이 아직 없는 DB에서도 일반 전송·읽음 처리가 깨지지 않게.
+      ...(m.deletedAt ? { deletedAt: m.deletedAt, deletedBy: m.deletedBy ?? null, deletedByName: m.deletedByName ?? null } : {}),
     };
   }
 
@@ -148,6 +151,9 @@ class AppwriteBackend implements ChatMessageBackend {
       replyTo: parseJson(row.replyTo),
       approvalPayload: parseJson(row.approvalPayload),
       reactions: parseJson(row.reactions) ?? {},
+      deletedAt: (row.deletedAt as string | null | undefined) ?? null,
+      deletedBy: (row.deletedBy as string | null | undefined) ?? null,
+      deletedByName: (row.deletedByName as string | null | undefined) ?? null,
     });
   }
 
@@ -264,7 +270,8 @@ export const chatMessageRepo = {
     const randomHex = Math.random().toString(36).substring(2, 8);
     const path = `chat/${roomId}/${Date.now()}-${randomHex}.${ext}`;
     const url = await fileStorage.put(path, file, { contentType: meta.mime, filename: file.name });
-    return { url, ...meta };
+    // 경로를 함께 남긴다 — 메시지를 삭제할 때 저장소 파일까지 지우려면 필요하다.
+    return { url, ...meta, path };
   },
 
   /** 메시지 추가(전송). 문서 ID = 메시지 ID. 생성 우선(update 404 노이즈 없음). */
@@ -293,6 +300,27 @@ export const chatMessageRepo = {
     const cur = (await backend.loadAll()).find((m) => m.id === id);
     if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
     await backend.save({ ...cur, reactions });
+  },
+
+  /**
+   * 메시지 삭제(모두에게서) — 규칙은 domain/chatMessage/deletion 이 단일 경계다.
+   * 문서는 남기고 내용을 지우며, 이 메시지를 인용한 답장 미리보기도 지운다. 첨부는 경로가
+   * 남아 있는 경우(새 업로드)에만 저장소에서도 지운다(예전 메시지는 URL만 있어 파일이 남는다).
+   */
+  async deleteMessage(id: string, actor: { id: string; name: string }, now: Date = new Date()): Promise<ChatMessage> {
+    const rows = await backend.loadAll();
+    const cur = rows.find((m) => m.id === id);
+    if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+    const verdict = canDeleteMessage(cur, actor.id, now);
+    if (!verdict.allowed) throw new Error(DELETE_DENIED_MESSAGE[verdict.reason]);
+
+    const deleted = applyDeletion(cur, actor, now);
+    await backend.save(deleted);
+    for (const reply of scrubReplyPreviews(rows.filter((m) => m.roomId === cur.roomId), id)) {
+      await backend.save(reply);
+    }
+    if (cur.attachment?.path) await fileStorage.remove(cur.attachment.path);
+    return deleted;
   },
 
   /** 특정 방의 메시지 전건 삭제 */

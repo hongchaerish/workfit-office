@@ -8,7 +8,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
-import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
+import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
@@ -71,6 +72,15 @@ export default function MobileChatThread() {
   const remove = useDeleteRoom();
   const updateRoomName = useUpdateRoomName();
   const updateReactions = useUpdateMessageReactions(roomId);
+  const deleteMessage = useDeleteMessage(roomId);
+  const handleDeleteMessage = async (msg: ChatMessage) => {
+    if (!window.confirm("이 메시지를 모든 참여자의 화면에서 삭제할까요?\n삭제하면 되돌릴 수 없습니다.")) return;
+    try {
+      await deleteMessage.mutateAsync({ messageId: msg.id, actor: { id: me, name: meName } });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "삭제에 실패했습니다.");
+    }
+  };
 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -672,6 +682,19 @@ export default function MobileChatThread() {
                   메시지 수정
                 </button>
               )}
+              {/* 삭제 가능 여부는 공용 규칙 하나로 판단(본인·24시간·일반/사진/파일) */}
+              {canDeleteMessage(sheetMessage, me, new Date()).allowed && (
+                <button
+                  onClick={() => {
+                    const target = sheetMessage;
+                    setSheetMessage(null);
+                    void handleDeleteMessage(target);
+                  }}
+                  className="w-full py-3.5 text-center text-[14px] font-semibold text-danger border-t border-black/5 active:bg-black/5"
+                >
+                  메시지 삭제
+                </button>
+              )}
             </div>
           </div>
           <button
@@ -1045,6 +1068,13 @@ function MessageBubble({
           <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
         </span>
       </button>
+    );
+  } else if (isDeletedMessage(m)) {
+    // 삭제된 메시지 — 내용 없이 안내만, 길게 눌러도 메뉴를 열지 않는다
+    body = (
+      <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 text-[12.5px] italic text-ink3 select-none">
+        {DELETED_MESSAGE_TEXT}
+      </div>
     );
   } else {
     body = (

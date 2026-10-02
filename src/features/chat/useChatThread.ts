@@ -102,6 +102,29 @@ export function useEditMessage(roomId: string) {
   });
 }
 
+/**
+ * 메시지 삭제(모두에게서) — 웹·PWA 공용. 규칙(본인·24시간·일반/사진/파일)은 repo 가
+ * domain/chatMessage/deletion 으로 다시 검사한다. 지운 메시지가 방의 마지막 메시지면
+ * 방 목록 미리보기 문구도 바꾼다.
+ */
+export function useDeleteMessage(roomId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, actor }: { messageId: string; actor: { id: string; name: string } }) => {
+      const deleted = await chatMessageRepo.deleteMessage(messageId, actor);
+      const room = await chatRoomRepo.get(roomId);
+      const last = room?.lastMessage;
+      if (last && last.at === deleted.at && last.senderId === deleted.senderId) {
+        await chatRoomRepo.updateLastMessage(roomId, { ...last, text: deleted.text });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
+    },
+  });
+}
+
 /** 메시지 이모지 반응 업데이트 훅 */
 export function useUpdateMessageReactions(roomId: string) {
   const qc = useQueryClient();

@@ -8,7 +8,8 @@ import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeav
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
-import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
@@ -285,6 +286,15 @@ function MessengerThread({
   const remove = useDeleteRoom();
   const updateRoomName = useUpdateRoomName();
   const updateReactions = useUpdateMessageReactions(room.id);
+  const deleteMessage = useDeleteMessage(room.id);
+  const handleDeleteMessage = async (msg: ChatMessage) => {
+    if (!window.confirm('이 메시지를 모든 참여자의 화면에서 삭제할까요?\n삭제하면 되돌릴 수 없습니다.')) return;
+    try {
+      await deleteMessage.mutateAsync({ messageId: msg.id, actor: { id: me, name: meName } });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+    }
+  };
 
   const handleToggleEmoji = async (messageId: string, emoji: string) => {
     const targetMsg = messages.find((m) => m.id === messageId);
@@ -1116,6 +1126,7 @@ function MessengerThread({
           onForward={(msg) => setForwardMessage(msg)}
           onStartEdit={(msgId) => setEditingMsgId(msgId)}
           onDownload={(att) => downloadAttachment(att)}
+          onDelete={(msg) => void handleDeleteMessage(msg)}
         />
       )}
       {forwardMessage && createPortal(
@@ -1147,6 +1158,7 @@ function MessageContextMenuPortal({
   onForward,
   onStartEdit,
   onDownload,
+  onDelete,
 }: {
   activeMenu: { m: ChatMessage; x: number; y: number; mine: boolean };
   me: string;
@@ -1156,8 +1168,19 @@ function MessageContextMenuPortal({
   onForward: (m: ChatMessage) => void;
   onStartEdit: (msgId: string) => void;
   onDownload: (att: Attachment) => void;
+  onDelete: (m: ChatMessage) => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  // 삭제 가능 여부는 공용 규칙 하나로 판단(본인·24시간·일반/사진/파일)
+  const canDelete = canDeleteMessage(activeMenu.m, me, new Date()).allowed;
+  const deleteButton = canDelete ? (
+    <button
+      onClick={() => { onClose(); onDelete(activeMenu.m); }}
+      className="w-full px-3 py-1.5 text-left hover:bg-black/5 transition-colors text-danger cursor-pointer"
+    >
+      삭제
+    </button>
+  ) : null;
   const [pos, setPos] = useState({ x: activeMenu.x, y: activeMenu.y });
 
   useEffect(() => {
@@ -1255,6 +1278,7 @@ function MessageContextMenuPortal({
               수정
             </button>
           )}
+          {deleteButton}
         </>
       ) : (
         <>
@@ -1278,6 +1302,7 @@ function MessageContextMenuPortal({
               다운로드
             </button>
           )}
+          {deleteButton}
         </>
       )}
     </div>,
@@ -1569,6 +1594,13 @@ function MessageBubble({
         )}
       </div>
     );
+  } else if (isDeletedMessage(m)) {
+    // 삭제된 메시지 — 내용 없이 안내만, 메뉴(복사·답장·전달·수정·삭제)는 열지 않는다
+    body = (
+      <div className="rounded-xl border border-dashed border-border px-3 py-2 text-[11.5px] italic text-ink3 select-none">
+        {DELETED_MESSAGE_TEXT}
+      </div>
+    );
   } else {
     body = (
       <div
@@ -1628,7 +1660,7 @@ function MessageBubble({
           >
             {body}
             {bubbleMeta}
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className={`flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 ${isDeletedMessage(m) ? 'hidden' : ''}`}>
               <button
                 onClick={() => onReply(m)}
                 title="답글"

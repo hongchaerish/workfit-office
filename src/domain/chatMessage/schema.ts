@@ -25,6 +25,8 @@ export const attachmentSchema = z.object({
   size: z.number(),
   /** MIME 타입(image/* 여부로 미리보기 판단). */
   mime: z.string(),
+  /** 저장소 경로 — 메시지 삭제 시 파일까지 지우는 데 쓴다. 예전 메시지에는 없다. */
+  path: z.string().optional(),
 });
 export type Attachment = z.infer<typeof attachmentSchema>;
 
@@ -70,6 +72,10 @@ export const chatMessageSchema = z.object({
   readBy: z.array(z.string()).default([]),
   isEdited: z.boolean().optional().default(false),
   reactions: z.record(z.string(), z.array(z.string())).optional().default({}),
+  /** 삭제(모두에게서) 시각·삭제자. 삭제되지 않은 메시지는 null. (domain/chatMessage/deletion) */
+  deletedAt: z.string().nullable().optional(),
+  deletedBy: z.string().nullable().optional(),
+  deletedByName: z.string().nullable().optional(),
 });
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;

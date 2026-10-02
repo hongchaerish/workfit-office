@@ -127,6 +127,10 @@ const COLLECTIONS: CollectionDef[] = [
       J('attachment', 4000), // url/name/size/mime
       J('replyTo', 2000),
       J('approvalPayload', 2000),
+      // 메시지 삭제(모두에게서) 기록 — 삭제된 메시지에만 채운다(domain/chatMessage/deletion)
+      S('deletedAt', 40),
+      S('deletedBy', 64),
+      S('deletedByName', 128),
     ],
     indexes: [IX('roomId', ['roomId']), IX('at', ['at'])],
   },
