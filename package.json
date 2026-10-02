@@ -8,7 +8,6 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "seed": "tsx scripts/seed-firestore.ts",
     "migrate-pw": "tsx scripts/migrate-passwords.ts",
     "appwrite:schema": "tsx scripts/appwrite-schema.ts",
     "etl": "tsx scripts/etl-firestore-to-appwrite.ts"

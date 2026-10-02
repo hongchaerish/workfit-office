@@ -13,12 +13,6 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', icon: '▦', order: 10, use: true },
         ]
       },
-      {
-        id: 'G_OPS_MON', name: '모니터링', icon: '◫', order: 20, use: true, children: [
-          { id: 'S_OPS_DASH', name: '통합 모니터링', url: '/ops/dashboard', icon: '◫', order: 10, use: true },
-          { id: 'S_OPS_LINE', name: '라인 가동 현황', url: '/ops/line', icon: '◷', order: 20, use: true },
-        ]
-      },
     ]
   },
 

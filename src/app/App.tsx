@@ -83,9 +83,6 @@ const StandaloneDockScreen = lazy(() => import('@/modules/dock/StandaloneDockScr
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
   '/exec': lazy(() => import('@/modules/exec/ExecDashboardScreen')),
-  // 운영 현황
-  '/ops/dashboard': lazy(() => import('@/modules/ops/dashboard/DashboardScreen')),
-  '/ops/line': lazy(() => import('@/modules/ops/line/LineStatusScreen')),
   // 기준 정보
   '/base/user': lazy(() => import('@/modules/base/user/UserScreen')),
   '/sys/user': lazy(() => import('@/modules/base/user/UserScreen')),

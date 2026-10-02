@@ -295,12 +295,6 @@ const COLLECTIONS: CollectionDef[] = [
 
   // ── 권한 / 설정 ──
   {
-    id: 'authRoles',
-    name: '권한역할',
-    attributes: [S('code', 64, true), S('name', 128, true), J('permissions')], // array of [bool,bool]
-    indexes: [],
-  },
-  {
     id: 'roleGroups',
     name: '역할그룹',
     attributes: [
@@ -323,21 +317,6 @@ const COLLECTIONS: CollectionDef[] = [
       S('targetType', 32, true),
       S('targetId', 64, true),
       S('targetName', 128, false),
-    ],
-    indexes: [],
-  },
-  {
-    id: 'sysAdmins',
-    name: '시스템관리자',
-    attributes: [
-      S('id', 64, true),
-      S('name', 64, true),
-      S('level', 32), // enum-무default → false
-      S('modules', 256),
-      S('status', 16),
-      S('twoFa', 8),
-      S('ip', 64),
-      S('lastLogin', 40),
     ],
     indexes: [],
   },
@@ -429,12 +408,6 @@ const COLLECTIONS: CollectionDef[] = [
       J('steps'), // array of routeStep
     ],
     indexes: [IX('docType', ['docType']), IX('priority', ['priority'])],
-  },
-  {
-    id: 'approvalRules',
-    name: '결재 규칙',
-    attributes: [S('id', 64, true), S('docType', 32), INT('amountFrom'), INT('amountTo'), S('finalApproverKey', 32)],
-    indexes: [IX('docType', ['docType'])],
   },
   {
     id: 'approvalFolders',
@@ -552,12 +525,6 @@ const COLLECTIONS: CollectionDef[] = [
     name: '시스템 로그',
     attributes: [S('id', 64, true), S('at', 40, true), S('user', 64, true), S('type', 32), S('screen', 128), S('detail', 1000), S('ip', 64)],
     indexes: [IX('at', ['at']), IX('user', ['user'])],
-  },
-  {
-    id: 'issues',
-    name: '자재 불출',
-    attributes: [S('no', 64, true), S('wo', 64), S('target', 128), S('kit', 64), S('warehouse', 64), S('status', 16), J('materials')],
-    indexes: [IX('wo', ['wo']), IX('status', ['status'])],
   },
   {
     // 채번 시퀀스. 문서 $id = 채널(예: AP-20260812). 전자결재 채번은 보존(SO-*는 폐기).

@@ -53,10 +53,8 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_GW_ORGCHART', name: '조직도', url: '/gw/orgchart', category: 'GW', desc: '조직 계층도 및 부서원 조회', supportedActions: ['access'] },
   { id: 'S_GW_GALLERY', name: '회사 갤러리', url: '/gw/gallery', category: 'GW', desc: '사내 행사 및 전사 갤러리 공유', supportedActions: ['access', 'create', 'update', 'delete'] },
 
-  // 2. 경영 & 운영 현황 (3개)
+  // 2. 경영 현황 (1개)
   { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', category: 'EXEC', desc: '경영 지표 및 전사 KPI 요약', supportedActions: ['access', 'update'] },
-  { id: 'S_OPS_DASH', name: '통합 모니터링', url: '/ops/dashboard', category: 'EXEC', desc: '운영 현황 및 실시간 지표', supportedActions: ['access', 'update'] },
-  { id: 'S_OPS_LINE', name: '라인 가동 현황', url: '/ops/line', category: 'EXEC', desc: '제조 라인 가동 상태 모니터링', supportedActions: ['access', 'create', 'update'] },
 
   // 3. 기준 정보 & 결재 관리 (8개)
   { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', category: 'BASE', desc: '사원 등록, 계정 및 퇴사 관리', supportedActions: ['access', 'create', 'update', 'delete'] },

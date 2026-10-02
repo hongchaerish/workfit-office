@@ -10,4 +10,4 @@ export const SCREEN_BY_NAME: Record<string, FlatScreen> = Object.fromEntries(
   SCREENS.map((s) => [s.name, s]),
 );
 
-export const HOME_URL = '/ops/dashboard';
+export const HOME_URL = '/exec';
