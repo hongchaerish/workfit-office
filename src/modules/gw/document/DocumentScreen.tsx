@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Search,
   X,
@@ -21,7 +21,8 @@ import {
   FilePlus,
   TrendingUp,
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
@@ -112,22 +113,21 @@ export default function DocumentScreen() {
   const [revReasonInput, setRevReasonInput] = useState('');
   const [revFileInput, setRevFileInput] = useState('');
 
-  // 1. 게시판 바로가기 딥링크 대응 (`docId` 쿼리 파라미터 감지)
-  useEffect(() => {
-    const docIdParam = searchParams.get('docId');
-    if (docIdParam) {
-      const idNum = parseInt(docIdParam, 10);
-      if (!isNaN(idNum)) {
-        const found = mockDocuments.find((d) => d.id === idNum);
-        if (found) {
-          setSelectedDocId(found.id);
-          setActiveCategory(found.category as any);
-          setActiveSubCategory(found.subCategory);
-          setActiveVersionName(null); // 최신 버전
-        }
-      }
-    }
-  }, [searchParams, documents]);
+  // 1. 게시판 바로가기 딥링크 대응 (`docId` 쿼리 파라미터 감지).
+  // 주소가 바뀔 때 한 번만 적용한다 — 문서 목록이 갱신될 때마다 다시 적용하면 사용자가 옮겨 간 선택이 되돌아간다.
+  const location = useLocation();
+  const docIdParam = searchParams.get('docId');
+  const deepLinkDoc = useMemo(() => {
+    const idNum = docIdParam ? parseInt(docIdParam, 10) : NaN;
+    return Number.isNaN(idNum) ? null : mockDocuments.find((d) => d.id === idNum) ?? null;
+  }, [docIdParam, mockDocuments]);
+  useApplyDeepLinkOnce(docIdParam ? `${location.key}|${docIdParam}` : null, deepLinkDoc !== null, () => {
+    if (!deepLinkDoc) return;
+    setSelectedDocId(deepLinkDoc.id);
+    setActiveCategory(deepLinkDoc.category as any);
+    setActiveSubCategory(deepLinkDoc.subCategory);
+    setActiveVersionName(null); // 최신 버전
+  });
 
   // 선택된 문서 데이터
   const selectedDoc = useMemo(() => {

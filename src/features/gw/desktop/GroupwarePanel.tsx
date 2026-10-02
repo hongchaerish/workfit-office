@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { openAppState, type ShellNavState } from '@/app/shell/tabModel';
 import { Bell, X, Settings2, RotateCcw, Check, ChevronLeft, ChevronRight, GripVertical, Lock } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -72,17 +73,18 @@ export function GroupwarePanel({ onClose, onNavigate }: { onClose: () => void; o
     [mailUnseenQuery.data],
   );
 
-  const navigateTo = (url: string) => {
+  const navigateTo = (url: string, state?: ShellNavState) => {
     if (onNavigate) {
       onNavigate(url);
     } else {
-      nav(url);
+      nav(url, { state });
       onClose();
     }
   };
 
   // 타일 클릭 → 그룹웨어 앱 라우트로 이동하고 도크를 닫는다.
-  const go = (to: string) => { navigateTo(`/gw/${to}`); };
+  // 이미 탭으로 열린 앱이면 그 탭(작성 중 화면 포함)으로 돌아간다.
+  const go = (to: string) => { navigateTo(`/gw/${to}`, openAppState); };
   // 결재 문서 딥링크 → 결재함이 해당 문서를 품은 탭으로 이동·선택.
   const goDoc = (id: string) => { navigateTo(`/gw/approval?doc=${id}`); };
 

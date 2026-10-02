@@ -195,6 +195,51 @@ export default function App() {
     }
   }, [user, navigate, isMobilePwa, isDock]);
 
+  // 셸(AppShell) 안의 화면 라우트 — AppShell 이 열린 탭마다 이 목록으로 화면을 그린다(탭 상태 유지).
+  const shellRoutes = (
+    <>
+      <Route index element={<Navigate to={HOME} replace />} />
+      {SCREENS.map((screen) => {
+        const Impl = SCREEN_COMPONENTS[screen.url];
+        return (
+          <Route
+            key={screen.id}
+            path={screen.url}
+            element={
+              <ProtectedRoute url={screen.url}>
+                {Impl ? <Impl /> : <PlaceholderScreen screen={screen} />}
+              </ProtectedRoute>
+            }
+          />
+        );
+      })}
+      {/* 그룹웨어(도크 전용) — 조직도 실화면 + 전자결재 독립 라우트 */}
+      <Route path="/gw/orgchart" element={<ProtectedRoute url="/gw/orgchart"><GwOrgChart /></ProtectedRoute>} />
+      <Route path="/gw/approval/new" element={<ProtectedRoute url="/gw/approval"><GwApprovalDraft /></ProtectedRoute>} />
+      <Route path="/gw/approval/edit/:id" element={<ProtectedRoute url="/gw/approval"><GwApprovalDraft /></ProtectedRoute>} />
+      <Route path="/gw/approval" element={<ProtectedRoute url="/gw/approval"><GwApproval /></ProtectedRoute>} />
+      <Route path="/gw/leave" element={<ProtectedRoute url="/gw/leave"><GwLeave /></ProtectedRoute>} />
+      <Route path="/gw/board" element={<ProtectedRoute url="/gw/board"><GwBoard /></ProtectedRoute>} />
+      <Route path="/gw/document" element={<ProtectedRoute url="/gw/document"><GwDocument /></ProtectedRoute>} />
+      <Route path="/gw/community" element={<ProtectedRoute url="/gw/community"><GwCommunity /></ProtectedRoute>} />
+      <Route path="/gw/employee" element={<ProtectedRoute url="/gw/employee"><GwEmployee /></ProtectedRoute>} />
+      <Route path="/gw/calendar" element={<ProtectedRoute url="/gw/calendar"><GwCalendar /></ProtectedRoute>} />
+      <Route path="/gw/resource" element={<ProtectedRoute url="/gw/resource"><GwResource /></ProtectedRoute>} />
+      <Route path="/gw/task" element={<ProtectedRoute url="/gw/task"><GwComingSoon /></ProtectedRoute>} />
+      <Route path="/gw/work-plan" element={<ProtectedRoute url="/gw/work-plan"><GwWorkPlan /></ProtectedRoute>} />
+      <Route path="/gw/survey" element={<ProtectedRoute url="/gw/survey"><GwSurvey /></ProtectedRoute>} />
+      <Route path="/gw/mail" element={<ProtectedRoute url="/gw/mail"><GwComingSoon /></ProtectedRoute>} />
+      <Route path="/gw/commute" element={<ProtectedRoute url="/gw/commute"><GwCommute /></ProtectedRoute>} />
+      <Route path="/gw/gallery" element={<ProtectedRoute url="/gw/gallery"><GwGallery /></ProtectedRoute>} />
+      <Route path="/gw/:app" element={<GwComingSoon />} />
+      {/* 개인 프로필 설정 */}
+      <Route path="/profile" element={<ProfileScreen />} />
+      {/* 환경설정 */}
+      <Route path="/settings" element={<SettingsScreen />} />
+      <Route path="*" element={<PlaceholderScreen />} />
+    </>
+  );
+
   return (
     <Routes>
       {/* 모바일 메신저 PWA — 데스크톱 셸 밖의 전체화면 라우트 */}
@@ -207,47 +252,7 @@ export default function App() {
       {/* /exec?from=mes 진입 시 AppShell(GNB/사이드바) 및 대시보드를 일체 띄우지 않고 도크만 렌더링 */}
       {isFromMes && <Route path="/exec" element={<StandaloneDockScreen />} />}
 
-      <Route element={<AppShell />}>
-        <Route index element={<Navigate to={HOME} replace />} />
-        {SCREENS.map((screen) => {
-          const Impl = SCREEN_COMPONENTS[screen.url];
-          return (
-            <Route
-              key={screen.id}
-              path={screen.url}
-              element={
-                <ProtectedRoute url={screen.url}>
-                  {Impl ? <Impl /> : <PlaceholderScreen screen={screen} />}
-                </ProtectedRoute>
-              }
-            />
-          );
-        })}
-        {/* 그룹웨어(도크 전용) — 조직도 실화면 + 전자결재 독립 라우트 */}
-        <Route path="/gw/orgchart" element={<ProtectedRoute url="/gw/orgchart"><GwOrgChart /></ProtectedRoute>} />
-        <Route path="/gw/approval/new" element={<ProtectedRoute url="/gw/approval"><GwApprovalDraft /></ProtectedRoute>} />
-        <Route path="/gw/approval/edit/:id" element={<ProtectedRoute url="/gw/approval"><GwApprovalDraft /></ProtectedRoute>} />
-        <Route path="/gw/approval" element={<ProtectedRoute url="/gw/approval"><GwApproval /></ProtectedRoute>} />
-        <Route path="/gw/leave" element={<ProtectedRoute url="/gw/leave"><GwLeave /></ProtectedRoute>} />
-        <Route path="/gw/board" element={<ProtectedRoute url="/gw/board"><GwBoard /></ProtectedRoute>} />
-        <Route path="/gw/document" element={<ProtectedRoute url="/gw/document"><GwDocument /></ProtectedRoute>} />
-        <Route path="/gw/community" element={<ProtectedRoute url="/gw/community"><GwCommunity /></ProtectedRoute>} />
-        <Route path="/gw/employee" element={<ProtectedRoute url="/gw/employee"><GwEmployee /></ProtectedRoute>} />
-        <Route path="/gw/calendar" element={<ProtectedRoute url="/gw/calendar"><GwCalendar /></ProtectedRoute>} />
-        <Route path="/gw/resource" element={<ProtectedRoute url="/gw/resource"><GwResource /></ProtectedRoute>} />
-        <Route path="/gw/task" element={<ProtectedRoute url="/gw/task"><GwComingSoon /></ProtectedRoute>} />
-        <Route path="/gw/work-plan" element={<ProtectedRoute url="/gw/work-plan"><GwWorkPlan /></ProtectedRoute>} />
-        <Route path="/gw/survey" element={<ProtectedRoute url="/gw/survey"><GwSurvey /></ProtectedRoute>} />
-        <Route path="/gw/mail" element={<ProtectedRoute url="/gw/mail"><GwComingSoon /></ProtectedRoute>} />
-        <Route path="/gw/commute" element={<ProtectedRoute url="/gw/commute"><GwCommute /></ProtectedRoute>} />
-        <Route path="/gw/gallery" element={<ProtectedRoute url="/gw/gallery"><GwGallery /></ProtectedRoute>} />
-        <Route path="/gw/:app" element={<GwComingSoon />} />
-        {/* 개인 프로필 설정 */}
-        <Route path="/profile" element={<ProfileScreen />} />
-        {/* 환경설정 */}
-        <Route path="/settings" element={<SettingsScreen />} />
-        <Route path="*" element={<PlaceholderScreen />} />
-      </Route>
+      <Route path="/*" element={<AppShell routes={shellRoutes} />} />
     </Routes>
   );
 }

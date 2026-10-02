@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -87,6 +88,7 @@ export default function ApprovalScreen() {
   const { byBox, isLoading } = useApprovalBoxes(me);
   const { data: allDocs = [] } = useAllApprovals();
   const [params] = useSearchParams();
+  const location = useLocation();
   const boxParam = params.get('box') as ApprovalBox | '문서함' | null;
 
   const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
@@ -384,27 +386,26 @@ export default function ApprovalScreen() {
     setSelectedIds([]);
   }, [box, doneFilter, todoFilter, rejectFilter, draftFilter]);
 
-  // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화
-  useEffect(() => {
-    const docId = params.get('doc');
-    const urlBox = params.get('box') as ApprovalBox | '문서함' | null;
+  // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화.
+  // **주소가 바뀔 때 한 번만** 적용한다. 결재 목록(allDocs)은 실시간으로 갱신되므로 그때마다
+  // 다시 적용하면, 다른 탭·다른 직원의 결재로 목록이 바뀔 때마다 사용자가 옮겨 간 함·문서를
+  // 알림으로 들어온 문서로 되돌려 버린다.
+  const deepDocId = params.get('doc');
+  const deepBox = params.get('box') as ApprovalBox | '문서함' | null;
+  // location.key 는 이동할 때마다 새로 생긴다 — 같은 알림을 다시 눌러도 다시 적용되고, 목록 갱신으로는 바뀌지 않는다.
+  const deepLinkKey = deepDocId || deepBox ? `${location.key}|${deepBox ?? ''}|${deepDocId ?? ''}` : null;
+  const deepTargetDoc = deepDocId ? allDocs.find((d) => d.id === deepDocId || d.docNo === deepDocId) ?? null : null;
+  useApplyDeepLinkOnce(deepLinkKey, !deepDocId || deepTargetDoc !== null, () => {
+    const urlBox = deepBox;
 
-    // 1. URL에 box만 변경된 경우
-    if (!docId) {
-      if (urlBox && urlBox !== box) {
-        setBox(urlBox);
-      }
+    // 1. URL에 box만 있는 경우
+    if (!deepTargetDoc) {
+      if (urlBox) setBox(urlBox);
       return;
     }
 
-    if (allDocs.length === 0) return;
-
-    const targetDoc = allDocs.find((d) => d.id === docId || d.docNo === docId);
-    if (!targetDoc) return;
-
-    if (selId !== targetDoc.id) {
-      setSelId(targetDoc.id);
-    }
+    const targetDoc = deepTargetDoc;
+    setSelId(targetDoc.id);
 
     // 2. 최적 결재함 자동 판정 (urlBox가 없거나 해당 함에 targetDoc이 없을 때)
     let determinedBox: ApprovalBox | '문서함' = urlBox || '문서함';
@@ -444,10 +445,8 @@ export default function ApprovalScreen() {
       }
     }
 
-    if (box !== determinedBox) {
-      setBox(determinedBox);
-    }
-  }, [params, allDocs, me, userObj?.dept]);
+    setBox(determinedBox);
+  });
 
   // 함 전환/목록/필터 변화 시 선택 보정(문서가 allDocs에서 완전히 사라진 경우에만 첫 항목으로 보정).
   useEffect(() => {
