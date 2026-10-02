@@ -10,7 +10,6 @@ import { COMMON_CODE_SEED } from '@/data/seeds/commonCode.seed';
 import { ROLE_GROUP_SEED } from '@/data/seeds/roleGroup.seed';
 import { SALES_ORDER_SEED } from '@/data/seeds/salesOrder.seed';
 import { SHIPMENT_SEED } from '@/data/seeds/shipment.seed';
-import { RECEIPT_SEED } from '@/data/seeds/receipt.seed';
 import { ISSUE_SEED } from '@/data/seeds/issue.seed';
 import { QUOTE_SEED } from '@/data/seeds/quote.seed';
 import { SALES_COLLECTION_SEED } from '@/data/seeds/salesCollection.seed';
@@ -51,7 +50,6 @@ const TABLES: SeedTable<any>[] = [
   { coll: 'roleGroups', docs: ROLE_GROUP_SEED, id: (d) => d.code },
   { coll: 'salesOrders', docs: SALES_ORDER_SEED, id: (d) => d.no },
   { coll: 'shipments', docs: SHIPMENT_SEED, id: (d) => d.no },
-  { coll: 'receipts', docs: RECEIPT_SEED, id: (d) => d.po },
   { coll: 'issues', docs: ISSUE_SEED, id: (d) => d.no },
   { coll: 'quotes', docs: QUOTE_SEED, id: (d) => d.no },
   { coll: 'salesCollections', docs: SALES_COLLECTION_SEED, id: (d) => d.no },

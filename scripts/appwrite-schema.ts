@@ -587,12 +587,6 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
-    id: 'receipts',
-    name: '입고',
-    attributes: [S('po', 64, true), S('item', 64, true), S('itemName', 128), S('vendor', 128), INT('poQty'), INT('recvQty'), S('warehouse', 32)],
-    indexes: [],
-  },
-  {
     id: 'taxInvoices',
     name: '세금계산서',
     attributes: [S('no', 64, true), S('sale', 64, true), S('cust', 128, true), S('type', 32, true), INT('amt'), S('date', 40), S('status', 32, true), S('nts', 32)],
