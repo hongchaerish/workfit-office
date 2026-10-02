@@ -17,17 +17,10 @@ import { resolveCommuteScope } from '@/features/auth/scopeHelper';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
-import { useHolidays } from '@/features/holiday/useHolidays';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
-import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
-import {
-  evaluateCommuteRecord,
-  type ApprovedLeaveInfo,
-} from '@/domain/commute/engine';
-import { useAllApprovals } from '@/features/gw/useApprovals';
-import { extractScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
+import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { CommutePolicyModal } from './components/CommutePolicyModal';
 import { EmployeeDetailDrawer } from './components/EmployeeDetailDrawer';
 import { CommuteMatrixView } from './components/CommuteMatrixView';
@@ -118,18 +111,10 @@ export default function CommuteScreen() {
   const { user } = useAuth();
   const { userRoles, isAdmin } = usePermission();
   const org = useOrgTree();
-  const { policy = DEFAULT_COMMUTE_POLICY, savePolicy } = useCommutePolicy();
+  const { savePolicy } = useCommutePolicy();
+  const { policy, holidays, holidayMap, approvals = [], approvalDaysOf, evaluate } = useCommuteEvaluation();
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
-  // DB 연동 공휴일 목록 및 빠른 조회를 위한 Date -> Name 맵
-  const { data: holidays = [] } = useHolidays();
-  const holidayMap = useMemo(() => {
-    const map = new Map<string, string>();
-    holidays.forEach((h) => {
-      map.set(h.date, h.name);
-    });
-    return map;
-  }, [holidays]);
 
   const commuteScope = useMemo(() => resolveCommuteScope(user, userRoles, org), [user, userRoles, org]);
   // 보안 지침 준수: 비임원/비팀장 사원은 ADMIN 권한이 있더라도 전사 근태 관제 센터에 접근할 수 없으며, 오직 ALL 스코프 보유자만 canAll 부여
@@ -368,82 +353,8 @@ export default function CommuteScreen() {
   // 전사 한 달치 전 직원 쿼리 (캐시를 유지하여 탭 전환 시 깜빡임 방지)
   const monthAllQuery = useCommuteMonthAll(canManage ? month : null);
 
-  // 전자결재 승인 휴가 데이터 연동
-  const approvalsQuery = useAllApprovals();
-
-  // 휴가·외근·출장 승인 일정 맵 생성 (단일 추출 엔진 extractScheduleInfo 활용)
-  const globalLeaveMap = useMemo(() => {
-    const map = new Map<string, Map<string, ApprovedLeaveInfo>>();
-
-    for (const doc of approvalsQuery.data ?? []) {
-      if (doc.status !== '완료') continue;
-      const schedule = extractScheduleInfo(doc);
-      if (!schedule) continue;
-
-      const drafterName = (schedule.drafterName || doc.drafterName || '').trim();
-      const start = schedule.startDate;
-      const end = schedule.endDate || start;
-      if (!start) continue;
-
-      let curr = new Date(start + 'T00:00:00');
-      const last = new Date(end + 'T00:00:00');
-      if (Number.isNaN(curr.getTime()) || Number.isNaN(last.getTime())) continue;
-
-      while (curr <= last) {
-        const yyyy = curr.getFullYear();
-        const mm = String(curr.getMonth() + 1).padStart(2, '0');
-        const dd = String(curr.getDate()).padStart(2, '0');
-        const dateKey = `${yyyy}-${mm}-${dd}`;
-
-        const leaveInfo: ApprovedLeaveInfo = {
-          leaveType: schedule.category === 'LEAVE'
-            ? (schedule.leaveType || '연차')
-            : schedule.category === 'OUTSIDE'
-            ? (schedule.subType || '외근')
-            : (schedule.subType || '출장'),
-          category: schedule.category,
-          docTitle: schedule.docTitle,
-          docId: schedule.docId,
-        };
-
-        if (schedule.drafterId) {
-          if (!map.has(schedule.drafterId)) map.set(schedule.drafterId, new Map());
-          map.get(schedule.drafterId)!.set(dateKey, leaveInfo);
-        }
-        if (doc.drafterId && doc.drafterId !== schedule.drafterId) {
-          if (!map.has(doc.drafterId)) map.set(doc.drafterId, new Map());
-          map.get(doc.drafterId)!.set(dateKey, leaveInfo);
-        }
-
-        if (drafterName) {
-          if (!map.has(drafterName)) map.set(drafterName, new Map());
-          map.get(drafterName)!.set(dateKey, leaveInfo);
-          const normDrafter = normName(drafterName);
-          if (normDrafter && !map.has(normDrafter)) map.set(normDrafter, new Map());
-          if (normDrafter) map.get(normDrafter)!.set(dateKey, leaveInfo);
-        }
-
-        curr.setDate(curr.getDate() + 1);
-      }
-    }
-    return map;
-  }, [approvalsQuery.data, normName]);
-
-  // 내 전용 휴가/외근/출장 맵 (userId 우선, 이름 및 정규화이름 폴백)
-  const myLeaveMap = useMemo(() => {
-    if (user?.id && globalLeaveMap.has(user.id)) {
-      return globalLeaveMap.get(user.id)!;
-    }
-    const targetName = user?.name?.trim() ?? '';
-    if (targetName && globalLeaveMap.has(targetName)) {
-      return globalLeaveMap.get(targetName)!;
-    }
-    const norm = normName(targetName);
-    if (norm && globalLeaveMap.has(norm)) {
-      return globalLeaveMap.get(norm)!;
-    }
-    return new Map();
-  }, [globalLeaveMap, user?.id, user?.name, normName]);
+  // 내 휴가·외근·출장 승인 일정 (사용자 id·이름 합산)
+  const myApprovalDays = useMemo(() => approvalDaysOf({ id: user?.id, name: user?.name }), [approvalDaysOf, user?.id, user?.name]);
 
   const myHireDate = useMemo(() => {
     return getHireDateForEmp(user?.name, user?.empNo ? Number(user.empNo) : null);
@@ -497,7 +408,7 @@ export default function CommuteScreen() {
     return buildLeaveLedger(
       empInput,
       employeeProfiles,
-      approvalsQuery.data ?? [],
+      approvals,
       adjustments,
       { mode: ledgerMode, holidays },
     );
@@ -508,7 +419,7 @@ export default function CommuteScreen() {
     normName,
     getHireDateForEmp,
     employeeProfiles,
-    approvalsQuery.data,
+    approvals,
     adjustments,
     ledgerMode,
     holidays,
@@ -536,10 +447,10 @@ export default function CommuteScreen() {
           inAt: null,
           outAt: null,
         };
-      records.push(evaluateCommuteRecord(raw, policy, myLeaveMap, myHireDate, holidayMap));
+      records.push(evaluate(raw, myApprovalDays, myHireDate));
     }
     return records;
-  }, [myMonthQuery.data, month, myEmpId, policy, myLeaveMap, myHireDate, holidayMap]);
+  }, [myMonthQuery.data, month, myEmpId, evaluate, myApprovalDays, myHireDate]);
 
   // 관제 대상 직원 필터링 (권한 범위 기반 및 비대상자/퇴사자 제외)
   const scopedEmployees = useMemo(() => {
@@ -618,11 +529,7 @@ export default function CommuteScreen() {
     for (const emp of scopedEmployees) {
       const u = userByEmpMap.get(emp.name.trim()) ?? userByEmpMap.get(normName(emp.name)) ?? userByEmpMap.get(String(emp.empId));
       const hireDate = getHireDateForEmp(emp.name, emp.empId);
-      const personLeaveMap =
-        (u?.id ? globalLeaveMap.get(u.id) : undefined) ??
-        globalLeaveMap.get(emp.name.trim()) ??
-        globalLeaveMap.get(normName(emp.name)) ??
-        new Map();
+      const personApprovalDays = approvalDaysOf({ id: u?.id, name: u?.name ?? emp.name });
       
       const capsId = capsEmpIdByName.get(emp.name.trim()) ?? capsEmpIdByName.get(normName(emp.name));
       const rawMap = rawByEmp.get(emp.empId) ?? (capsId !== undefined ? rawByEmp.get(capsId) : undefined);
@@ -639,7 +546,7 @@ export default function CommuteScreen() {
             inAt: null,
             outAt: null,
           };
-        const evaluated = evaluateCommuteRecord(raw, policy, personLeaveMap, hireDate, holidayMap);
+        const evaluated = evaluate(raw, personApprovalDays, hireDate);
         records.push(evaluated);
         recordsMap.set(dateStr, evaluated);
       }
@@ -687,7 +594,7 @@ export default function CommuteScreen() {
     }
 
     return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [scopedEmployees, monthAllQuery.data, month, policy, globalLeaveMap, getHireDateForEmp, userByEmpMap, holidayMap]);
+  }, [scopedEmployees, monthAllQuery.data, month, evaluate, approvalDaysOf, getHireDateForEmp, userByEmpMap, normName, allEmployees]);
 
   // 글로벌 필터 적용된 PersonRows
   const filteredPersonRows = useMemo(() => {
@@ -1124,7 +1031,7 @@ export default function CommuteScreen() {
           {adminTab === 'leave' && (
             <CommuteLeaveView
               month={month}
-              approvals={approvalsQuery.data ?? []}
+              approvals={approvals}
               personMap={personMap}
               onSelectPerson={(person) => setSelectedPersonDetail(person)}
             />

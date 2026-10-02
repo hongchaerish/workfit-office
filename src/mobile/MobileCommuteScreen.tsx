@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Clock,
@@ -12,8 +12,8 @@ import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { useLeave } from '@/features/gw/useLeave';
 import { useCommuteEmployees, useCommuteMonth } from '@/features/commute/useCommute';
-import { useHolidays } from '@/features/holiday/useHolidays';
-import { getKoreanHoliday } from '@/domain/commute/engine';
+import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
+import { getKoreanHoliday, requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import MobileCommonHeader from './MobileCommonHeader';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
@@ -40,6 +40,13 @@ function getCommuteStatusBadge(
   todayStr: string,
   isHolidayOrWeekend: boolean
 ) {
+  if (record?.status === 'late') {
+    return {
+      label: '지각',
+      style: 'text-amber-700 bg-amber-50 border-amber-200/80 font-bold',
+      tone: 'late',
+    };
+  }
   if (record?.leaveName || record?.status === 'leave') {
     return {
       label: record.leaveName || '휴가',
@@ -59,13 +66,6 @@ function getCommuteStatusBadge(
       label: record.tripName || '출장',
       style: 'text-indigo-600 bg-indigo-50 border-indigo-200/70',
       tone: 'trip',
-    };
-  }
-  if (record?.status === 'late' || (record?.lateMin ?? 0) > 0) {
-    return {
-      label: '지각',
-      style: 'text-amber-700 bg-amber-50 border-amber-200/80 font-bold',
-      tone: 'late',
     };
   }
   if (record?.inAt || record?.outAt || record?.status === 'normal') {
@@ -122,7 +122,9 @@ export default function MobileCommuteScreen() {
   // 사원 정보 매핑 (commute empId)
   const { data: employees = [] } = useCommuteEmployees();
   const currentEmp = useMemo(() => {
-    return employees.find((e) => e.name === user?.name);
+    const norm = (s?: string | null) => (s || '').replace(/\s+/g, '');
+    const empNo = user?.empNo ? Number(user.empNo) : null;
+    return employees.find((e) => (user?.name && norm(e.name) === norm(user.name)) || (empNo !== null && e.empId === empNo));
   }, [employees, user?.name]);
 
   // 오늘이 속한 달의 기록 (오늘 요약 카드용)
@@ -137,32 +139,34 @@ export default function MobileCommuteScreen() {
     selectedMonth
   );
 
-  // 공휴일 맵
-  const { data: holidays = [] } = useHolidays();
-  const holidayMap = useMemo(() => {
-    const map = new Map<string, string>();
-    holidays.forEach((h) => map.set(h.date, h.name));
-    return map;
-  }, [holidays]);
+  // 근태 판정(정책·공휴일·승인 결재) — 데스크톱과 같은 엔진으로 다시 판정한다
+  const { policy, holidayMap, approvalDaysOf, evaluate } = useCommuteEvaluation();
+  const myApprovalDays = useMemo(() => approvalDaysOf({ id: user?.id, name: user?.name }), [approvalDaysOf, user?.id, user?.name]);
+  const evaluateDate = useCallback(
+    (dateStr: string, rows: CommuteRecord[]) =>
+      evaluate(
+        rows.find((r) => r.date === dateStr) ?? { empId: currentEmp?.empId ?? 0, date: dateStr, inAt: null, outAt: null },
+        myApprovalDays,
+      ),
+    [evaluate, myApprovalDays, currentEmp?.empId],
+  );
 
   // 휴가 밸런스 조회
   const leaveBalance = useLeave(user?.id);
 
   // 오늘 근태 기록
-  const todayRecord = useMemo(() => {
-    return currentMonthRows.find((r) => r.date === todayStr);
-  }, [currentMonthRows, todayStr]);
+  const todayRecord = useMemo(() => evaluateDate(todayStr, currentMonthRows), [evaluateDate, currentMonthRows, todayStr]);
 
   const checkInTime = todayRecord?.inAt ? timeOf(todayRecord.inAt) : null;
   const checkOutTime = todayRecord?.outAt ? timeOf(todayRecord.outAt) : null;
 
-  // 퇴근 시간(18:00) 이상으로 찍힌 경우에만 실제 퇴근으로 처리
+  // 그날 근무 종료 시각(정책·반차 반영) 이후로 찍힌 경우에만 실제 퇴근으로 처리
   const isActualOff = useMemo(() => {
     if (!checkOutTime) return false;
-    const [hh, mm] = checkOutTime.split(':').map(Number);
-    const outMin = (hh || 0) * 60 + (mm || 0);
-    return outMin >= 18 * 60;
-  }, [checkOutTime]);
+    const span = requiredWorkSpan(policy, myApprovalDays.get(todayStr) ?? []);
+    const endMin = span?.end ?? timeToMinutes(policy.workEndTime) ?? 1050;
+    return (timeToMinutes(checkOutTime) ?? 0) >= endMin;
+  }, [checkOutTime, policy, myApprovalDays, todayStr]);
 
   // 원클릭 상태 전환 핸들러
   const handleQuickStatus = async (newStatus: UserPresenceStatus, defaultMsg?: string) => {
@@ -175,9 +179,6 @@ export default function MobileCommuteScreen() {
     if (!y || !m) return { firstDayOfWeek: 0, list: [] };
     const daysInMonth = new Date(y, m, 0).getDate();
     const firstDayOfWeek = new Date(y, m - 1, 1).getDay();
-
-    const rowByDate = new Map<string, CommuteRecord>();
-    selectedMonthRows.forEach((r) => rowByDate.set(r.date, r));
 
     const list = [];
     for (let d = 1; d <= daysInMonth; d++) {
@@ -193,7 +194,7 @@ export default function MobileCommuteScreen() {
         date: dateStr,
         dayNum: d,
         dayOfWeek,
-        record: rowByDate.get(dateStr),
+        record: evaluateDate(dateStr, selectedMonthRows),
         holiday,
         isSun,
         isSat,
@@ -202,7 +203,7 @@ export default function MobileCommuteScreen() {
     }
 
     return { firstDayOfWeek, list };
-  }, [selectedMonth, selectedMonthRows, holidayMap, todayStr]);
+  }, [selectedMonth, selectedMonthRows, holidayMap, todayStr, evaluateDate]);
 
   // 선택한 월의 통계 (출근일, 지각일, 휴가일)
   const monthStats = useMemo(() => {
@@ -212,9 +213,9 @@ export default function MobileCommuteScreen() {
 
     for (const item of calendarData.list) {
       const rec = item.record;
-      if (rec?.leaveName || rec?.status === 'leave') {
+      if (rec?.status === 'leave') {
         leaveDays += 1;
-      } else if (rec?.inAt || rec?.outAt || rec?.status === 'normal') {
+      } else if (rec?.inAt || rec?.outAt || rec?.status === 'outside' || rec?.status === 'trip') {
         workDays += 1;
         if (rec.status === 'late' || (rec.lateMin ?? 0) > 0) {
           lateDays += 1;

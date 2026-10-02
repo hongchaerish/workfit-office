@@ -11,8 +11,8 @@ import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { useCommuteEmployees, useCommuteDay } from '@/features/commute/useCommute';
 import { useUsers } from '@/features/user/useUsers';
-import { useAllApprovals } from '@/features/gw/useApprovals';
-import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
+import { requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import MobileCommonHeader from './MobileCommonHeader';
 
@@ -63,13 +63,9 @@ export default function MobileCommuteAdminScreen() {
   // 3. 당일 출퇴근 기록 및 휴가/외근 일정
   const { data: dayRecords = [] } = useCommuteDay(selectedDateStr);
   const { data: employees = [] } = useCommuteEmployees();
-  const approvalsQuery = useAllApprovals();
-  const allApprovalDocs = approvalsQuery.data ?? [];
+  // 근태 판정(정책·공휴일·승인 결재) — 데스크톱과 같은 엔진으로 다시 판정한다
+  const { policy, approvalDaysOf, evaluate } = useCommuteEvaluation();
   const presenceMap = useAllUserPresences();
-
-  const approvedSchedules = useMemo(() => {
-    return extractApprovedSchedules(allApprovalDocs);
-  }, [allApprovalDocs]);
 
   const empIdToNameMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -89,66 +85,50 @@ export default function MobileCommuteAdminScreen() {
       if (matchedName) recordByName.set(matchedName, r);
     });
 
-    const leaveByUserName = new Map<string, string>();
-    for (const s of approvedSchedules) {
-      if (s.startDate <= selectedDateStr && selectedDateStr <= s.endDate) {
-        const applicant = (s.drafterName || '').replace(/\s+/g, '');
-        if (applicant) leaveByUserName.set(applicant, s.leaveType || s.docType || '휴가');
-      }
-    }
-
     return targetUsers.map((u) => {
       const normName = (u.name || '').replace(/\s+/g, '');
-      const rec =
-        (u.empNo ? recordByEmpId.get(Number(u.empNo)) : undefined) ??
-        recordByName.get(normName);
-
-      const approvedLeaveType = leaveByUserName.get(normName);
+      // 이름 우선(데스크톱과 동일) — CAPS 사번과 워크핏 사번이 달라도 같은 사람에 연결
+      const rec = recordByName.get(normName) ?? (u.empNo ? recordByEmpId.get(Number(u.empNo)) : undefined);
+      const approvalDays = approvalDaysOf({ id: u.id, name: u.name });
+      const entries = approvalDays.get(selectedDateStr) ?? [];
+      const evaluated = evaluate(
+        rec ?? { empId: 0, date: selectedDateStr, inAt: null, outAt: null },
+        approvalDays,
+      );
+      const approvedLeaveType = evaluated.leaveName ?? evaluated.outsideName ?? evaluated.tripName;
       const userPresence = presenceMap[u.id];
 
-      const inAt = timeOf(rec?.inAt);
-      const outAt = timeOf(rec?.outAt);
-      const totalMin = rec?.totalMin ?? 0;
+      const inAt = timeOf(evaluated.inAt);
+      const outAt = timeOf(evaluated.outAt);
+      const totalMin = evaluated.totalMin;
 
-      // 퇴근 기준 시각 판정:
-      // 기본 정규 퇴근 시간은 18:00 (오후반차인 경우 13:00)
-      const isPmHalf = approvedLeaveType?.includes('오후') || approvedLeaveType?.includes('반차');
-      const targetEndMinutes = isPmHalf ? 13 * 60 : 18 * 60;
+      // 퇴근 기준 시각: 그날 근무 종료 시각(정책·반차 반영)
+      const span = requiredWorkSpan(policy, entries);
+      const targetEndMinutes = span?.end ?? timeToMinutes(policy.workEndTime) ?? 1050;
 
       let isActualOff = false;
       if (outAt) {
-        const [outHh, outMm] = outAt.split(':').map(Number);
-        const outMinutes = (outHh || 0) * 60 + (outMm || 0);
-
-        if (selectedDateStr < todayStr) {
-          // 과거 날짜: 이미 종료된 날짜이므로 태그가 있으면 퇴근으로 처리
-          isActualOff = true;
-        } else {
-          // 오늘 날짜: 퇴근 기준 시각(18:00, 오후반차 시 13:00) 이상으로 찍힌 경우에만 실제 퇴근으로 인정!
-          isActualOff = outMinutes >= targetEndMinutes;
-        }
+        // 과거 날짜는 태그가 있으면 퇴근, 오늘은 근무 종료 시각 이후로 찍힌 경우에만 퇴근
+        isActualOff = selectedDateStr < todayStr || (timeToMinutes(outAt) ?? 0) >= targetEndMinutes;
       }
 
       let statusText = '미출근';
       let statusTone: 'normal' | 'late' | 'leave' | 'outside' | 'absent' = 'absent';
 
-      if (approvedLeaveType && !inAt) {
-        statusText = approvedLeaveType;
+      if (evaluated.status === 'outside' || evaluated.status === 'trip') {
+        statusText = evaluated.outsideName ?? evaluated.tripName ?? (evaluated.status === 'trip' ? '출장' : '외근');
+        statusTone = 'outside';
+      } else if (evaluated.status === 'leave') {
+        statusText = evaluated.leaveName ?? '휴가';
         statusTone = 'leave';
       } else if (inAt) {
-        const [hh, mm] = inAt.split(':').map(Number);
-        const isLate = hh > 9 || (hh === 9 && mm > 10);
-
+        const isLate = evaluated.status === 'late';
         if (isActualOff) {
           statusText = isLate ? '지각/퇴근' : '정상 퇴근';
-          statusTone = isLate ? 'late' : 'normal';
         } else {
           statusText = isLate ? '지각 근무중' : '정상 근무중';
-          statusTone = isLate ? 'late' : 'normal';
         }
-      } else if (approvedLeaveType) {
-        statusText = approvedLeaveType;
-        statusTone = 'leave';
+        statusTone = isLate ? 'late' : 'normal';
       } else if (userPresence?.status === 'OUTSIDE') {
         statusText = '외근/출장';
         statusTone = 'outside';
@@ -168,7 +148,7 @@ export default function MobileCommuteAdminScreen() {
         isAnomaly: statusTone === 'late' || (statusTone === 'absent' && !approvedLeaveType),
       };
     });
-  }, [targetUsers, dayRecords, approvedSchedules, selectedDateStr, presenceMap, empIdToNameMap]);
+  }, [targetUsers, dayRecords, selectedDateStr, todayStr, presenceMap, empIdToNameMap, approvalDaysOf, evaluate, policy]);
 
   // 5. 검색 및 서브탭 필터링
   const filteredRoster = useMemo(() => {
@@ -185,7 +165,7 @@ export default function MobileCommuteAdminScreen() {
     if (filterTab === 'anomaly') {
       list = list.filter((m) => m.isAnomaly);
     } else if (filterTab === 'leave') {
-      list = list.filter((m) => m.statusTone === 'leave');
+      list = list.filter((m) => m.statusTone === 'leave' || m.statusTone === 'outside');
     }
     return list;
   }, [roster, searchQuery, filterTab]);
@@ -197,7 +177,7 @@ export default function MobileCommuteAdminScreen() {
     let leave = 0;
     let absent = 0;
     roster.forEach((m) => {
-      if (m.statusTone === 'leave') leave++;
+      if (m.statusTone === 'leave' || m.statusTone === 'outside') leave++;
       else if (m.statusTone === 'late') late++;
       else if (m.inAt) working++;
       else absent++;
