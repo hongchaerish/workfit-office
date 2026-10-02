@@ -6,6 +6,9 @@ import {
 } from '@/domain/commutePolicy/schema';
 import { nowLocalIso } from '@/shared/lib/datetime';
 
+/** Appwrite commutePolicies 컬렉션에 속성이 없는 필드 — id 는 문서 $id 로 저장되고 읽을 때 복원된다. */
+export const COMMUTE_POLICY_STRIP_FIELDS = ['id'];
+
 const appBackend = createCrudBackend<CommutePolicy>({
   coll: 'commutePolicies',
   parse: (raw) => {
@@ -14,6 +17,7 @@ const appBackend = createCrudBackend<CommutePolicy>({
   },
   idOf: (item) => item.id,
   seed: [DEFAULT_COMMUTE_POLICY],
+  stripFields: COMMUTE_POLICY_STRIP_FIELDS,
 });
 
 const LOCAL_STORAGE_KEY = 'workfit.commutePolicy';

@@ -35,3 +35,13 @@ test('DB 저장에 성공하면 저장한 정책을 DB에서 다시 읽는다', 
   assert.equal(policy.breakStartTime, '11:30');
   assert.equal(backend.saved.length, 1);
 });
+
+test('저장 페이로드의 모든 필드가 Appwrite commutePolicies 컬렉션 속성에 있다', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { commutePolicySchema } = await import('@/domain/commutePolicy/schema');
+  const { COMMUTE_POLICY_STRIP_FIELDS } = await import('./commutePolicy.repo');
+  const script = readFileSync('scripts/appwrite-provision-commute-policy.ts', 'utf8');
+  const attrKeys = new Set([...script.matchAll(/key: '([A-Za-z]+)'/g)].map((m) => m[1]));
+  const payloadKeys = Object.keys(commutePolicySchema.shape).filter((k) => !COMMUTE_POLICY_STRIP_FIELDS.includes(k));
+  assert.deepEqual(payloadKeys.filter((k) => !attrKeys.has(k)), []);
+});
