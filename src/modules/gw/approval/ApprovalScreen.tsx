@@ -6,6 +6,7 @@ import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
+import { correctSelection, resolveSelectedDoc } from './selection';
 import {
   useApprovalBoxes,
   useDecideStep,
@@ -361,13 +362,16 @@ export default function ApprovalScreen() {
   }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, org, draftFilter]);
 
   // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
-  const selDoc = useMemo(() => {
-    if (selId) {
-      const match = filteredList.find((d) => d.id === selId || d.docNo === selId) || allDocs.find((d) => d.id === selId || d.docNo === selId);
-      if (match) return match;
-    }
-    return filteredList[0] ?? null;
-  }, [selId, filteredList, allDocs]);
+  // 선택이 없으면 null — 목록만 보이고, 문서를 눌러야 상세가 열린다(맨 앞 문서 자동 열람 없음)
+  const selDoc = useMemo(() => resolveSelectedDoc(selId, filteredList, allDocs), [selId, filteredList, allDocs]);
+
+  /** 상세 닫기 → 목록만 보기. 주소의 doc 도 지워 새로고침해도 다시 열리지 않게 한다. */
+  const handleCloseDoc = () => {
+    setSelId(null);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete('doc');
+    window.history.replaceState(null, '', nextUrl.toString());
+  };
 
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
@@ -436,26 +440,10 @@ export default function ApprovalScreen() {
     setBox(determinedBox);
   });
 
-  // 함 전환/목록/필터 변화 시 선택 보정(문서가 allDocs에서 완전히 사라진 경우에만 첫 항목으로 보정).
+  // 목록 변화 시 선택 보정 — 선택한 문서가 아예 사라졌을 때만 선택을 비운다(다음 문서를 대신 열지 않음)
   useEffect(() => {
-    if (filteredList.length === 0) {
-      if (selId !== null && allDocs.length > 0 && !allDocs.some((d) => d.id === selId || d.docNo === selId)) {
-        setSelId(null);
-      }
-    } else {
-      if (!selId) {
-        setSelId(filteredList[0].id);
-      } else {
-        const existsInFiltered = filteredList.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
-        if (!existsInFiltered) {
-          // allDocs에도 전혀 존재하지 않을 때만 첫 번째 항목으로 보정
-          const existsInAll = allDocs.some((d: ApprovalDoc) => d.id === selId || d.docNo === selId);
-          if (!existsInAll && allDocs.length > 0) {
-            setSelId(filteredList[0].id);
-          }
-        }
-      }
-    }
+    const corrected = correctSelection(selId, allDocs);
+    if (corrected !== selId) setSelId(corrected);
 
     setSelectedIds((prev) => {
       const next = prev.filter((id) => filteredList.some((d: ApprovalDoc) => d.id === id));
@@ -835,6 +823,7 @@ export default function ApprovalScreen() {
               )}
             </div>
 
+            {selDoc && (
             <button
               type="button"
               onClick={() => setIsListCollapsed(!isListCollapsed)}
@@ -843,12 +832,13 @@ export default function ApprovalScreen() {
               <span>{isListCollapsed ? '▶' : '◀'}</span>
               <span>{isListCollapsed ? '목록 펼치기' : '목록 접기'}</span>
             </button>
+            )}
           </div>
 
           <div className="flex items-start gap-4">
-            {/* 중: 목록 (목록 접기 시 hidden 처리) */}
-            {!isListCollapsed && (
-              <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col w-[320px] shrink-0 min-w-0 shadow-sm self-start animate-fadeIn sticky top-[8px]">
+            {/* 중: 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 320px(목록 접기 시 숨김) */}
+            {(!isListCollapsed || !selDoc) && (
+              <div className={`overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm self-start animate-fadeIn sticky top-[8px] ${selDoc ? 'w-[320px] shrink-0' : 'flex-1'}`}>
                 {/* 목록 헤더 */}
 
                 <div className="border-b border-border px-3.5 py-2.5 flex items-center justify-between text-[12px] font-bold text-ink2 bg-panel-alt/30">
@@ -1083,9 +1073,19 @@ export default function ApprovalScreen() {
               </div>
             )}
 
-            {/* 우: 상세 */}
+            {/* 우: 상세 — 문서를 눌렀을 때만 */}
+            {selDoc && (
             <div className="rounded-xl border border-border bg-panel flex-1 min-w-[680px] shadow-sm">
-              {selDoc ? (
+              <div className="flex justify-end border-b border-border px-3 py-1.5">
+                <button
+                  type="button"
+                  onClick={handleCloseDoc}
+                  title="상세 닫기 — 목록만 보기"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
+                >
+                  ✕ 닫기
+                </button>
+              </div>
                 <DocDetail
                   key={selDoc.id}
                   doc={selDoc}
@@ -1094,11 +1094,8 @@ export default function ApprovalScreen() {
                   onEdit={(d) => navigate(`/gw/approval/edit/${d.id}`)}
                   onSelectDocId={handleSelectDocById}
                 />
-
-              ) : (
-                <div className="grid h-full place-items-center py-20 text-[12px] text-ink3">문서를 선택하세요.</div>
-              )}
             </div>
+            )}
           </div>
         </div>
       </div>
