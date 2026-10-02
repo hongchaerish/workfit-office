@@ -252,6 +252,8 @@ export default function ApprovalScreen() {
   // 목록 툴바 — 정렬·안읽음만 보기
   const [listOrder, setListOrder] = useState<ListOrder>('recent');
   const [unreadOnly, setUnreadOnly] = useState(false);
+  // 문서를 열었을 때 목록을 접어 상세를 넓게 보기
+  const [isListCollapsed, setIsListCollapsed] = useState(false);
 
   const batchDecide = useBatchDecideStep();
   const batchRestore = useBatchRestoreFromTrash();
@@ -911,6 +913,62 @@ export default function ApprovalScreen() {
 
 
             <div className="flex items-center gap-2 shrink-0">
+              {/* 결재함별 상태 필터 — 글자 크기만큼의 작은 묶음 버튼(목록 폭에 따라 늘어나지 않게) */}
+              {box === '대기' && (
+                <FilterSegment
+                  value={todoFilter}
+                  onChange={setTodoFilter}
+                  activeClass="bg-teal text-white"
+                  options={[
+                    { key: 'pending', label: '결재대기중', count: activePendingCount },
+                    { key: 'progress', label: '진행중' },
+                    { key: 'all', label: '전체' },
+                  ]}
+                />
+              )}
+              {box === '상신' && (
+                <FilterSegment
+                  value={draftFilter}
+                  onChange={setDraftFilter}
+                  activeClass="bg-blue-600 text-white"
+                  options={[
+                    { key: 'all', label: '전체' },
+                    { key: 'progress', label: '진행중' },
+                    {
+                      key: 'rejected',
+                      label: '반려',
+                      count: (byBox['상신'] ?? []).filter(
+                        (d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송',
+                      ).length,
+                    },
+                    { key: 'completed', label: '완료' },
+                  ]}
+                />
+              )}
+              {box === '완료' && (
+                <FilterSegment
+                  value={doneFilter}
+                  onChange={setDoneFilter}
+                  activeClass="bg-teal text-white"
+                  options={[
+                    { key: 'all', label: '전체' },
+                    { key: 'draft', label: '기안한 문서' },
+                    { key: 'approved', label: '결재한 문서' },
+                  ]}
+                />
+              )}
+              {box === '반려' && (
+                <FilterSegment
+                  value={rejectFilter}
+                  onChange={setRejectFilter}
+                  activeClass="bg-rose-500 text-white"
+                  options={[
+                    { key: 'all', label: '전체' },
+                    { key: 'rejected', label: '내가 직접 반려' },
+                    { key: 'chain', label: '결재참여 반려' },
+                  ]}
+                />
+              )}
               {isTrackedBox && (
                 <button
                   type="button"
@@ -936,116 +994,8 @@ export default function ApprovalScreen() {
           <div className="flex items-start gap-4">
             {/* 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 340px(여러 문서를 빠르게 넘겨보기 좋게 분할 유지) */}
             {(
-              <div className={`min-w-0 flex flex-col self-start ${selDoc ? 'w-[340px] shrink-0 sticky top-[8px]' : 'flex-1'}`}>
+              <div className={`min-w-0 flex flex-col self-start ${selDoc ? `w-[340px] shrink-0 sticky top-[8px] ${isListCollapsed ? 'hidden' : ''}` : 'flex-1'}`}>
               <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm animate-fadeIn">
-
-                {box === '상신' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(() => {
-                      const rejectedDraftCount = (byBox['상신'] ?? []).filter(
-                        (d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송'
-                      ).length;
-
-                      return (['all', 'progress', 'rejected', 'completed'] as const).map((f) => {
-                        const label = f === 'all' ? '전체' : f === 'progress' ? '진행중' : f === 'rejected' ? '반려' : '완료';
-                        const active = draftFilter === f;
-                        return (
-                          <button
-                            key={f}
-                            onClick={() => setDraftFilter(f)}
-                            className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all flex items-center justify-center gap-1 ${active
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                              }`}
-                          >
-                            <span>{label}</span>
-                            {f === 'rejected' && rejectedDraftCount > 0 && (
-                              <span
-                                className={`rounded-full px-1.5 py-0.2 text-[9px] font-extrabold ${
-                                  active ? 'bg-white text-red-600' : 'bg-red-500 text-white'
-                                }`}
-                              >
-                                {rejectedDraftCount}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-
-                {box === '대기' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['pending', 'progress', 'all'] as const).map((f) => {
-                      const label = f === 'pending' ? '결재대기중' : f === 'progress' ? '진행중' : '전체';
-                      const active = todoFilter === f;
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setTodoFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all flex items-center justify-center gap-1 ${active
-                            ? 'bg-teal text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          <span>{label}</span>
-                          {f === 'pending' && activePendingCount > 0 && (
-                            <span
-                              className={`rounded-full px-1.5 py-0.2 text-[9px] font-extrabold ${
-                                active ? 'bg-white text-teal' : 'bg-red-500 text-white'
-                              }`}
-                            >
-                              {activePendingCount}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {box === '완료' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'draft', 'approved'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'draft' ? '기안한 문서' : '결재한 문서';
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setDoneFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${doneFilter === f
-                            ? 'bg-teal text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {box === '반려' && (
-                  <div className="flex border-b border-border bg-panel-alt/50 p-1.5 gap-1.5">
-                    {(['all', 'rejected', 'chain'] as const).map((f) => {
-                      const label = f === 'all' ? '전체' : f === 'rejected' ? '내가 직접 반려' : '결재참여 반려';
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setRejectFilter(f)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10.5px] font-bold transition-all ${rejectFilter === f
-                            ? 'bg-rose-500 text-white shadow-sm'
-                            : 'text-ink3 hover:bg-panel-alt hover:text-ink2'
-                            }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-
-
 
                 {/* 목록 데이터 영역 */}
                 <div>
@@ -1122,6 +1072,14 @@ export default function ApprovalScreen() {
                   className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-bold text-ink2 hover:bg-panel-alt hover:text-ink transition-colors cursor-pointer"
                 >
                   ✕ 닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsListCollapsed((v) => !v)}
+                  title={isListCollapsed ? '목록 다시 보기' : '목록을 접고 상세를 넓게 보기'}
+                  className="mr-auto flex items-center gap-1 rounded-md border border-teal/30 px-2 py-1 text-[11.5px] font-bold text-teal hover:bg-teal-soft/20 transition-colors cursor-pointer"
+                >
+                  {isListCollapsed ? '▶ 목록 펼치기' : '◀ 목록 접기'}
                 </button>
                 {position && position.index > 0 && (
                   <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-ink3">
@@ -2066,6 +2024,40 @@ function DocDetail({
           onClose={() => setShowRecallModal(false)}
         />
       )}
+    </div>
+  );
+}
+
+/** 결재함별 상태 필터 묶음 버튼 — 툴바 안에서 글자 크기만큼만 차지한다. 개수가 있으면 배지로. */
+function FilterSegment<T extends string>({
+  value,
+  onChange,
+  options,
+  activeClass,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { key: T; label: string; count?: number }[];
+  activeClass: string;
+}) {
+  return (
+    <div className="flex items-center rounded-lg border border-border bg-panel-alt/40 p-0.5">
+      {options.map((o) => {
+        const active = value === o.key;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => onChange(o.key)}
+            className={`flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-bold transition-all cursor-pointer ${active ? `${activeClass} shadow-2xs` : 'text-ink3 hover:text-ink'}`}
+          >
+            {o.label}
+            {o.count !== undefined && o.count > 0 && (
+              <span className={`rounded-full px-1.5 text-[9px] font-extrabold ${active ? 'bg-white/90 text-ink' : 'bg-red-500 text-white'}`}>{o.count}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
