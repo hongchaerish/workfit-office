@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
+import { resizeTextareaToContent } from './autoResize';
 
 interface TableCellTextareaProps {
   value: string;
@@ -28,14 +29,10 @@ export function TableCellTextarea({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const resize = () => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${Math.max(26, el.scrollHeight)}px`;
-    }
+    if (textareaRef.current) resizeTextareaToContent(textareaRef.current, 26);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     resize();
   }, [value]);
 

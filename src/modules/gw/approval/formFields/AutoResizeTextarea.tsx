@@ -1,4 +1,5 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useLayoutEffect } from 'react';
+import { resizeTextareaToContent } from './autoResize';
 
 interface AutoResizeTextareaProps {
   value: string;
@@ -17,12 +18,9 @@ export function AutoResizeTextarea({
 }: AutoResizeTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }
+  // 페인트 전에 높이를 맞춰야 줄어든 프레임이 화면에 보이지 않는다.
+  useLayoutEffect(() => {
+    if (textareaRef.current) resizeTextareaToContent(textareaRef.current);
   }, [value]);
 
   return (
