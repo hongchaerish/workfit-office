@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { useAuth } from '@/app/auth/AuthProvider';
 import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { useUsers } from '@/features/user/useUsers';
 import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
@@ -30,7 +29,6 @@ function formatDate(d: Date): string {
 }
 
 export default function MobileWorkPlanAdminScreen() {
-  const { user } = useAuth();
   const securityContext = useSecurityContext();
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
@@ -45,9 +43,7 @@ export default function MobileWorkPlanAdminScreen() {
     return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
   }, [usersQuery.data]);
 
-  // 2. 내부 시야(Scope) 필터링: workPlanPolicy 정밀 판정
-  //    - 임원 / 인사담당자 ➔ 전사 임직원 (ALL)
-  //    - 팀장(부서장) ➔ 소속 팀원 + 타 부서 팀장 (TEAM_AND_LEADERS)
+  // 2. 열람 대상 — 업무계획은 전사 공통 열람(workPlanPolicy.canViewUser)
   const targetUsers = useMemo(() => {
     return allUsers.filter((u) => workPlanPolicy.canViewUser(securityContext, {
       id: u.id,
@@ -130,11 +126,7 @@ export default function MobileWorkPlanAdminScreen() {
     <div className="flex h-full flex-col select-none overflow-hidden" style={{ background: '#f2f8fc' }}>
       <MobileCommonHeader
         title="업무계획 종합 현황"
-        subtitle={
-          workPlanPolicy.getScope(securityContext) === 'TEAM_AND_LEADERS'
-            ? `${user?.dept || '부서'} 팀원 및 타팀장 업무계획`
-            : '전사 임직원 업무계획(To-Do) 모니터링'
-        }
+        subtitle="전사 임직원 업무계획(To-Do) 모니터링"
       />
 
       {/* 1. 일자 선택 네비게이터 */}

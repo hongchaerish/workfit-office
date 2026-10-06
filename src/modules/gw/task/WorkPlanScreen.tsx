@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveWorkPlanScope, canViewWorkPlan, isLeaderPosition, isTestUser } from '@/features/auth/scopeHelper';
+import { resolveWorkPlanScope, canViewWorkPlan, isTestUser } from '@/features/auth/scopeHelper';
 import { calendarToday, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
@@ -297,7 +297,7 @@ function sortWorkPlanUsers(
     const kw = searchKeyword.trim().toLowerCase();
 
     // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합)
-    if (deptFilter !== 'all' && deptFilter !== 'leaders') {
+    if (deptFilter !== 'all') {
       const matchedUsers: User[] = [];
       const seenUserIds = new Set<string>();
 
@@ -362,15 +362,8 @@ function sortWorkPlanUsers(
       });
     }
 
-    // 2. 전체(all) 또는 팀장(leaders) 필터
-    return roster.filter((user) => {
-      let matchesDept = true;
-      if (deptFilter === 'leaders') {
-        matchesDept = user.dept !== actor?.dept && isLeaderPosition(user.position, user.jobTitle, user.id, org);
-      }
-      const matchesName = !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw);
-      return matchesDept && matchesName;
-    });
+    // 2. 전체(all) 필터
+    return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor]);
 
   const savePlan = useCallback(
@@ -472,42 +465,22 @@ function sortWorkPlanUsers(
       {/* ── 다차원 필터링 툴바 ── */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-border bg-panel px-3.5 py-2.5 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
-          {/* 부서 필터 드롭다운 (권한 스코프별 제어) */}
+          {/* 부서 필터 드롭다운 — 열람은 전사 공통 */}
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
             className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
           >
-            {actorScope === 'TEAM' ? (
-              <option value="all">우리 팀 · {actor?.dept || '소속 부서'} ({roster.length}명)</option>
-            ) : actorScope === 'TEAM_AND_LEADERS' ? (
-              <>
-                <option value="all">전체 ({roster.length}명)</option>
-                {actor?.dept && (
-                  <option value={actor.dept}>
-                    우리 팀 · {actor.dept} ({roster.filter((u) => u.dept === actor.dept).length}명)
-                  </option>
-                )}
-                <option value="leaders">
-                  타 부서 팀장 모아보기 ({roster.filter((u) => u.dept !== actor?.dept && isLeaderPosition(u.position, u.jobTitle, u.id, org)).length}명)
-                </option>
-              </>
-            ) : (
-              <>
-                <option value="all">전체 부서 ({roster.length}명)</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d} ({roster.filter((u) => u.dept === d).length}명)
-                  </option>
-                ))}
-              </>
-            )}
+            <option value="all">전체 부서 ({roster.length}명)</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d} ({roster.filter((u) => u.dept === d).length}명)
+              </option>
+            ))}
           </select>
 
           {/* 권한 스코프 뱃지 안내 */}
           <div className="text-[10.5px] font-semibold text-ink3 rounded-md bg-panel-alt/50 px-2 py-1 border border-border">
-            {actorScope === 'TEAM' && `열람 범위: ${actor.dept || '우리 팀'} (팀원 및 팀장)`}
-            {actorScope === 'TEAM_AND_LEADERS' && `열람 범위: ${actor.dept || '우리 팀'} 및 타 부서 팀장`}
             {actorScope === 'ALL' && '열람 범위: 전사 임직원'}
           </div>
         </div>

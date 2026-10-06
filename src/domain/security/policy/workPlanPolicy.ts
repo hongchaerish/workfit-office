@@ -31,26 +31,12 @@ export const workPlanPolicy = {
   },
 
   /**
-   * 특정 사용자의 업무계획을 열람할 수 있는지 여부
+   * 특정 사용자의 업무계획을 열람할 수 있는지 여부 — 전사 공통이라 로그인만 확인한다.
    */
   canViewUser(
     context: SecurityContext,
-    targetUser: { id: string; dept?: string | null; position?: string | null; isLeader?: boolean }
+    _targetUser: { id: string; dept?: string | null; position?: string | null; isLeader?: boolean }
   ): boolean {
-    if (!context.user) return false;
-    if (context.userId === targetUser.id) return true;
-
-    const scope = this.getScope(context);
-    if (scope === 'ALL') return true;
-
-    // 소속 부서원인 경우
-    if (context.organization.isSameDept(targetUser.dept)) return true;
-
-    // TEAM_AND_LEADERS 스코프인 경우 타 부서 팀장급도 열람 가능
-    if (scope === 'TEAM_AND_LEADERS' && targetUser.isLeader) {
-      return true;
-    }
-
-    return false;
+    return Boolean(context.user);
   },
 };

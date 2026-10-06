@@ -13,7 +13,7 @@ import { useProjects } from '@/features/project/useProjects';
 import { useUsers } from '@/features/user/useUsers';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
-import { resolveWorkPlanScope, isLeaderPosition } from '@/features/auth/scopeHelper';
+import { resolveWorkPlanScope } from '@/features/auth/scopeHelper';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
@@ -161,10 +161,7 @@ function LocalCalendarScreen() {
   };
 
   /*
-    업무계획과 동일한 일정 열람 권한 판정:
-    - ALL (임원/운영진): 전사 임직원 일정 조회
-    - TEAM_AND_LEADERS (팀장급): 본인 부서 팀원 + 타 부서 팀장급 일정 조회
-    - TEAM (일반 사원): 본인 부서 팀원 및 팀장의 일정 조회 (타 부서는 비노출)
+    업무계획과 동일한 일정 열람 권한 판정 — 전사 공통(ALL). 테스터 계정만 본인 부서로 격리.
   */
   const actorScope = useMemo(() => resolveWorkPlanScope(actor, userRoles, org), [actor, userRoles, org]);
 
@@ -179,15 +176,7 @@ function LocalCalendarScreen() {
       .filter((dm) => dm.userId === actor?.id && !dm.isPrimary)
       .map((dm) => dm.deptName);
 
-    if (actorScope === 'TEAM_AND_LEADERS') {
-      const headed = (departmentsQuery.data ?? []).filter((dept) => dept.headUserId === actor?.id).map((dept) => dept.name);
-      const myDeptNames = Array.from(new Set([
-        ...(headed.length > 0 ? headed : (actor?.dept ? [actor.dept] : [])),
-        ...concDeptNames,
-      ]));
-      return { kind: 'depts', deptNames: myDeptNames };
-    }
-    // 일반 팀원(사원): 본인 본직 부서 및 겸직 부서 일정 열람
+    // 테스터: 본인 본직 부서 및 겸직 부서 일정만
     const myDepts = Array.from(new Set([
       ...(actor?.dept ? [actor.dept] : []),
       ...concDeptNames,
@@ -198,23 +187,20 @@ function LocalCalendarScreen() {
   const activeTab = tab;
   const isTeam = activeTab === 'team';
 
-  /** 팀 일정의 부서 필터 선택지. 관리자는 전 부서, 팀장은 맡은 부서만. 사원은 본인 부서 고정. */
+  /** 팀 일정의 부서 필터 선택지. 전 부서(테스터는 본인 부서 고정). */
   const teamDeptOptions = useMemo<string[]>(() => {
     if (actorScope === 'ALL') {
       return (departmentsQuery.data ?? []).map((dept) => dept.name);
     }
-    if (actorScope === 'TEAM_AND_LEADERS' && supervisorScope.kind === 'depts') {
-      return supervisorScope.deptNames;
-    }
     return actor?.dept ? [actor.dept] : [];
-  }, [actorScope, supervisorScope, departmentsQuery.data, actor?.dept]);
+  }, [actorScope, departmentsQuery.data, actor?.dept]);
 
   /*
     부서 필터의 유효값.
   */
   const effectiveDeptSel = teamDeptSel !== ALL_DEPTS && teamDeptOptions.includes(teamDeptSel)
     ? teamDeptSel
-    : (actorScope === 'TEAM' ? (actor?.dept ?? ALL_DEPTS) : ALL_DEPTS);
+    : ALL_DEPTS;
 
   /** 특정 부서에 소속된 모든 사용자 ID 목록 (본직 + 겸직 종합) */
   const getDeptUserIds = useCallback((targetDeptName: string): string[] => {
@@ -229,30 +215,18 @@ function LocalCalendarScreen() {
   const teamOwners = useMemo<string[] | null>(() => {
     if (!actor) return [];
 
-    // 1. 임원: 전체 부서 선택 시 null(전 직원), 특정 부서 선택 시 해당 부서원 (겸직자 포함)
+    // 1. 전체 부서 선택 시 null(전 직원), 특정 부서 선택 시 해당 부서원 (겸직자 포함)
     if (actorScope === 'ALL') {
       if (effectiveDeptSel === ALL_DEPTS) return null;
       return getDeptUserIds(effectiveDeptSel);
     }
 
-    // 2. 팀장: 전체일 때는 본인 부서원 + 타 부서 팀장급
-    if (actorScope === 'TEAM_AND_LEADERS') {
-      if (effectiveDeptSel !== ALL_DEPTS) {
-        return getDeptUserIds(effectiveDeptSel);
-      }
-      const myDeptUserIds = getDeptUserIds(actor.dept);
-      const leaderUserIds = users
-        .filter((u) => u.status === '사용' && isLeaderPosition(u.position, u.jobTitle, u.id, org))
-        .map((u) => u.id);
-      return Array.from(new Set([...myDeptUserIds, ...leaderUserIds]));
-    }
-
-    // 3. 일반 사원(TEAM): 오직 본인 부서 소속 팀원들과 팀장의 일정만 조회!
+    // 2. 테스터: 본인 부서 일정만
     if (effectiveDeptSel !== ALL_DEPTS) {
       return getDeptUserIds(effectiveDeptSel);
     }
     return getDeptUserIds(actor.dept);
-  }, [actor, actorScope, effectiveDeptSel, getDeptUserIds, users, org]);
+  }, [actor, actorScope, effectiveDeptSel, getDeptUserIds]);
 
   const cells = useMemo(() => buildCalendarMonth(month), [month]);
   const range = useMemo(() => ({ from: cells[0].date, to: cells[cells.length - 1].date }), [cells]);
@@ -802,9 +776,7 @@ function LocalCalendarScreen() {
                   열람 범위 ·{' '}
                   {actorScope === 'ALL'
                     ? (effectiveDeptSel === ALL_DEPTS ? '전 직원' : effectiveDeptSel)
-                    : actorScope === 'TEAM_AND_LEADERS'
-                      ? (effectiveDeptSel === ALL_DEPTS ? `${actor?.dept} 팀원 및 타 부서 팀장` : effectiveDeptSel)
-                      : `${actor?.dept} (팀원 및 팀장)`}
+                    : `${actor?.dept} (본인 부서)`}
                 </span>
               </>
             )}
