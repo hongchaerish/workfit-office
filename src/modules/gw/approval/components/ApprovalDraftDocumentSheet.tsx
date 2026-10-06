@@ -409,6 +409,7 @@ export function ApprovalDraftDocumentSheet({
             posOf={posOf}
             sealOf={sealOf}
             isSignatureOf={isSignatureOf}
+            allowCurrentSignature
             isPostApproval={isPostApproval}
           />
         </div>
@@ -1280,8 +1281,9 @@ export function ApprovalDraftDocumentSheet({
               </span>
             )
           ) : me.sealUrl ? (
-            <span className="relative inline-flex h-9 w-9 items-center justify-center select-none bg-white">
-              <img src={me.sealUrl} alt="인감" className="h-full w-full object-contain" />
+            <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
+              <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
+              <img src={me.sealUrl} alt="인감" className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none" />
             </span>
           ) : (
             <span className="grid h-[32px] w-[32px] place-items-center rounded-full border-[1.5px] border-[#c0392b] text-[9.5px] font-bold text-[#c0392b] select-none">

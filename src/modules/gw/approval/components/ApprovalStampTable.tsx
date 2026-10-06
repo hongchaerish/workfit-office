@@ -1,4 +1,5 @@
 import type { ApprovalStep } from '@/domain/approvalDoc/schema';
+import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 
 function shortDate(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -65,18 +66,32 @@ export function ApprovalStampTable({
   sealOf,
   isSignatureOf,
   isPostApproval,
+  allowCurrentSignature = false,
 }: {
   steps: ApprovalStep[];
   nameOf: (id: string) => string;
   posOf: (id: string) => string;
-  sealOf: (id: string) => string;
-  isSignatureOf: (id: string) => boolean;
+  sealOf?: (id: string) => string;
+  isSignatureOf?: (id: string) => boolean;
   isPostApproval?: boolean;
+  /** 작성 화면에서만 현재 프로필 이미지를 참조한다. */
+  allowCurrentSignature?: boolean;
 }) {
   if (steps.length === 0) return null;
 
   const approvalSteps = steps.filter((s) => s.kind !== '합의');
   const agreementSteps = steps.filter((s) => s.kind === '합의');
+
+  const signatureOfStep = (step: ApprovalStep) => {
+    if (!allowCurrentSignature) return resolveSignatureSnapshot(step);
+    const isSignature = isSignatureOf?.(step.approverId) ?? false;
+    const url = sealOf?.(step.approverId) ?? '';
+    return resolveSignatureSnapshot(step, {
+      signType: isSignature ? 'signature' : 'stamp',
+      signUrl: isSignature ? url : null,
+      sealUrl: isSignature ? null : url,
+    });
+  };
 
   return (
     <div className="flex items-start justify-end gap-3.5 shrink-0">
@@ -90,10 +105,7 @@ export function ApprovalStampTable({
             {agreementSteps.map((s) => {
               const finalName = s.approverName || nameOf(s.approverId);
               const finalPos = s.approverPos || posOf(s.approverId);
-              const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
-              const finalSealUrl = s.signType
-                ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
-                : sealOf(s.approverId);
+              const { url: finalSealUrl, isSignature: finalIsSignature } = signatureOfStep(s);
 
               return (
                 <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
@@ -119,10 +131,7 @@ export function ApprovalStampTable({
             {approvalSteps.map((s) => {
               const finalName = s.approverName || nameOf(s.approverId);
               const finalPos = s.approverPos || posOf(s.approverId);
-              const finalIsSignature = s.signType ? (s.signType === 'signature') : isSignatureOf(s.approverId);
-              const finalSealUrl = s.signType
-                ? (s.signType === 'signature' ? s.signUrl : s.sealUrl)
-                : sealOf(s.approverId);
+              const { url: finalSealUrl, isSignature: finalIsSignature } = signatureOfStep(s);
 
               return (
                 <div key={s.seq} className="w-[60px] border-r border-[#333] last:border-r-0">
