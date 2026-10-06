@@ -121,8 +121,8 @@ export const workPlanRepo = {
   },
 
   /**
-   * 전체 보기 — 공유 범위가 없어서 판정 없이 그대로 반환한다. 고치는 건 본인 것만
-   * 가능하니(`update`/`remove`), 조회를 다 열어도 남의 것을 건드릴 길은 없다.
+   * 전체 보기 — 공유 범위가 없어서 판정 없이 그대로 반환한다. 팀 월간표에서 서로의
+   * 칸을 채워 주므로 `update`/`remove` 도 소유자를 따지지 않는다(동시 편집은 expectedUpdatedAt).
    */
   async listAll(filter?: WorkPlanFilter): Promise<WorkPlan[]> {
     validateFilter(filter);

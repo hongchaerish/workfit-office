@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import type { WorkProjectDraft } from '@/domain/workProject/schema';
+import { workTaskRepo } from '@/data/workTask/workTask.repo';
 import { workProjectRepo } from './workProject.repo';
 
 const owner: ProjectAccessContext = { userId: 'U011', deptId: 'D240', active: true };
@@ -29,8 +30,10 @@ const draft = (code: string): WorkProjectDraft => ({
 });
 
 test('접근 가능한 프로젝트만 목록과 상세로 반환한다', async () => {
-  assert.equal((await workProjectRepo.list(owner)).some((row) => row.id === 'PRJ-0001'), true);
-  assert.equal(await workProjectRepo.get(outsider, 'PRJ-0002'), null);
+  const created = await workProjectRepo.create(owner, draft('LOCAL-PM-ACCESS'));
+  assert.equal((await workProjectRepo.list(owner)).some((row) => row.id === created.id), true);
+  assert.equal((await workProjectRepo.list(outsider)).some((row) => row.id === created.id), false);
+  assert.equal(await workProjectRepo.get(outsider, created.id), null);
 });
 
 test('프로젝트 생성과 일정·참여자 수정을 지원한다', async () => {
@@ -50,13 +53,24 @@ test('프로젝트 생성과 일정·참여자 수정을 지원한다', async ()
 test('외부 수정·중복 코드·비활성 계정 생성을 차단한다', async () => {
   const created = await workProjectRepo.create(owner, draft('LOCAL-PM-GUARD'));
   await assert.rejects(() => workProjectRepo.update(outsider, created.id, draft('OTHER-CODE')));
-  await assert.rejects(() => workProjectRepo.create(owner, draft('GW-2026')));
+  await assert.rejects(() => workProjectRepo.create(owner, draft('LOCAL-PM-GUARD')));
   await assert.rejects(() => workProjectRepo.create({ ...owner, active: false }, draft('INACTIVE-CREATE')));
 });
 
 test('WBS 작업 담당자로 지정된 참여자 제거를 차단한다', async () => {
-  const project = await workProjectRepo.get(owner, 'PRJ-0001');
-  assert.ok(project);
+  const project = await workProjectRepo.create(owner, draft('LOCAL-PM-ASSIGNEE'));
+  await workTaskRepo.create(owner, {
+    projectId: project.id,
+    trackId: null,
+    parentId: null,
+    title: '담당자 지정 작업',
+    description: '',
+    assigneeUserId: 'U012',
+    startAt: '2026-08-15T00:00:00.000Z',
+    dueAt: '2026-08-16T14:59:59.999Z',
+    status: 'TODO',
+    progress: 0,
+  });
 
   await assert.rejects(
     () => workProjectRepo.update(owner, project.id, {
