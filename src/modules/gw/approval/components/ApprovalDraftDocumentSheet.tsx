@@ -1550,12 +1550,14 @@ function InlineFieldEditor({
 
     case '텍스트':
     default:
+      // Enter 로 줄을 바꾸면 칸이 아래로 늘어난다(인쇄·상세는 whitespace-pre-wrap 으로 줄바꿈 유지).
       return (
-        <input
+        <AutoResizeTextarea
           value={sv}
-          onChange={(e) => setVals({ [field.key]: e.target.value })}
+          onChange={(val) => setVals({ [field.key]: val })}
           placeholder={field.placeholder || ''}
-          className="w-full bg-transparent px-1 py-0.5 text-[12px] text-[#222] outline-none focus:bg-teal/5 rounded"
+          rows={1}
+          className="block w-full resize-none bg-transparent px-1 py-0.5 text-[12px] leading-relaxed text-[#222] outline-none focus:bg-teal/5 rounded"
         />
       );
   }

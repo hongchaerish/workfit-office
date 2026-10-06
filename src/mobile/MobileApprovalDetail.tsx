@@ -702,7 +702,7 @@ function ApprovalBody({
         rows.push(
           <div key={f.key} className="flex items-start gap-2 py-1">
             <span className="w-20 shrink-0 text-[12.5px] text-ink3">{f.label}</span>
-            <span className={`min-w-0 flex-1 break-words text-[12.5px] font-semibold text-ink ${isBlurred ? 'blur-xs select-none opacity-60' : ''}`} style={{ overflowWrap: 'anywhere' }}>
+            <span className={`min-w-0 flex-1 whitespace-pre-line break-words text-[12.5px] font-semibold text-ink ${isBlurred ? 'blur-xs select-none opacity-60' : ''}`} style={{ overflowWrap: 'anywhere' }}>
               {text}
             </span>
             {isBlurred && <span className="shrink-0 text-[9px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">🔒 보안</span>}
