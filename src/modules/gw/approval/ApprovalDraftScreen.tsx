@@ -38,6 +38,7 @@ import { useHolidays } from '@/features/holiday/useHolidays';
 import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, CheckCircle2, ChevronRight, Eye, Trash2 } from 'lucide-react';
 import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
 import type { CellMerge } from './formFields/utils';
+import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -475,8 +476,9 @@ function ApprovalDraftInner({
     }
   };
 
-  const draftKey = `draft_autosave_${me.id}_${editDoc?.id ?? 'new'}`;
-  const activeKey = `draft_autosave_active_${me.id}_${editDoc?.id ?? 'new'}`;
+  // 새 기안은 탭마다 따로 보관한다(탭 간 덮어쓰기 방지) — [[draftAutosaveKeys.ts]]
+  const [draftTabId] = useState(() => getDraftTabId(sessionStorage));
+  const { draftKey, activeKey } = draftAutosaveKeys(me.id, editDoc?.id ?? null, draftTabId);
   const HISTORY_KEY = `draft_history_${me.id}`;
 
   /**
@@ -591,7 +593,8 @@ function ApprovalDraftInner({
   /** 최신 작업 스냅샷 페이로드 (언마운트 및 이탈 보관용) */
   const latestPayloadRef = useRef<any>(null);
 
-  const bootDraftRef = useRef<{ data: unknown; active: boolean } | null>(null);
+  /** 복구 제안할 보관본과 그 출처 키(자기 탭 것이거나, 닫힌 탭이 남긴 것). */
+  const bootDraftRef = useRef<{ data: unknown; active: boolean; draftKey: string; activeKey: string } | null>(null);
   if (bootDraftRef.current === null) {
     let data: unknown = null;
     try {
@@ -601,8 +604,31 @@ function ApprovalDraftInner({
     bootDraftRef.current = {
       data,
       active: localStorage.getItem(activeKey) === 'true',
+      draftKey,
+      activeKey,
     };
+    // 새 기안인데 이 탭의 보관본이 없으면, 닫힌 탭이 남긴 보관본을 찾는다.
+    if (!editDoc && !(bootDraftRef.current.active && data)) {
+      const orphan = findOrphanNewDraft(localStorage, me.id, draftTabId, Date.now());
+      if (orphan) bootDraftRef.current = { data: orphan.data, active: true, draftKey: orphan.draftKey, activeKey: orphan.activeKey };
+    }
   }
+
+  // 이 탭이 열려 있다는 표시 — 다른 탭이 이 탭의 보관본을 가져가지 않게 한다.
+  useEffect(() => {
+    const beat = () => markTabAlive(localStorage, draftTabId, Date.now());
+    beat();
+    const timer = setInterval(beat, TAB_HEARTBEAT_MS);
+    const gone = () => localStorage.removeItem(tabAliveKey(draftTabId));
+    const onVisible = () => { if (document.visibilityState === 'visible') beat(); };
+    window.addEventListener('pagehide', gone);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('pagehide', gone);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [draftTabId]);
 
   const isDiscardedOrSubmittedRef = useRef(false);
 
@@ -761,7 +787,7 @@ function ApprovalDraftInner({
     }
     // 제안을 띄웠을 때만 플래그를 내린다. 예전에는 무조건 지워서, 이 화면에 잠깐
     // 들렀다 나가기만 해도 다음번 복구 제안이 사라졌다(내용은 남아 있는데도).
-    if (offered) localStorage.removeItem(activeKey);
+    if (offered && boot) localStorage.removeItem(boot.activeKey);
     hasCheckedAutosave.current = true;
   }, [me.id, forms, editDoc]);
 
@@ -1923,6 +1949,14 @@ function ApprovalDraftInner({
               if (data.postApprovalNecessity !== undefined) setPostApprovalNecessity(data.postApprovalNecessity || '');
               if (data.postApprovedAt !== undefined) setPostApprovedAt(data.postApprovedAt || '');
               if (data.postApprovedById !== undefined) setPostApprovedById(data.postApprovedById || '');
+              // 닫힌 탭의 보관본을 불러왔으면 이 탭 키로 옮긴다 — 이후 자동보관이 이어지고, 보관함에 중복으로 남지 않는다.
+              const source = bootDraftRef.current;
+              if (source && source.draftKey !== draftKey) {
+                try {
+                  localStorage.setItem(draftKey, JSON.stringify(data));
+                  localStorage.removeItem(source.draftKey);
+                } catch { /* 옮기지 못해도 원본은 보관함에 남는다 */ }
+              }
             }
             setShowAutosaveRecoverModal(false);
             setPendingAutosaveData(null);
