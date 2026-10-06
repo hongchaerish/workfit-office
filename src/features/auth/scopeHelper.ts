@@ -102,39 +102,18 @@ export function isTestUser(user?: { id?: string; name?: string; dept?: string; e
 }
 
 /**
- * 업무계획 화면의 조회 스코프를 결정합니다.
- * 
- * [규칙]
- * 0. 테스터 계정: 무슨 일이 있어도 본인 외에는 뜨지 않음 (MY_ONLY)
- * 1. 임원 (roleGroups의 OPERATOR/EXEC 또는 임원 직급/직책): 전사 스코프 (ALL)
- * 2. 팀장급 (조직도 부서장 또는 팀장/부서장 직책): 팀원 + 타팀장 스코프 (TEAM_AND_LEADERS)
- * 3. 사원 및 일반 관리자(ADMIN): 본인 부서/팀 스코프 (TEAM)
- * ⚠️ ADMIN은 시스템 관리 권한일 뿐, 업무계획 조회는 자신의 본래 인사 스코프를 따릅니다.
+ * 업무계획(및 같은 범위를 쓰는 캘린더 팀 일정)의 조회 스코프를 결정합니다.
+ *
+ * 2026-10-06부터 직책·직급·권한별 차등 없이 **전사 공통(ALL)** 입니다.
+ * 테스터 계정만 본인 전용(MY_ONLY)으로 격리합니다.
  */
 export function resolveWorkPlanScope(
   user?: User | null,
-  userRoles: string[] = [],
-  org?: OrgContextLike
+  _userRoles: string[] = [],
+  _org?: OrgContextLike
 ): DataScope {
   if (!user) return 'TEAM';
-
-  // 0. 테스터 계정은 무조건 본인 전용 (MY_ONLY)
-  if (isTestUser(user)) {
-    return 'MY_ONLY';
-  }
-
-  // 1. 임원 (전사 스코프)
-  if (isExecutiveUser(user, userRoles)) {
-    return 'ALL';
-  }
-
-  // 2. 팀장급 (팀원 + 타팀장 스코프)
-  if (isLeaderUser(user, userRoles, org)) {
-    return 'TEAM_AND_LEADERS';
-  }
-
-  // 3. 일반 사원 (비임원 ADMIN 포함)
-  return 'TEAM';
+  return isTestUser(user) ? 'MY_ONLY' : 'ALL';
 }
 
 /**
