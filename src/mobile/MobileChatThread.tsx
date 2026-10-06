@@ -1155,7 +1155,10 @@ function MessageBubble({
   );
 }
 
-/** 이미지 라이트박스 — 전체화면 원본 표시 + 다운로드 + 이전/다음 슬라이드. 배경/✕ 로 닫기. */
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 5;
+
+/** 이미지 라이트박스 — 전체화면 원본 표시 + 핀치줌/더블탭/패닝 + 다운로드 + 이전/다음 슬라이드. 배경/✕ 로 닫기. */
 function ImageViewer({
   attachments,
   initialIdx,
@@ -1167,6 +1170,40 @@ function ImageViewer({
 }) {
   const [currentIdx, setCurrentIdx] = useState(initialIdx);
   const att = attachments[currentIdx];
+
+  const [z, setZ] = useState({ scale: 1, tx: 0, ty: 0 });
+  const [isInteracting, setIsInteracting] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 터치 및 드래그 상태 추적용 ref
+  const touchState = useRef({
+    // 1-finger drag
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    baseTx: 0,
+    baseTy: 0,
+    hasMoved: false,
+
+    // 2-finger pinch
+    isPinching: false,
+    startDist: 0,
+    startScale: 1,
+    midX: 0,
+    midY: 0,
+    baseTxPinch: 0,
+    baseTyPinch: 0,
+
+    // double-tap
+    lastTapTime: 0,
+    lastTapX: 0,
+    lastTapY: 0,
+  });
+
+  // 사진이 변경되면 배율 및 위치 상태 초기화
+  useEffect(() => {
+    setZ({ scale: 1, tx: 0, ty: 0 });
+  }, [currentIdx]);
 
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < attachments.length - 1;
@@ -1195,13 +1232,155 @@ function ImageViewer({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, hasPrev, hasNext]);
 
+  const getDistance = (t1: React.Touch, t2: React.Touch) => {
+    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  };
+
+  const getMidpoint = (t1: React.Touch, t2: React.Touch) => {
+    return {
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2,
+    };
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touches = e.touches;
+
+    if (touches.length === 2) {
+      // 핀치 줌 시작
+      const dist = getDistance(touches[0], touches[1]);
+      const mid = getMidpoint(touches[0], touches[1]);
+      touchState.current.isPinching = true;
+      touchState.current.isDragging = false;
+      touchState.current.startDist = dist;
+      touchState.current.startScale = z.scale;
+      touchState.current.midX = mid.x;
+      touchState.current.midY = mid.y;
+      touchState.current.baseTxPinch = z.tx;
+      touchState.current.baseTyPinch = z.ty;
+      setIsInteracting(true);
+    } else if (touches.length === 1) {
+      const touch = touches[0];
+      const now = Date.now();
+      const lastTap = touchState.current.lastTapTime;
+      const tapDist = Math.hypot(touch.clientX - touchState.current.lastTapX, touch.clientY - touchState.current.lastTapY);
+
+      // 더블 탭 판별 (300ms 이내 + 30px 이내)
+      if (now - lastTap < 300 && tapDist < 30) {
+        touchState.current.lastTapTime = 0;
+        if (z.scale > 1) {
+          // 원본 1배율로 복원
+          setZ({ scale: 1, tx: 0, ty: 0 });
+        } else {
+          // 2.5배율로 확대 (더블탭 위치 중심)
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) {
+            const cx = touch.clientX - (rect.left + rect.width / 2);
+            const cy = touch.clientY - (rect.top + rect.height / 2);
+            const targetScale = 2.5;
+            setZ({
+              scale: targetScale,
+              tx: -cx * (targetScale - 1),
+              ty: -cy * (targetScale - 1),
+            });
+          } else {
+            setZ({ scale: 2.5, tx: 0, ty: 0 });
+          }
+        }
+        return;
+      }
+
+      touchState.current.lastTapTime = now;
+      touchState.current.lastTapX = touch.clientX;
+      touchState.current.lastTapY = touch.clientY;
+
+      if (z.scale > 1) {
+        touchState.current.isDragging = true;
+        touchState.current.isPinching = false;
+        touchState.current.startX = touch.clientX;
+        touchState.current.startY = touch.clientY;
+        touchState.current.baseTx = z.tx;
+        touchState.current.baseTy = z.ty;
+        touchState.current.hasMoved = false;
+        setIsInteracting(true);
+      }
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touches = e.touches;
+
+    if (touches.length === 2 && touchState.current.isPinching) {
+      const dist = getDistance(touches[0], touches[1]);
+      if (touchState.current.startDist === 0) return;
+      const scaleFactor = dist / touchState.current.startDist;
+      const nextScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, touchState.current.startScale * scaleFactor));
+
+      const rect = containerRef.current?.getBoundingClientRect();
+      let tx = touchState.current.baseTxPinch;
+      let ty = touchState.current.baseTyPinch;
+
+      if (rect && touchState.current.startScale > 0) {
+        const cx = touchState.current.midX - (rect.left + rect.width / 2);
+        const cy = touchState.current.midY - (rect.top + rect.height / 2);
+        const k = nextScale / touchState.current.startScale;
+        tx = tx * k + cx * (1 - k);
+        ty = ty * k + cy * (1 - k);
+      }
+
+      setZ({
+        scale: nextScale,
+        tx: nextScale <= 1 ? 0 : tx,
+        ty: nextScale <= 1 ? 0 : ty,
+      });
+    } else if (touches.length === 1 && touchState.current.isDragging && z.scale > 1) {
+      const touch = touches[0];
+      const dx = touch.clientX - touchState.current.startX;
+      const dy = touch.clientY - touchState.current.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        touchState.current.hasMoved = true;
+      }
+      setZ((prev) => ({
+        ...prev,
+        tx: touchState.current.baseTx + dx,
+        ty: touchState.current.baseTy + dy,
+      }));
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      touchState.current.isDragging = false;
+      touchState.current.isPinching = false;
+      setIsInteracting(false);
+
+      if (z.scale <= 1) {
+        setZ({ scale: 1, tx: 0, ty: 0 });
+      }
+    } else if (e.touches.length === 1) {
+      touchState.current.isPinching = false;
+      if (z.scale > 1) {
+        const touch = e.touches[0];
+        touchState.current.isDragging = true;
+        touchState.current.startX = touch.clientX;
+        touchState.current.startY = touch.clientY;
+        touchState.current.baseTx = z.tx;
+        touchState.current.baseTy = z.ty;
+      }
+    }
+  };
+
   if (!att) return null;
 
   return createPortal(
-    <div onClick={onClose} className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/90 p-4">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/90 p-4 overflow-hidden select-none"
+      style={{ touchAction: 'none' }}
+    >
       {/* 상단 헤더 영역 */}
       <div
-        className="absolute left-0 right-0 top-0 flex items-center gap-3 px-4 py-3 text-white"
+        className="absolute left-0 right-0 top-0 z-30 flex items-center gap-3 px-4 py-3 text-white pointer-events-auto"
         style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1215,22 +1394,41 @@ function ImageViewer({
       </div>
 
       {/* 이미지 렌더링 및 이전/다음 버튼 */}
-      <div className="relative flex w-full max-w-full items-center justify-center h-[75vh]" onClick={(e) => e.stopPropagation()}>
-        {hasPrev && (
+      <div
+        ref={containerRef}
+        className="relative flex w-full max-w-full items-center justify-center h-[75vh]"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        {hasPrev && z.scale <= 1 && (
           <button
             onClick={handlePrev}
             title="이전 사진"
-            className="absolute left-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none"
+            className="absolute left-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none pointer-events-auto"
           >
             ◀
           </button>
         )}
-        <img src={att.url} alt={att.name} className="max-h-full max-w-full rounded-lg object-contain" />
-        {hasNext && (
+        <img
+          src={att.url}
+          alt={att.name}
+          draggable={false}
+          style={{
+            transform: `translate(${z.tx}px, ${z.ty}px) scale(${z.scale})`,
+            transformOrigin: 'center center',
+            transition: isInteracting ? 'none' : 'transform 160ms ease-out',
+            touchAction: 'none',
+          }}
+          className="max-h-full max-w-full rounded-lg object-contain pointer-events-none select-none"
+        />
+        {hasNext && z.scale <= 1 && (
           <button
             onClick={handleNext}
             title="다음 사진"
-            className="absolute right-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none"
+            className="absolute right-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-[20px] text-white hover:bg-black/60 active:scale-95 transition-all select-none pointer-events-auto"
           >
             ▶
           </button>
