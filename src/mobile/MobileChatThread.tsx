@@ -19,6 +19,7 @@ import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
@@ -222,6 +223,34 @@ export default function MobileChatThread() {
     setAttachedFiles([]);
   };
 
+  const handlePaste = (e: React.ClipboardEvent<any>) => {
+    if (readonly) return;
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const ext = file.type.split('/')[1] || 'png';
+          const namedFile = new File(
+            [file],
+            `capture_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i + 1}.${ext}`,
+            { type: file.type }
+          );
+          imageFiles.push(namedFile);
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      handleFilesAttach(imageFiles);
+    }
+  };
+
   useEffect(() => {
     return () => {
       attachedFiles.forEach((f) => {
@@ -388,7 +417,7 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div className="flex h-full flex-col relative" style={{ background: '#f2f8fc' }}>
+    <div onPaste={handlePaste} className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc' }}>
       {(() => {
         const isDirect = room?.type === 'direct';
         const otherId = isDirect ? room.members.find((m) => m !== me) : null;
@@ -630,6 +659,7 @@ export default function MobileChatThread() {
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
               placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
               className="min-w-0 flex-1 rounded-full bg-black/5 px-4 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink3"
@@ -1113,7 +1143,7 @@ function MessageBubble({
         onPointerDown={handleTouchStart}
         onPointerMove={handleTouchMove}
         onPointerUp={handleTouchEnd}
-        className="whitespace-pre-line break-words rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
+        className="whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] leading-relaxed cursor-pointer select-none -webkit-touch-callout-none"
         style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
       >
         {renderHighlightedText(m.text, searchQuery, isSearchActive)}
@@ -1817,12 +1847,14 @@ function MobileForwardModal({
 
 function renderHighlightedText(text: string, query: string, isActive: boolean) {
   if (!text) return '';
-  if (!query.trim()) return text;
+  if (!query.trim()) {
+    return <AutoLinkText text={text} className="break-words [word-break:break-word] whitespace-pre-wrap select-text" />;
+  }
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escaped})`, 'gi');
   const parts = text.split(regex);
   return (
-    <>
+    <span className="break-words [word-break:break-word] whitespace-pre-wrap select-text">
       {parts.map((part, i) => {
         const isMatch = part.toLowerCase() === query.trim().toLowerCase();
         if (isMatch) {
@@ -1840,9 +1872,9 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
             </mark>
           );
         }
-        return part;
+        return <AutoLinkText key={i} text={part} />;
       })}
-    </>
+    </span>
   );
 }
 

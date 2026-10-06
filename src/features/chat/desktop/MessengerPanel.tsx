@@ -19,6 +19,7 @@ import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domai
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
+import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 
 /** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
 export function fmtTime(iso?: string): string {
@@ -661,7 +662,7 @@ function MessengerThread({
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<any>) => {
     if (readonly) return;
     const items = e.clipboardData?.items;
     if (!items || items.length === 0) return;
@@ -675,7 +676,7 @@ function MessengerThread({
           const ext = file.type.split('/')[1] || 'png';
           const namedFile = new File(
             [file],
-            `capture_${Date.now()}_${i + 1}.${ext}`,
+            `capture_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i + 1}.${ext}`,
             { type: file.type }
           );
           imageFiles.push(namedFile);
@@ -704,6 +705,7 @@ function MessengerThread({
       ) : (
         <div
           onDragOver={handleDragOver}
+          onPaste={handlePaste}
           className="flex-1 flex h-full flex-col relative min-w-0"
         >
       {isDragging && !readonly && (
@@ -1587,7 +1589,7 @@ function MessageBubble({
         {m.text && (
           <div
             style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+            className={`whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {renderHighlightedText(m.text, searchQuery, isSearchActive)}
           </div>
@@ -1596,24 +1598,24 @@ function MessageBubble({
     );
   } else if (m.type === 'file' && att) {
     body = (
-      <div className="flex flex-col gap-1.5" onContextMenu={onContextMenu}>
+      <div className="flex flex-col gap-1.5 min-w-0 max-w-full" onContextMenu={onContextMenu}>
         <button
           type="button"
           onClick={() => downloadAttachment(att)}
           title={`${att.name} 다운로드`}
           style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-          className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] transition-[filter] hover:brightness-95 select-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+          className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] transition-[filter] hover:brightness-95 select-text min-w-0 max-w-full ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         >
-          <span className="text-[18px]">📄</span>
-          <span className="min-w-0">
-            <span className="block max-w-[180px] truncate text-[12px] font-semibold">{att.name}</span>
+          <span className="text-[18px] shrink-0">📄</span>
+          <span className="min-w-0 flex-1">
+            <span className="block max-w-[220px] truncate text-[12px] font-semibold">{att.name}</span>
             <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
           </span>
         </button>
         {m.text && (
           <div
             style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-            className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+            className={`whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
           >
             {renderHighlightedText(m.text, searchQuery, isSearchActive)}
           </div>
@@ -1623,7 +1625,7 @@ function MessageBubble({
   } else if (isDeletedMessage(m)) {
     // 삭제된 메시지 — 내용 없이 안내만, 메뉴(복사·답장·전달·수정·삭제)는 열지 않는다
     body = (
-      <div className="rounded-xl border border-dashed border-border px-3 py-2 text-[11.5px] italic text-ink3 select-none">
+      <div className="rounded-xl border border-dashed border-border px-3 py-2 text-[11.5px] italic text-ink3 select-none min-w-0 max-w-full">
         {DELETED_MESSAGE_TEXT}
       </div>
     );
@@ -1631,7 +1633,7 @@ function MessageBubble({
     body = (
       <div
         style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
-        className={`whitespace-pre-line rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
+        className={`whitespace-pre-wrap break-words [word-break:break-word] max-w-full min-w-0 rounded-xl px-3 py-2.5 text-[12px] leading-relaxed shadow-[0_1px_2px_rgba(16,24,48,0.05)] select-text cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         onContextMenu={onContextMenu}
       >
         {renderHighlightedText(m.text, searchQuery, isSearchActive)}
@@ -2421,12 +2423,14 @@ function DesktopForwardModal({
 
 function renderHighlightedText(text: string, query: string, isActive: boolean) {
   if (!text) return '';
-  if (!query.trim()) return text;
+  if (!query.trim()) {
+    return <AutoLinkText text={text} className="break-words [word-break:break-word] whitespace-pre-wrap select-text" />;
+  }
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escaped})`, 'gi');
   const parts = text.split(regex);
   return (
-    <>
+    <span className="break-words [word-break:break-word] whitespace-pre-wrap select-text">
       {parts.map((part, i) => {
         const isMatch = part.toLowerCase() === query.trim().toLowerCase();
         if (isMatch) {
@@ -2444,9 +2448,9 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
             </mark>
           );
         }
-        return part;
+        return <AutoLinkText key={i} text={part} />;
       })}
-    </>
+    </span>
   );
 }
 
