@@ -6,8 +6,8 @@ import { Search, Paperclip, FileSignature, FileText, X, Pencil, Download } from 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
-import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
+import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
@@ -247,6 +247,7 @@ export default function MobileChatThread() {
 
     if (imageFiles.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       handleFilesAttach(imageFiles);
     }
   };
@@ -530,7 +531,7 @@ export default function MobileChatThread() {
           let prevMsg: ChatMessage | null = null;
           if (idx > 0) {
             const prevItem = processedItems[idx - 1];
-            if (prevItem.type === 'image-bundle' && prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
+            if (prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
               prevMsg = prevItem.bundleMessages[prevItem.bundleMessages.length - 1];
             } else {
               prevMsg = prevItem.message;
@@ -542,7 +543,7 @@ export default function MobileChatThread() {
           // 같은 사람이 같은 분에 이어 보낸 메시지는 바짝 붙이고 프로필(이름·사진)은 첫 말풍선에만
           const groupedWithPrev = !showDateDivider && isGroupedWithPrevious(prevMsg, m);
 
-          const lastMsgOfGroup = item.type === 'image-bundle' && item.bundleMessages
+          const lastMsgOfGroup = item.bundleMessages && item.bundleMessages.length > 0
             ? item.bundleMessages[item.bundleMessages.length - 1]
             : m;
           const hideTime = nextMsg && lastMsgOfGroup.senderId === nextMsg.senderId && isSameMinute(lastMsgOfGroup.at, nextMsg.at);
@@ -557,9 +558,9 @@ export default function MobileChatThread() {
                   </span>
                 </div>
               )}
-              {item.type === 'image-bundle' && item.bundleMessages ? (
-                <ImageBundleBubble
-                  bundle={item.bundleMessages}
+              {item.type === 'composite-bundle' ? (
+                <CompositeMessageBubble
+                  item={item}
                   me={me}
                   group={room?.type === 'group'}
                   roomMembers={room?.members ?? []}
@@ -828,8 +829,8 @@ function ApprovalBotCard({ payload, text }: { payload: ApprovalBotPayload; text:
   );
 }
 
-function ImageBundleBubble({
-  bundle,
+function CompositeMessageBubble({
+  item,
   me,
   group,
   roomMembers,
@@ -839,18 +840,17 @@ function ImageBundleBubble({
   onLongPress,
   onToggleEmoji,
 }: {
-  bundle: ChatMessage[];
+  item: RenderMessageItem;
   me: string;
   group?: boolean;
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   showTime: boolean;
-  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
   showProfile?: boolean;
   onLongPress: (m: ChatMessage) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
 }) {
-  const m = bundle[0];
+  const m = item.message;
   const presenceMap = useAllUserPresences();
   const mine = m.senderId === me;
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
@@ -885,13 +885,6 @@ function ImageBundleBubble({
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const renderGrid = () => {
-    const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
-    if (attachments.length === 0) return null;
-    return <ImageBundleGrid attachments={attachments} onOpen={onOpenImage} className="border-black/10" />;
-  };
-
-  // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
   const bubbleMeta = (mine && unreadCount > 0) || showTime ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
       {mine && unreadCount > 0 && (
@@ -932,7 +925,14 @@ function ImageBundleBubble({
             onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
             className={`relative flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
           >
-            {renderGrid()}
+            <CompositeMessageCard
+              text={item.text}
+              images={item.images}
+              files={item.files}
+              mine={mine}
+              onOpenImage={(att, list) => onOpenImage(att, list)}
+              onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+            />
             {bubbleMeta}
           </div>
           {reactions && Object.keys(reactions).length > 0 && (

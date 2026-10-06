@@ -22,9 +22,12 @@ test('사진 여러 장: 같은 시각·증가하는 id, 글은 사진 뒤 별�
   assert.deepEqual(batch.map((m) => m.id), ['R-1000', 'R-1001', 'R-1002', 'R-1003']);
   assert.ok(batch.slice(0, 3).every((m) => m.text === '' && m.replyTo === null));
   assert.deepEqual(batch[3].replyTo, reply);
+  // 같은 배치의 글까지 한 카드(composite-bundle)로 묶인다.
   const items = processMessageBundles(batch);
-  assert.equal(items[0].type, 'image-bundle');
-  assert.equal(items[0].bundleMessages?.length, 3);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, 'composite-bundle');
+  assert.equal(items[0].images?.length, 3);
+  assert.equal(items[0].text, '설명');
 });
 
 test('사진 여러 장 + 글 없이 답장: 답장은 첫 사진에 담아 묶음 위에 보이게', () => {

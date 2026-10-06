@@ -6,8 +6,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
-import { ImageBundleGrid } from '@/features/chat/ImageBundleGrid';
-import { isSameMinute, processMessageBundles, isGroupedWithPrevious } from '@/features/chat/messageBundles';
+import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
@@ -140,7 +140,7 @@ export function MessengerPanel() {
 
   // 새 메시지(미읽음)가 도착한 숨김 방은 자동으로 숨김 해제
   useEffect(() => {
-    const arrived = hiddenIds.filter((id) => (unreadMap[id] ?? 0) > 0);
+    const arrived = hiddenIds.filter((id: string) => (unreadMap[id] ?? 0) > 0);
     if (arrived.length > 0) unhideRooms(me, arrived);
   }, [hiddenIds, unreadMap, me]);
 
@@ -686,6 +686,7 @@ function MessengerThread({
 
     if (imageFiles.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       handleFilesAttach(imageFiles);
     }
   };
@@ -916,7 +917,7 @@ function MessengerThread({
           let prevMsg: ChatMessage | null = null;
           if (idx > 0) {
             const prevItem = processedItems[idx - 1];
-            if (prevItem.type === 'image-bundle' && prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
+            if (prevItem.bundleMessages && prevItem.bundleMessages.length > 0) {
               prevMsg = prevItem.bundleMessages[prevItem.bundleMessages.length - 1];
             } else {
               prevMsg = prevItem.message;
@@ -952,13 +953,13 @@ function MessengerThread({
                 </div>
               )}
               {(() => {
-                const curLastMsg = item.type === 'image-bundle' && item.bundleMessages && item.bundleMessages.length > 0
+                const curLastMsg = item.bundleMessages && item.bundleMessages.length > 0
                   ? item.bundleMessages[item.bundleMessages.length - 1]
                   : item.message;
 
                 const nextItem = idx < processedItems.length - 1 ? processedItems[idx + 1] : null;
                 const nextFirstMsg = nextItem
-                  ? (nextItem.type === 'image-bundle' && nextItem.bundleMessages && nextItem.bundleMessages.length > 0
+                  ? (nextItem.bundleMessages && nextItem.bundleMessages.length > 0
                       ? nextItem.bundleMessages[0]
                       : nextItem.message)
                   : null;
@@ -972,27 +973,31 @@ function MessengerThread({
                 );
                 const showTime = !hideTime;
 
-                return item.type === 'image-bundle' && item.bundleMessages ? (
-                  <ImageBundleBubble
-                    bundle={item.bundleMessages}
-                    me={me}
-                    group={room.type === 'group'}
-                    roomMembers={room.members}
-                    onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
-                    onReply={setReplyTo}
-                    onJumpToMessage={jumpToMessage}
-                    onToggleEmoji={handleToggleEmoji}
-                    showTime={showTime}
-                    showProfile={!groupedWithPrev}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
-                      const zoom = parseFloat(fontScaleStr) || 1.1875;
-                      setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
-                    }}
-                  />
-                ) : (
+                if (item.type === 'composite-bundle') {
+                  return (
+                    <CompositeMessageBubble
+                      item={item}
+                      me={me}
+                      group={room.type === 'group'}
+                      roomMembers={room.members}
+                      onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: list.indexOf(att) })}
+                      onReply={setReplyTo}
+                      onJumpToMessage={jumpToMessage}
+                      onToggleEmoji={handleToggleEmoji}
+                      showTime={showTime}
+                      showProfile={!groupedWithPrev}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const fontScaleStr = window.getComputedStyle(document.documentElement).getPropertyValue('--font-scale') || '1.1875';
+                        const zoom = parseFloat(fontScaleStr) || 1.1875;
+                        setActiveMenu({ m, x: e.clientX / zoom, y: e.clientY / zoom, mine: m.senderId === me });
+                      }}
+                    />
+                  );
+                }
+
+                return (
                   <MessageBubble
                     m={m}
                     me={me}
@@ -1338,8 +1343,8 @@ function MessageContextMenuPortal({
   );
 }
 
-function ImageBundleBubble({
-  bundle,
+function CompositeMessageBubble({
+  item,
   me,
   group,
   roomMembers,
@@ -1351,21 +1356,19 @@ function ImageBundleBubble({
   showTime = true,
   showProfile = true,
 }: {
-  bundle: ChatMessage[];
+  item: RenderMessageItem;
   me: string;
   group: boolean;
   roomMembers: string[];
   onOpenImage: (att: Attachment, list: Attachment[]) => void;
   onReply: (m: ChatMessage) => void;
-  /** 답장 인용 클릭 → 원본 메시지로 이동 */
   onJumpToMessage?: (messageId: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleEmoji?: (messageId: string, emoji: string) => void;
   showTime?: boolean;
-  /** 앞 말풍선과 이어지면 false — 프로필 사진·이름을 숨기고 자리만 둔다 */
   showProfile?: boolean;
 }) {
-  const m = bundle[0];
+  const m = item.message;
   const presenceMap = useAllUserPresences();
   const mine = m.senderId === me;
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
@@ -1378,13 +1381,6 @@ function ImageBundleBubble({
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const renderGrid = () => {
-    const attachments = bundle.map((msg) => msg.attachment).filter(Boolean) as Attachment[];
-    if (attachments.length === 0) return null;
-    return <ImageBundleGrid attachments={attachments} onOpen={onOpenImage} className="border-border" />;
-  };
-
-  // 안읽음 수·시간은 말풍선 바로 옆(아래 맞춤)에 붙인다 — 시간을 숨긴 말풍선에서도 숫자가 떨어져 보이지 않게
   const hasMeta = (mine && unreadCount > 0) || showTime;
   const bubbleMeta = hasMeta ? (
     <div className={`flex shrink-0 flex-col gap-0.5 pb-0.5 leading-none ${mine ? 'items-end' : 'items-start'}`}>
@@ -1429,7 +1425,14 @@ function ImageBundleBubble({
             className={`flex items-end gap-1 ${mine ? 'flex-row-reverse' : 'flex-row'}`}
             onContextMenu={onContextMenu}
           >
-            {renderGrid()}
+            <CompositeMessageCard
+              text={item.text}
+              images={item.images}
+              files={item.files}
+              mine={mine}
+              onOpenImage={(att, list) => onOpenImage(att, list)}
+              onContextMenu={onContextMenu}
+            />
             {bubbleMeta}
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               <button
