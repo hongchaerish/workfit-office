@@ -91,6 +91,8 @@ export default function MobileChatThread() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [hasNewMsg, setHasNewMsg] = useState(false);
   const prevLengthRef = useRef(messages.length);
+  const isInitialLoadRef = useRef(true);
+  const prevRoomIdRef = useRef(roomId);
 
   const [showFileBox, setShowFileBox] = useState(false);
   const filesInRoom = useMemo(() => {
@@ -267,22 +269,47 @@ export default function MobileChatThread() {
   }, [roomId, me]);
 
   useEffect(() => {
+    if (prevRoomIdRef.current !== roomId) {
+      prevRoomIdRef.current = roomId;
+      isInitialLoadRef.current = true;
+      prevLengthRef.current = 0;
+    }
+  }, [roomId]);
+
+  useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
 
-    if (filteredMessages.length > prevLengthRef.current) {
-      if (isAtBottom) {
+    if (isInitialLoadRef.current) {
+      if (filteredMessages.length > 0) {
         el.scrollTop = el.scrollHeight;
+        // DOM 및 이미지 레이아웃 렌더링 후 재보정
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        });
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 100);
+        isInitialLoadRef.current = false;
         setHasNewMsg(false);
-      } else {
-        setHasNewMsg(true);
       }
     } else {
-      el.scrollTop = el.scrollHeight;
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+      if (filteredMessages.length > prevLengthRef.current) {
+        if (isAtBottom) {
+          el.scrollTop = el.scrollHeight;
+          setHasNewMsg(false);
+        } else {
+          setHasNewMsg(true);
+        }
+      }
     }
     prevLengthRef.current = filteredMessages.length;
-  }, [filteredMessages.length]);
+  }, [filteredMessages.length, roomId]);
 
   const submit = async () => {
     const t = text.trim();

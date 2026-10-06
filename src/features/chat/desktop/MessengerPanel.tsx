@@ -334,6 +334,8 @@ function MessengerThread({
 
   const [hasNewMsg, setHasNewMsg] = useState(false);
   const prevLengthRef = useRef(messages.length);
+  const isInitialLoadRef = useRef(true);
+  const prevRoomIdRef = useRef(room.id);
 
   useEffect(() => {
     if (!activeMenu) return;
@@ -580,22 +582,46 @@ function MessengerThread({
   }, [room.id, me]);
 
   useEffect(() => {
+    if (prevRoomIdRef.current !== room.id) {
+      prevRoomIdRef.current = room.id;
+      isInitialLoadRef.current = true;
+      prevLengthRef.current = 0;
+    }
+  }, [room.id]);
+
+  useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
 
-    if (filteredMessages.length > prevLengthRef.current) {
-      if (isAtBottom) {
+    if (isInitialLoadRef.current) {
+      if (filteredMessages.length > 0) {
         el.scrollTop = el.scrollHeight;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        });
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 100);
+        isInitialLoadRef.current = false;
         setHasNewMsg(false);
-      } else {
-        setHasNewMsg(true);
       }
     } else {
-      el.scrollTop = el.scrollHeight;
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+      if (filteredMessages.length > prevLengthRef.current) {
+        if (isAtBottom) {
+          el.scrollTop = el.scrollHeight;
+          setHasNewMsg(false);
+        } else {
+          setHasNewMsg(true);
+        }
+      }
     }
     prevLengthRef.current = filteredMessages.length;
-  }, [filteredMessages.length]);
+  }, [filteredMessages.length, room.id]);
 
   const submit = async () => {
     const t = text.trim();
