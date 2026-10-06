@@ -22,13 +22,13 @@ export function useCreateReservation() {
 }
 
 export function useApproveReservation() {
-  return useReservationMutation(({ actor, id }: { actor: User; id: string }) => reservationRepo.approve(actor, id));
+  return useReservationMutation(({ actor, id, isAdmin }: { actor: User; id: string; isAdmin?: boolean }) => reservationRepo.approve(actor, id, isAdmin));
 }
 
 export function useRejectReservation() {
-  return useReservationMutation(({ actor, id, reason }: { actor: User; id: string; reason: string }) => reservationRepo.reject(actor, id, reason));
+  return useReservationMutation(({ actor, id, reason, isAdmin }: { actor: User; id: string; reason: string; isAdmin?: boolean }) => reservationRepo.reject(actor, id, reason, isAdmin));
 }
 
 export function useCancelReservation() {
-  return useReservationMutation(({ actor, id, reason }: { actor: User; id: string; reason: string }) => reservationRepo.cancel(actor, id, reason));
+  return useReservationMutation(({ actor, id, reason, isAdmin }: { actor: User; id: string; reason: string; isAdmin?: boolean }) => reservationRepo.cancel(actor, id, reason, isAdmin));
 }

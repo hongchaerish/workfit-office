@@ -90,5 +90,6 @@ test('ADMIN은 비상 관리 권한으로 취소 마감의 제한을 받지 않�
     vehicle,
     reservation('2026-08-12T00:01:00.000Z'),
     now,
+    true, // 관리자 여부는 users.roleGroup 대신 호출 측(usePermission)이 넘긴다.
   ));
 });

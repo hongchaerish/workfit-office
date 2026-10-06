@@ -32,7 +32,7 @@ export default function ReservationApprovals({ actor, reservations, resources, u
   const approve = async (row: Reservation) => {
     setError('');
     try {
-      await approveReservation.mutateAsync({ actor, id: row.id });
+      await approveReservation.mutateAsync({ actor, id: row.id, isAdmin });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '승인 처리에 실패했습니다.');
     }
@@ -81,7 +81,7 @@ export default function ReservationApprovals({ actor, reservations, resources, u
           confirmLabel="반려"
           onClose={() => setRejectTarget(null)}
           onSubmit={async (reason) => {
-            await rejectReservation.mutateAsync({ actor, id: rejectTarget.id, reason });
+            await rejectReservation.mutateAsync({ actor, id: rejectTarget.id, reason, isAdmin });
             setRejectTarget(null);
           }}
         />

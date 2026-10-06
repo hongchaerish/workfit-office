@@ -101,3 +101,25 @@ test('수량형 예약은 합계 초과를 막고 취소 후 수량을 반환한
   assert.equal(retried.status, 'PENDING');
   assert.equal(retried.quantity, 5);
 });
+
+test('관리자는 담당 자원이 아니어도 승인·반려하고 남의 예약을 취소한다', async () => {
+  const admin = otherRequester; // 차량 담당자가 아닌 일반 사용자 — 관리자 여부는 호출 측(usePermission)이 넘긴다.
+  const first = await reservationRepo.create(requester, request('RES-0003', futureWindow(22, '09:00', '10:00'), { title: '관리자 승인' }));
+  await assert.rejects(
+    () => reservationRepo.approve(admin, first.id),
+    (error) => error instanceof ReservationError && error.code === 'FORBIDDEN',
+  );
+  const approved = await reservationRepo.approve(admin, first.id, true);
+  assert.equal(approved.status, 'CONFIRMED');
+
+  await assert.rejects(
+    () => reservationRepo.cancel(admin, approved.id, '관리자 취소'),
+    (error) => error instanceof ReservationError && error.code === 'FORBIDDEN',
+  );
+  const cancelled = await reservationRepo.cancel(admin, approved.id, '관리자 취소', true);
+  assert.equal(cancelled.status, 'CANCELLED');
+
+  const second = await reservationRepo.create(requester, request('RES-0003', futureWindow(22, '11:00', '12:00'), { title: '관리자 반려' }));
+  const rejected = await reservationRepo.reject(admin, second.id, '관리자 반려', true);
+  assert.equal(rejected.status, 'REJECTED');
+});

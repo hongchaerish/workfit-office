@@ -84,15 +84,15 @@ function LocalResourceScreen() {
     if (tab === 'my') return row.requesterUserId === actor.id ? row : null;
     if (tab === 'approvals') {
       const resource = resources.find((item) => item.id === row.resourceId);
-      return resource && canApproveResource(actor, resource) ? row : null;
+      return resource && canApproveResource(actor, resource, isAdmin) ? row : null;
     }
     if (tab === 'overview') return OVERVIEW_DETAIL_STATUSES.has(row.status) ? row : null;
     return null;
-  }, [actor, reservations, resources, selectedReservationId, tab]);
+  }, [actor, isAdmin, reservations, resources, selectedReservationId, tab]);
   const selectedResource = selectedReservation ? resources.find((resource) => resource.id === selectedReservation.resourceId) : undefined;
   const showPrivateDetails = Boolean(selectedReservation && actor && (
     selectedReservation.requesterUserId === actor.id
-    || (selectedResource && canApproveResource(actor, selectedResource))
+    || (selectedResource && canApproveResource(actor, selectedResource, isAdmin))
   ));
 
   const changeTab = (next: TabId) => {
@@ -124,7 +124,7 @@ function LocalResourceScreen() {
     if (!actor) return;
     setActionError('');
     try {
-      await approveReservation.mutateAsync({ actor, id: row.id });
+      await approveReservation.mutateAsync({ actor, id: row.id, isAdmin });
       setNotice('예약을 승인했습니다.');
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : '승인 처리에 실패했습니다.');
@@ -169,7 +169,7 @@ function LocalResourceScreen() {
               id: item,
               icon: TAB_ICONS[item],
               label: TAB_LABELS[item],
-              badge: item === 'approvals' && reservations.some((row) => row.status === 'PENDING' && resources.some((resource) => resource.id === row.resourceId && canApproveResource(actor, resource))) ? '대기' : undefined,
+              badge: item === 'approvals' && reservations.some((row) => row.status === 'PENDING' && resources.some((resource) => resource.id === row.resourceId && canApproveResource(actor, resource, isAdmin))) ? '대기' : undefined,
               badgeTone: 'amber' as const,
             }))}
             activeId={activeTab}
@@ -197,17 +197,17 @@ function LocalResourceScreen() {
           showPrivateDetails={showPrivateDetails}
           onClose={closeReservation}
           onRequestCancel={
-            ['PENDING', 'CONFIRMED'].includes(selectedReservation.status) && canCancelReservation(actor, selectedReservation)
+            ['PENDING', 'CONFIRMED'].includes(selectedReservation.status) && canCancelReservation(actor, selectedReservation, isAdmin)
               ? () => setCancelTarget(selectedReservation)
               : undefined
           }
           onApprove={
-            selectedReservation.status === 'PENDING' && selectedResource && canApproveResource(actor, selectedResource)
+            selectedReservation.status === 'PENDING' && selectedResource && canApproveResource(actor, selectedResource, isAdmin)
               ? () => void approveSelected(selectedReservation)
               : undefined
           }
           onRequestReject={
-            selectedReservation.status === 'PENDING' && selectedResource && canApproveResource(actor, selectedResource)
+            selectedReservation.status === 'PENDING' && selectedResource && canApproveResource(actor, selectedResource, isAdmin)
               ? () => setRejectTarget(selectedReservation)
               : undefined
           }
@@ -223,7 +223,7 @@ function LocalResourceScreen() {
           confirmLabel="예약 취소"
           onClose={() => setCancelTarget(null)}
           onSubmit={async (reason) => {
-            await cancelReservation.mutateAsync({ actor, id: cancelTarget.id, reason });
+            await cancelReservation.mutateAsync({ actor, id: cancelTarget.id, reason, isAdmin });
             // 상세 모달은 열어 둔다 — 취소 상태와 처리 이력이 바로 보인다.
             setCancelTarget(null);
             setNotice('예약을 취소했습니다.');
@@ -238,7 +238,7 @@ function LocalResourceScreen() {
           confirmLabel="반려"
           onClose={() => setRejectTarget(null)}
           onSubmit={async (reason) => {
-            await rejectReservation.mutateAsync({ actor, id: rejectTarget.id, reason });
+            await rejectReservation.mutateAsync({ actor, id: rejectTarget.id, reason, isAdmin });
             setRejectTarget(null);
             setNotice('예약을 반려했습니다.');
           }}

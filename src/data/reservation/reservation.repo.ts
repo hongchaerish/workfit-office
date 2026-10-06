@@ -160,14 +160,14 @@ export const reservationRepo = {
     });
   },
 
-  approve(actor: User, id: string): Promise<Reservation> {
+  approve(actor: User, id: string, isAdmin = false): Promise<Reservation> {
     return exclusive(async () => {
       assertActiveActor(actor);
       const rows = await loadAll();
       const row = rows.find((item) => item.id === id);
       if (!row) throw new ReservationError('INVALID_INPUT', '예약을 찾을 수 없습니다.');
       const resource = await requireResource(row.resourceId);
-      if (!canApproveResource(actor, resource)) throw new ReservationError('FORBIDDEN', '이 자원의 승인 권한이 없습니다.');
+      if (!canApproveResource(actor, resource, isAdmin)) throw new ReservationError('FORBIDDEN', '이 자원의 승인 권한이 없습니다.');
       if (resource.status !== 'ACTIVE') throw new ReservationError('RESOURCE_UNAVAILABLE', '사용 중인 자원만 승인할 수 있습니다.');
       if (new Date(row.startAt).getTime() <= Date.now()) throw new ReservationError('PAST_TIME', '시작 시간이 지난 예약은 승인할 수 없습니다.');
       validateReservationRequest(resource, {
@@ -190,7 +190,7 @@ export const reservationRepo = {
     });
   },
 
-  reject(actor: User, id: string, reason: string): Promise<Reservation> {
+  reject(actor: User, id: string, reason: string, isAdmin = false): Promise<Reservation> {
     return exclusive(async () => {
       assertActiveActor(actor);
       const rows = await loadAll();
@@ -199,7 +199,7 @@ export const reservationRepo = {
       const row = rows.find((item) => item.id === id);
       if (!row) throw new ReservationError('INVALID_INPUT', '예약을 찾을 수 없습니다.');
       const resource = await requireResource(row.resourceId);
-      if (!canApproveResource(actor, resource)) throw new ReservationError('FORBIDDEN', '이 자원의 승인 권한이 없습니다.');
+      if (!canApproveResource(actor, resource, isAdmin)) throw new ReservationError('FORBIDDEN', '이 자원의 승인 권한이 없습니다.');
       if (new Date(row.startAt).getTime() <= Date.now()) throw new ReservationError('PAST_TIME', '시작 시간이 지난 예약은 반려할 수 없습니다.');
       assertReservationTransition(row.status, 'REJECTED');
       const now = new Date().toISOString();
@@ -210,7 +210,7 @@ export const reservationRepo = {
     });
   },
 
-  cancel(actor: User, id: string, reason: string): Promise<Reservation> {
+  cancel(actor: User, id: string, reason: string, isAdmin = false): Promise<Reservation> {
     return exclusive(async () => {
       assertActiveActor(actor);
       const rows = await loadAll();
@@ -219,7 +219,7 @@ export const reservationRepo = {
       const row = rows.find((item) => item.id === id);
       if (!row) throw new ReservationError('INVALID_INPUT', '예약을 찾을 수 없습니다.');
       const resource = await requireResource(row.resourceId);
-      assertCancellationAllowed(actor, resource, row);
+      assertCancellationAllowed(actor, resource, row, new Date(), isAdmin);
       assertReservationTransition(row.status, 'CANCELLED');
       const now = new Date().toISOString();
       return applyUpdate(row, (current) => ({
