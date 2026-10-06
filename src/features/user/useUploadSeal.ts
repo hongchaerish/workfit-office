@@ -17,7 +17,9 @@ export function useUploadSeal() {
       // 이미지 리사이즈 (300×300 max, PNG 변환)
       const resized = await resizeImage(file, 300, 300);
       const blob = await dataUrlToBlob(resized);
-      return await fileStorage.put(`seals/${userId}/seal.png`, blob, {
+      // 교체마다 새 경로를 사용해 이전 이미지 캐시와 기존 문서의 도장 덮어쓰기를 방지한다.
+      const path = `seals/${userId}/seal-${crypto.randomUUID()}.png`;
+      return await fileStorage.put(path, blob, {
         contentType: 'image/png',
       });
     } catch (e) {

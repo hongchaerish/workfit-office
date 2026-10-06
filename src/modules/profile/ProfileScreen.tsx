@@ -36,6 +36,7 @@ export default function ProfileScreen() {
   const [signPreview, setSignPreview] = useState<string>(user?.signUrl ?? '');
   const [sealMsg, setSealMsg] = useState('');
   const [sealErr, setSealErr] = useState('');
+  const [savingSeal, setSavingSeal] = useState(false);
   const [savingSign, setSavingSign] = useState(false);
 
   /* ── 프로필 사진 상태 ── */
@@ -95,15 +96,18 @@ export default function ProfileScreen() {
     e.target.value = '';
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { setSealErr('파일이 너무 큽니다. 5MB 이내로 선택하세요.'); return; }
+    setSavingSeal(true);
     setSealErr(''); setSealMsg('');
     try {
       const url = await upload(user.id, file);
-      setSealPreview(url);
       await updateProfile({ sealUrl: url });
+      setSealPreview(url);
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       setSealMsg('인감 이미지가 저장되었습니다.');
     } catch (e) {
       setSealErr(e instanceof Error ? e.message : '업로드에 실패했습니다.');
+    } finally {
+      setSavingSeal(false);
     }
   };
 
@@ -126,8 +130,8 @@ export default function ProfileScreen() {
     setSavingSign(true); setSealErr(''); setSealMsg('');
     try {
       const url = await upload(user.id, file);
-      setSignPreview(url);
       await updateProfile({ signUrl: url });
+      setSignPreview(url);
       await queryClient.invalidateQueries({ queryKey: ['users'] });
       setSealMsg('서명이 저장되었습니다.');
     } catch (e) {
@@ -396,15 +400,16 @@ export default function ProfileScreen() {
               />
               <button
                 onClick={() => sealInputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || savingSeal || savingSign}
                 className="rounded-lg border border-border-hi bg-panel-alt px-4 py-2 text-[12px] font-semibold text-ink hover:bg-border/30 disabled:opacity-50"
               >
-                {uploading ? '업로드 중…' : sealPreview ? '이미지 변경' : '이미지 등록'}
+                {uploading || savingSeal ? '저장 중…' : sealPreview ? '이미지 변경' : '이미지 등록'}
               </button>
               {sealPreview && (
                 <button
                   onClick={handleDeleteSeal}
-                  className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5"
+                  disabled={uploading || savingSeal || savingSign}
+                  className="rounded-lg border border-danger/30 px-4 py-2 text-[12px] font-semibold text-danger hover:bg-danger/5 disabled:opacity-50"
                 >
                   이미지 삭제
                 </button>
