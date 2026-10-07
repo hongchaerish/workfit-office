@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { onForegroundMessage } from '@/shared/lib/messaging';
+import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/shared/lib/transientPushNotification';
+import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
+import MobileNotificationsScreen from './MobileNotificationsScreen';
+import MobilePushPermissionPrompt from './MobilePushPermissionPrompt';
 import MobileChatList from './MobileChatList';
 import MobileChatThread from './MobileChatThread';
 import MobileNewRoom from './MobileNewRoom';
@@ -29,7 +33,26 @@ import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from 
  */
 export default function MobileApp() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
+
+  // SW는 열린 PWA에 이동 메시지를 보낸다. 라우터로 처리해 전체 새로고침을 피한다.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.type !== 'workfit-open-link' || typeof data.linkUrl !== 'string') return;
+      try {
+        const target = new URL(data.linkUrl, window.location.origin);
+        if (target.origin !== window.location.origin || !/^\/m(?:\/|$)/.test(target.pathname)) return;
+        navigate(`${target.pathname}${target.search}${target.hash}`);
+      } catch {
+        // 잘못된 링크는 현재 화면을 유지한다.
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
 
   // /m 접속 시: 홈 화면에 아직 추가하지 않은 브라우저 상태이고 오늘 닫은 적이 없다면 가이드 모달 자동 노출
   useEffect(() => {
@@ -54,21 +77,25 @@ export default function MobileApp() {
     void onForegroundMessage(async (p) => {
       try {
         if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        if (shouldSuppressChatPopup(p.roomId)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
-        const body = isChat ? '새로운 메시지가 도착했습니다.' : p.body;
+        const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
-          await reg.showNotification(p.title, {
+          const options: NotificationOptions & { renotify: boolean } = {
             body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
             tag: p.roomId || p.docId || undefined,
-          });
+            renotify: Boolean(p.roomId || p.docId),
+          };
+          await showTransientPushNotification(reg, p.title, options);
         } else {
           // 폴백(구형 브라우저): 페이지 컨텍스트 알림.
-          new Notification(p.title, { body, icon: '/icons/icon-192.png' });
+          const notification = new Notification(p.title, { body, icon: '/icons/icon-192.png' });
+          setTimeout(() => notification.close(), PUSH_NOTIFICATION_DURATION_MS);
         }
       } catch {
         /* iOS 등 미지원 환경 무시 */
@@ -89,6 +116,7 @@ export default function MobileApp() {
         ) : (
           <Routes>
             <Route index element={<MobileChatList />} />
+            <Route path="notifications" element={<MobileNotificationsScreen />} />
             <Route path="modules" element={<MobileModuleLauncher />} />
             <Route path="new" element={<MobileNewRoom />} />
             <Route path="room/:roomId" element={<MobileChatThread />} />
@@ -117,6 +145,7 @@ export default function MobileApp() {
         )}
       </div>
 
+      {user && <MobilePushPermissionPrompt key={user.id} userId={user.id} />}
       <IosPwaGuideModal
         isOpen={showGuide}
         onClose={() => setShowGuide(false)}

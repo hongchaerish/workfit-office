@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { ClipboardCheck, Bell, Settings, X, Info, Search } from 'lucide-react';
+import { ClipboardCheck, Settings, X, Info, Search } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
-import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
+import MobileNotificationBell from './MobileNotificationBell';
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -162,18 +162,6 @@ export default function MobileApprovalList() {
     }
   };
 
-  // 결재 푸시 opt-in — 권한이 아직 'default'일 때만 노출(최초 허용은 사용자 제스처 필요).
-  const [pushPerm, setPushPerm] = useState<NotificationPermission | 'unsupported'>(() => notificationPermission());
-  const [notice, setNotice] = useState('');
-  const showPushOptIn = isPushConfigured() && pushPerm === 'default';
-  const enablePush = async () => {
-    setNotice('알림 설정 중…');
-    const res = await enablePushForUser(me);
-    setPushPerm(notificationPermission());
-    setNotice(res.ok ? '✅ 결재 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
-    setTimeout(() => setNotice(''), 8000);
-  };
-
   const docs = useMemo(() => {
     if (box === '문서함') {
       const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
@@ -305,18 +293,12 @@ export default function MobileApprovalList() {
         <button onClick={() => nav('/m')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[18px] hover:bg-white/10">←</button>
         <span className="flex items-center gap-1.5 text-[15px] font-bold"><ClipboardCheck size={17} /> 전자결재</span>
         <div className="ml-auto flex items-center gap-1">
-          {showPushOptIn && (
-            <button onClick={enablePush} title="결재 알림 켜기" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10">
-              <Bell size={18} strokeWidth={2} />
-            </button>
-          )}
+          <MobileNotificationBell />
           <button onClick={openSettings} title="결재함 설정" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-white/10">
             <Settings size={18} strokeWidth={2} />
           </button>
         </div>
       </header>
-
-      {notice && <div className="px-4 py-2 text-[11.5px] text-navy" style={{ background: '#c7ecc5' }}>{notice}</div>}
 
       {/* ── 검색 바 ── */}
       <div className="shrink-0 border-b border-[#e2e8f0] bg-white px-3 py-2">

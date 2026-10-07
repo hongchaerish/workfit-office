@@ -78,11 +78,18 @@ function LocalCalendarScreen() {
 
   /*
     읽고 나면 지운다 — 안 지우면 주소창에 남아 "오늘"을 눌러도 다시 이 날짜로 보인다.
-    마운트 시 1회만 확인하면 된다 — 이후 달력 안 조작(달 이동·모달 열기)은 이 쿼리와 무관하다.
+    이미 열린 달력에서 다른 알림을 눌렀을 때도 새 날짜를 적용한다.
   */
   useEffect(() => {
-    if (searchParams.has('date')) setSearchParams((prev) => { prev.delete('date'); return prev; }, { replace: true });
-  }, [searchParams, setSearchParams]);
+    if (!searchParams.has('date')) return;
+    if (linkedDate && isValidCalendarDate(linkedDate)) {
+      setSelectedDate(linkedDate);
+      setMonth(linkedDate.slice(0, 7));
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('date');
+    setSearchParams(next, { replace: true });
+  }, [linkedDate, searchParams, setSearchParams]);
   const [demoUserId, setDemoUserId] = useState('U009');
   const { isOperator, isExecutive, userRoles } = usePermission();
   const org = useOrgTree();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -26,6 +26,7 @@ import { MobileMemberPicker } from './MobileMemberPicker';
 import { statusColor } from './MobileApprovalList';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 
 /** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
 export function getAvatarStyle(userId: string): { bg: string; text: string } {
@@ -66,6 +67,10 @@ export default function MobileChatThread() {
   const { data: users = [] } = useUsers();
   const presenceMap = useAllUserPresences();
   const room = rooms.find((r) => r.id === roomId);
+  useLayoutEffect(() => {
+    if (!room) return;
+    return registerViewedChatRoom(room.id);
+  }, [room?.id]);
   const send = useSendMessage(roomId);
   const sendFile = useSendAttachments(roomId);
   const markRead = useMarkRead();

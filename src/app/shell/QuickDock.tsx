@@ -91,7 +91,7 @@ export function QuickDock({ open, setOpen }: { open: string | null; setOpen: (v:
               {/* 메신저 패널 */}
               <div className="menu-scroll h-full overflow-y-auto">
                 {tool.key === 'bot' && <ChatbotPanel />}
-                {tool.key === 'msg' && <MessengerPanel />}
+                {tool.key === 'msg' && <MessengerPanel isVisible={!msgNotiView} />}
               </div>
               {/* 메신저 알림 기록 슬라이드 오버레이 */}
               {tool.key === 'msg' && (

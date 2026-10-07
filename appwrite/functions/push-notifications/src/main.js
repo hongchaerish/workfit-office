@@ -51,6 +51,16 @@ async function getRoom(dbs, DB, roomId, log) {
   return null;
 }
 
+/** 알림 본문은 한 줄, 최대 80자로 제한한다. 첨부 내용 대신 종류만 표시한다. */
+function chatPreview(msg) {
+  if (msg.type === 'image') return '사진을 보냈습니다.';
+  if (msg.type === 'file') return '파일을 보냈습니다.';
+  const text = String(msg.text || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '새로운 메시지가 도착했습니다.';
+  const chars = Array.from(text);
+  return chars.length > 80 ? chars.slice(0, 80).join('') + '…' : text;
+}
+
 // ── 채팅 메시지 → 방 멤버(발신자 제외)에게 푸시 ──
 async function handleChatMessage(msg, dbs, DB, log) {
   if (!msg || msg.type === 'system') return { skipped: 'system' };
@@ -71,10 +81,9 @@ async function handleChatMessage(msg, dbs, DB, log) {
   );
   if (tokens.length === 0) return { skipped: 'no-tokens', room: roomId };
 
-  const senderName = msg.senderName || '';
-  const title = room.name;
-  // 개인정보 보호: 메시지 알림 본문 미리보기 숨김 처리
-  const body = '새로운 메시지가 도착했습니다.';
+  const senderName = String(msg.senderName || '').replace(/\s+/g, ' ').trim();
+  const title = senderName ? `${senderName} · ${room.name}` : room.name;
+  const body = chatPreview(msg);
 
   const res = await ensureAdmin()
     .messaging()

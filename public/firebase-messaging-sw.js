@@ -15,32 +15,43 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 알림 표시 코드만 즉시 갱신하며, 사용자 화면은 다시 로드하지 않는다.
+self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
+async function expireNotification(id, tag) {
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+  const notifications = await self.registration.getNotifications({ tag });
+  for (const notification of notifications) {
+    if (notification.data?.workfitNotificationId === id) notification.close();
+  }
+}
+
 // 백그라운드/종료 상태 수신 → 알림 표시.
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage(async (payload) => {
   const n = payload.notification || {};
   const data = payload.data || {};
   const isChat = Boolean(data.roomId);
-  const bodyText = isChat ? '새로운 메시지가 도착했습니다.' : (n.body || data.body || '');
-  self.registration.showNotification(n.title || data.title || '새 알림', {
+  const bodyText = n.body || data.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
+  const id = `${Date.now()}-${Math.random()}`;
+  const tag = data.roomId || data.docId || data.linkUrl || undefined;
+  await self.registration.showNotification(n.title || data.title || '새 알림', {
     body: bodyText,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    data,
+    data: { ...data, workfitNotificationId: id },
     /**
      * 같은 대상의 알림은 겹쳐 쌓지 않고 하나로 합친다.
      *
      * 일정 알림은 roomId·docId 가 없어 tag 가 안 붙었고, 그래서 5분 주기 리마인더가
      * 배너를 계속 쌓았다. linkUrl 을 마지막 수단으로 써서 일정 알림도 병합되게 한다.
      */
-    tag: data.roomId || data.docId || data.linkUrl || undefined,
-    /**
-     * 채팅·결재는 사용자가 닫을 때까지 남긴다(놓치면 안 되는 것).
-     * 일정 리마인더는 자동으로 사라지게 둔다 — 치우려고 클릭하게 만들면 알림 클릭이
-     * 곧 화면 이동이라 하던 일이 끊긴다. 알림센터에는 그대로 남는다.
-     */
-    requireInteraction: Boolean(data.roomId || data.docId),
+    tag,
+    requireInteraction: false,
     renotify: Boolean(data.roomId || data.docId),
   });
+  // FCM은 반환한 Promise를 push 이벤트의 waitUntil에 연결한다.
+  await expireNotification(id, tag);
 });
 
 // 기기 모드(desktop/pwa) 저장 — 열린 창이 없는 "콜드 클릭"의 목적지를 정한다.
@@ -48,6 +59,10 @@ messaging.onBackgroundMessage((payload) => {
 let clientMode = null;
 self.addEventListener('message', (event) => {
   const d = event.data || {};
+  if (d.type === 'workfit-expire-notification' && typeof d.id === 'string') {
+    event.waitUntil(expireNotification(d.id, d.tag));
+    return;
+  }
   if (d.type === 'workfit-mode' && d.mode) {
     clientMode = d.mode;
     event.waitUntil(caches.open('workfit-meta').then((c) => c.put('/mode', new Response(d.mode))));

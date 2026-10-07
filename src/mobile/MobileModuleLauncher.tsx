@@ -16,7 +16,6 @@ import {
   FolderGit2,
   Network,
   ChevronRight,
-  Bell,
   ShieldCheck,
   ListTodo,
 } from 'lucide-react';
@@ -26,7 +25,7 @@ import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engi
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
-import { enablePushForUser } from '@/shared/lib/messaging';
+import MobileNotificationBell from './MobileNotificationBell';
 import { useSecurityContext } from '@/features/auth/useSecurityContext';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
 import { workPlanPolicy } from '@/domain/security/policy/workPlanPolicy';
@@ -72,7 +71,6 @@ export default function MobileModuleLauncher() {
   const { byBox } = useApprovalBoxes(me);
   const preds = useMemo(() => (me ? getPredecessorsOf(me) : []), [me]);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [notice, setNotice] = useState('');
 
   // 1. 미결재 건수 계산
   const pendingApprovals = useMemo(() => {
@@ -94,13 +92,6 @@ export default function MobileModuleLauncher() {
     const day = days[now.getDay()];
     return `${y}. ${m}. ${d} (${day})`;
   }, []);
-
-  const enablePush = async () => {
-    setNotice('알림 설정 중…');
-    const res = await enablePushForUser(me);
-    setNotice(res.ok ? '✅ 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
-    setTimeout(() => setNotice(''), 5000);
-  };
 
   // ── [1단] 웹 버전 최상단 1행과 100% 일치하는 4대 필수 핵심 업무 ──
   const coreApps: CoreAppItem[] = useMemo(
@@ -272,15 +263,7 @@ export default function MobileModuleLauncher() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* 푸시 알림 설정 */}
-          <button
-            type="button"
-            onClick={enablePush}
-            className="grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white"
-            title="푸시 알림 켜기"
-          >
-            <Bell size={18} strokeWidth={2} />
-          </button>
+          <MobileNotificationBell />
 
           {/* 프로필 아바타 */}
           <button
@@ -306,13 +289,6 @@ export default function MobileModuleLauncher() {
           </button>
         </div>
       </header>
-
-      {/* 알림 토스트 배너 */}
-      {notice && (
-        <div className="bg-teal px-3 py-1.5 text-center text-[11.5px] font-bold text-white animate-in fade-in">
-          {notice}
-        </div>
-      )}
 
       {/* 2. 스크롤 가능한 본문 영역 */}
       <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-4">
