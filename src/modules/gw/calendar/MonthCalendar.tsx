@@ -10,6 +10,8 @@ interface MonthCalendarProps {
   events: CalendarEvent[];
   /** DB 공휴일 목록. 날짜 셀에 이름과 빨간 숫자로 표시한다. */
   holidays?: Holiday[];
+  /** 업무계획의 전사 공통 중요 일정(날짜 → 내용). 날짜 옆에 붉은 글씨로 표시한다. */
+  importantByDate?: Map<string, string>;
   /** 날짜를 선택했을 때(좌측 패널 연동). */
   onSelectDate: (date: string) => void;
   /** 그 날짜로 새 일정을 등록한다(칸 우상단 +). */
@@ -33,6 +35,7 @@ export default function MonthCalendar({
   selectedDate,
   events,
   holidays,
+  importantByDate,
   onSelectDate,
   onAddOn,
   onSelectEvent,
@@ -68,11 +71,12 @@ export default function MonthCalendar({
             const isSelected = cell.date === selectedDate;
             const holidayName = holidayMap.get(cell.date);
             const isHoliday = Boolean(holidayName);
+            const important = cell.inCurrentMonth ? importantByDate?.get(cell.date) : undefined;
             return (
               <div
                 key={cell.date}
                 onClick={() => onSelectDate(cell.date)}
-                className={`group relative min-h-[72px] lg:min-h-[78px] cursor-pointer border-b border-r border-border p-1.5 text-left align-top transition-all ${
+                className={`group relative min-h-[96px] lg:min-h-[112px] cursor-pointer border-b border-r border-border p-1.5 text-left align-top transition-all ${
                   isSelected
                     ? 'ring-2 ring-teal ring-inset bg-teal-soft/20 z-10'
                     : isHoliday
@@ -81,8 +85,8 @@ export default function MonthCalendar({
                 } ${index % 7 === 6 ? 'border-r-0' : ''}`}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <div className="flex flex-col items-start gap-0.5 min-w-0">
-                    <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold transition-all ${
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold transition-all ${
                       isToday
                         ? 'bg-teal text-white shadow-2xs'
                         : isSelected
@@ -96,8 +100,13 @@ export default function MonthCalendar({
                       {Number(cell.date.slice(-2))}
                     </span>
                     {holidayName && cell.inCurrentMonth && (
-                      <span className="block max-w-[56px] truncate text-[8px] font-bold leading-tight text-danger/80" title={holidayName}>
+                      <span className="truncate text-[9.5px] font-semibold leading-tight text-danger" title={holidayName}>
                         {holidayName}
+                      </span>
+                    )}
+                    {important && (
+                      <span className="truncate text-[9.5px] font-bold leading-tight text-rose-600 dark:text-rose-400" title={important}>
+                        {important.split('\n')[0]}
                       </span>
                     )}
                   </div>
@@ -118,7 +127,7 @@ export default function MonthCalendar({
                   </button>
                 </div>
                 <span className="mt-0.5 block space-y-0.5">
-                  {rows.slice(0, 2).map((event) => {
+                  {rows.slice(0, 3).map((event) => {
                     const owner = ownerNameOf?.(event) ?? null;
                     const isAppr = event.id.startsWith('CAL-APPR-');
                     const shouldPrependOwner = owner && !isAppr && !event.title.includes(owner);
@@ -131,21 +140,21 @@ export default function MonthCalendar({
                     const isOutside = event.eventType === 'OUTSIDE' && !isTrip;
                     const isMeeting = event.eventType === 'MEETING' || (event.attendeeUserIds && event.attendeeUserIds.length > 0);
 
-                    let chipStyle = 'bg-blue/10 text-blue';
+                    let chipStyle = 'bg-blue/[0.07] text-blue';
                     if (muted) {
                       chipStyle = 'bg-ink3/10 text-ink3';
                     } else if (isCompany) {
-                      chipStyle = 'bg-teal-500/15 text-teal-700 dark:text-teal-400 font-bold border border-teal-500/30';
+                      chipStyle = 'bg-teal-500/[0.07] text-teal-700 dark:text-teal-400';
                     } else if (isVacation) {
-                      chipStyle = 'bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30';
+                      chipStyle = 'bg-amber-500/[0.07] text-amber-700 dark:text-amber-400';
                     } else if (isTrip) {
-                      chipStyle = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-semibold border border-indigo-500/30';
+                      chipStyle = 'bg-indigo-500/[0.07] text-indigo-700 dark:text-indigo-400';
                     } else if (isOutside) {
-                      chipStyle = 'bg-blue-500/15 text-blue-700 dark:text-blue-400 font-semibold border border-blue-500/30';
+                      chipStyle = 'bg-blue-500/[0.07] text-blue-700 dark:text-blue-400';
                     } else if (isMeeting) {
-                      chipStyle = 'bg-purple-500/15 text-purple-700 dark:text-purple-400 font-semibold border border-purple-500/30';
+                      chipStyle = 'bg-purple-500/[0.07] text-purple-700 dark:text-purple-400';
                     } else if (event.allDay) {
-                      chipStyle = 'bg-teal-soft/75 text-teal';
+                      chipStyle = 'bg-teal-soft/40 text-teal';
                     }
 
                     return (
@@ -155,15 +164,15 @@ export default function MonthCalendar({
                         key={event.id}
                         onClick={(clicked) => { clicked.stopPropagation(); onSelectEvent(event); }}
                         title={`${label}${event.attendeeUserIds?.length ? ` (참여자 ${event.attendeeUserIds.length}명)` : ''}`}
-                        className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[9px] leading-tight focus:outline-none focus:ring-1 focus:ring-teal/40 ${chipStyle}`}
+                        className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] leading-tight focus:outline-none focus:ring-1 focus:ring-teal/40 ${chipStyle}`}
                       >
                         {label}
                       </button>
                     );
                   })}
-                  {rows.length > 2 && (
-                    <span className="block px-0.5 text-[7.5px] font-bold text-ink3">
-                      +{rows.length - 2}개
+                  {rows.length > 3 && (
+                    <span className="block px-0.5 text-[9px] font-semibold text-ink3">
+                      +{rows.length - 3}개
                     </span>
                   )}
                 </span>

@@ -9,7 +9,6 @@ import {
   Users,
   Trash2,
   ChevronDown,
-  Save,
   X,
   FileSpreadsheet,
   AlertTriangle,
@@ -29,7 +28,6 @@ export interface WorkPlanOfficeRibbonToolbarProps {
   conflictError: string | null;
   onSave: (forceOverwrite?: boolean) => Promise<void>;
   onDelete?: () => Promise<void>;
-  onClose: () => void;
   /** [회의 등록] — 캘린더에 회의 1건 + 참석자로 등록(업무계획 본문에는 쓰지 않음) */
   onAddMeeting?: () => void;
 }
@@ -45,7 +43,6 @@ export function WorkPlanOfficeRibbonToolbar({
   conflictError,
   onSave,
   onDelete,
-  onClose,
   onAddMeeting,
 }: WorkPlanOfficeRibbonToolbarProps) {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -87,7 +84,7 @@ export function WorkPlanOfficeRibbonToolbar({
         if (target.tagName === 'INPUT') return;
         e.preventDefault();
       }}
-      className="sticky top-0 z-30 mb-2 rounded-xl border border-teal/40 bg-panel shadow-md overflow-visible animate-in slide-in-from-top-2 duration-150"
+      className="relative z-30 rounded-xl border border-teal/40 bg-panel shadow-md overflow-visible animate-in slide-in-from-top-2 duration-150"
     >
       {/* ── 오피스 엑셀/한글 스타일 리본 메뉴 바 ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-b border-border bg-slate-50/90 dark:bg-panel-alt/80">
@@ -193,22 +190,15 @@ export function WorkPlanOfficeRibbonToolbar({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => onSave(false)}
-            disabled={isSaving}
-            className="rounded-lg bg-teal px-2.5 py-1 text-[11px] font-bold text-white hover:bg-teal-dark transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
-            title="저장"
-          >
-            <Save size={12} />
-            <span>{isSaving ? '저장 중…' : '저장'}</span>
-          </button>
+          {/* 저장은 칸을 벗어나면 자동으로 된다 — 닫기도 저장 후 닫는다 */}
+          {isSaving && <span className="text-[10.5px] font-semibold text-ink3">저장 중…</span>}
 
           <button
             type="button"
-            onClick={onClose}
-            className="grid h-6 w-6 place-items-center rounded-lg text-ink3 hover:text-ink hover:bg-panel-alt transition-colors cursor-pointer ml-0.5"
-            title="닫기"
+            onClick={() => void onSave(false)}
+            disabled={isSaving}
+            className="grid h-6 w-6 place-items-center rounded-lg text-ink3 hover:text-ink hover:bg-panel-alt transition-colors cursor-pointer ml-0.5 disabled:opacity-50"
+            title="저장하고 닫기"
           >
             <X size={14} />
           </button>

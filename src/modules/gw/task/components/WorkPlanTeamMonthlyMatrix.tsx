@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from 'react';
+import { useState, useMemo, useRef, useEffect, Fragment, type ReactNode } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import {
@@ -72,6 +72,10 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onEditorReady?: (editor: Editor | null) => void;
   /** 회의 칩 클릭 → 회의 상세(주최자는 수정, 참석자는 참석 취소, 그 밖의 사람은 합류) */
   onOpenMeeting?: (event: CalendarEvent) => void;
+  /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
+  filters?: ReactNode;
+  /** 상단 고정 바 바로 아래에 붙일 편집 리본 */
+  editingToolbar?: ReactNode;
 }
 
 export function WorkPlanTeamMonthlyMatrix({
@@ -90,10 +94,18 @@ export function WorkPlanTeamMonthlyMatrix({
   onToggleItem,
   onEditorReady,
   onOpenMeeting,
+  editingToolbar,
+  filters,
 }: WorkPlanTeamMonthlyMatrixProps) {
   // 현재 조회 중인 월 (YYYY-MM)
   const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
-  const currentWeekRef = useRef<HTMLTableRowElement>(null);
+  const currentWeekRef = useRef<HTMLTableRowElement | null>(null);
+  /** 이번 주차에서 로그인한 사용자의 행. 업무계획 대상이 아니면 비어 있다. */
+  const myCurrentWeekRowRef = useRef<HTMLTableRowElement>(null);
+  /** 고정 상단 바와 주차 머리행 — 스크롤 위치의 주차를 상단 바에 표시하는 데 쓴다 */
+  const stickyBarRef = useRef<HTMLDivElement>(null);
+  const weekHeaderRefs = useRef(new Map<number, HTMLTableRowElement>());
+  const [visibleWeekNum, setVisibleWeekNum] = useState<number | null>(null);
 
   // 공휴일 데이터 조회 및 날짜별 매핑
   const holidaysQuery = useHolidays();
@@ -301,18 +313,41 @@ export function WorkPlanTeamMonthlyMatrix({
     return map;
   }, [approvalsQuery.data, calendarEventsQuery.data, allDays]);
 
-  // 이번 주차 위치로 부드럽게 스크롤
+  // 이번 주차로 부드럽게 스크롤 — 내 행이 있으면 내 입력칸, 없으면 주차 머리행
   const scrollToCurrentWeek = () => {
-    if (currentWeekRef.current) {
+    if (myCurrentWeekRowRef.current) {
+      myCurrentWeekRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (currentWeekRef.current) {
       currentWeekRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
 
+  const hasMembers = members.length > 0;
   useEffect(() => {
     if (currentMonth === todayStr.slice(0, 7)) {
-      setTimeout(scrollToCurrentWeek, 250);
+      const timer = setTimeout(scrollToCurrentWeek, 250);
+      return () => clearTimeout(timer);
     }
-  }, [currentMonth, todayStr]);
+  }, [currentMonth, todayStr, hasMembers]);
+
+  useEffect(() => {
+    const update = () => {
+      const barBottom = stickyBarRef.current?.getBoundingClientRect().bottom ?? 0;
+      let current: number | null = null;
+      weekHeaderRefs.current.forEach((row, weekNum) => {
+        if (row.getBoundingClientRect().top <= barBottom + 8 && (current === null || weekNum > current)) current = weekNum;
+      });
+      setVisibleWeekNum(current);
+    };
+    update();
+    // 스크롤 컨테이너가 화면 레이아웃에 따라 달라서 캡처 단계에서 모든 스크롤을 받는다
+    document.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [currentMonth]);
 
   const handlePrevMonth = () => {
     setCurrentMonth((prev) => moveCalendarMonth(prev, -1));
@@ -330,8 +365,9 @@ export function WorkPlanTeamMonthlyMatrix({
 
   return (
     <div className="space-y-4">
-      {/* ── 월간 상단 툴바 ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-xs">
+      {/* ── 월간 상단 툴바 + 편집 리본 (스크롤해도 상단 고정) ── */}
+      <div ref={stickyBarRef} className="sticky top-0 z-40 space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
             <button
@@ -362,6 +398,11 @@ export function WorkPlanTeamMonthlyMatrix({
           <h2 className="ml-1 text-[14px] font-extrabold text-ink flex items-center gap-1.5">
             <CalendarIcon size={16} className="text-teal" />
             <span>{yearNum}년 {monthNum}월 업무계획</span>
+            {visibleWeekNum !== null && (
+              <span className="rounded-md bg-teal-soft/40 px-1.5 py-0.5 text-[11.5px] font-extrabold text-teal">
+                {visibleWeekNum}주차
+              </span>
+            )}
           </h2>
 
           <span className="text-[11px] font-semibold text-ink3 ml-2">
@@ -380,8 +421,9 @@ export function WorkPlanTeamMonthlyMatrix({
           )}
         </div>
 
-        {/* 액션 버튼 */}
-        <div className="flex items-center gap-1.5">
+        {/* 필터·검색 및 액션 버튼 */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {filters}
           {onOpenConfig && (
             <button
               type="button"
@@ -394,6 +436,9 @@ export function WorkPlanTeamMonthlyMatrix({
             </button>
           )}
         </div>
+      </div>
+
+      {editingToolbar}
       </div>
 
       {/* ── 일주일 단위로 끊어서 아래로 이어지는 단일 통합 매트릭스 표 (가로너비 일치 & 일체형 엑셀 뷰) ── */}
@@ -416,7 +461,11 @@ export function WorkPlanTeamMonthlyMatrix({
                 <Fragment key={week.weekNum}>
                   {/* 주차 구분 날짜 헤더 행 (주차 정보 + 7개 요일 날짜) */}
                   <tr
-                    ref={week.hasToday ? currentWeekRef : undefined}
+                    ref={(row) => {
+                      if (row) weekHeaderRefs.current.set(week.weekNum, row);
+                      else weekHeaderRefs.current.delete(week.weekNum);
+                      if (week.hasToday) currentWeekRef.current = row;
+                    }}
                     className={`border-b border-border ${wIdx > 0 ? 'border-t-2 border-t-border' : ''} ${
                       week.hasToday ? 'bg-teal-soft/20' : 'bg-panel-alt/75'
                     }`}
@@ -519,13 +568,13 @@ export function WorkPlanTeamMonthlyMatrix({
                           <div className="flex flex-col gap-0.5 min-h-[26px] justify-center">
                             {/* 공휴일: 심플한 빨간 텍스트 */}
                             {holidayName && (
-                              <span className="text-[9.5px] font-semibold text-rose-500 dark:text-rose-400 truncate" title={holidayName}>
+                              <span className="text-[9px] font-medium text-rose-400 dark:text-rose-300 truncate" title={holidayName}>
                                 {holidayName}
                               </span>
                             )}
                             {/* 전사 주요 일정 내용 */}
                             {content ? (
-                              <div className="text-[10px] font-semibold text-ink2 dark:text-ink2 break-words leading-tight line-clamp-2">
+                              <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 break-words leading-tight line-clamp-2">
                                 {content}
                               </div>
                             ) : !holidayName ? (
@@ -554,6 +603,7 @@ export function WorkPlanTeamMonthlyMatrix({
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
                         <tr
+                          ref={week.hasToday && isMe ? myCurrentWeekRowRef : undefined}
                           className="border-b border-border/60 hover:bg-panel-alt/10 transition-colors last:border-b-0"
                         >
                           {/* 좌측 성명 열 */}

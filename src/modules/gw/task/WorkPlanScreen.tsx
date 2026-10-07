@@ -24,7 +24,6 @@ import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatri
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
-import { Calendar } from 'lucide-react';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
@@ -462,138 +461,6 @@ function sortWorkPlanUsers(
         </div>
       )}
 
-      {/* ── 다차원 필터링 툴바 ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-border bg-panel px-3.5 py-2.5 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 부서 필터 드롭다운 — 열람은 전사 공통 */}
-          <select
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-            className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
-          >
-            <option value="all">전체 부서 ({roster.length}명)</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d} ({roster.filter((u) => u.dept === d).length}명)
-              </option>
-            ))}
-          </select>
-
-          {/* 권한 스코프 뱃지 안내 */}
-          <div className="text-[10.5px] font-semibold text-ink3 rounded-md bg-panel-alt/50 px-2 py-1 border border-border">
-            {actorScope === 'ALL' && '열람 범위: 전사 임직원'}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* 월간 종합 계획표 배지 */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-teal/20 bg-teal-soft/10 px-3 py-1.5 text-[11px] font-bold text-teal shadow-2xs">
-            <Calendar size={13} />
-            <span>월간 계획표</span>
-          </div>
-
-          {/* 이름 또는 부서 실시간 검색창 */}
-          <div className="relative min-w-[150px] flex-1 sm:max-w-[200px]">
-            <input
-              type="text"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="이름 또는 부서 검색..."
-              className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
-            />
-            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
-            {searchKeyword && (
-              <button
-                type="button"
-                onClick={() => setSearchKeyword('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── 엑셀/스프레드시트 상단 오피스 리본 메뉴 툴바 ── */}
-      {editingTarget && (
-        <WorkPlanOfficeRibbonToolbar
-          dateTitle={
-            editingTarget.targetUser && editingTarget.targetUser.id !== actor.id
-              ? `${editingTarget.targetUser.name}(${editingTarget.targetUser.position || '팀원'}) · ${dayTitle(editingTarget.date)}`
-              : dayTitle(editingTarget.date)
-          }
-          targetUser={editingTarget.targetUser}
-          actor={actor}
-          content={editingContent}
-          onContentChange={setEditingContent}
-          editor={cellEditor}
-          onAddMeeting={() => setMeetingModal({ date: editingTarget.date })}
-          todayEvents={editingDateEvents}
-          isSaving={isSavingPlan}
-          conflictError={conflictError}
-          onSave={async (forceOverwrite) => {
-            if (!editingTarget) return;
-            setIsSavingPlan(true);
-            setConflictError(null);
-            try {
-              if (!editingContent.trim()) {
-                if (editingTarget.plan) {
-                  await removePlan(editingTarget.plan.id, editingTarget.date, editingTarget.targetUser?.id);
-                } else {
-                  await savePlan(
-                    editingTarget.date,
-                    '',
-                    undefined,
-                    editingTarget.targetUser,
-                    undefined,
-                  );
-                }
-              } else {
-                await savePlan(
-                  editingTarget.date,
-                  editingContent.trim(),
-                  editingTarget.plan?.id,
-                  editingTarget.targetUser,
-                  forceOverwrite ? undefined : editingTarget.plan?.updatedAt,
-                );
-              }
-              setEditingTarget(null);
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : '';
-              if (
-                msg.includes('먼저 수정') ||
-                msg.includes('먼저 등록') ||
-                (err as { code?: string })?.code === 'CONFLICT'
-              ) {
-                setConflictError(
-                  msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
-                );
-              } else {
-                alert(msg || '저장 중 오류가 발생했습니다.');
-              }
-            } finally {
-              setIsSavingPlan(false);
-            }
-          }}
-          onDelete={
-            editingTarget.plan
-              ? async () => {
-                  if (!window.confirm('이 날짜의 업무계획을 삭제하시겠습니까? (연동된 캘린더 일정도 함께 정리됩니다)')) return;
-                  setIsSavingPlan(true);
-                  try {
-                    await removePlan(editingTarget.plan!.id, editingTarget.date, editingTarget.targetUser?.id);
-                    setEditingTarget(null);
-                  } finally {
-                    setIsSavingPlan(false);
-                  }
-                }
-              : undefined
-          }
-          onClose={() => setEditingTarget(null)}
-        />
-      )}
-
       {/* ── 메인 뷰: 월간 종합 뷰 (엑셀 셀 직접 입력 지원) ── */}
       <WorkPlanTeamMonthlyMatrix
         actor={actor}
@@ -672,6 +539,120 @@ function sortWorkPlanUsers(
         onToggleItem={handleToggleItem}
         onEditorReady={setCellEditor}
         onOpenMeeting={(event) => setMeetingModal({ date: event.date, event })}
+        // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
+        filters={(
+          <>
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              title="부서 필터"
+              className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
+            >
+              <option value="all">전체 부서 ({roster.length}명)</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d} ({roster.filter((u) => u.dept === d).length}명)
+                </option>
+              ))}
+            </select>
+            <div className="relative w-[180px]">
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="이름 또는 부서 검색..."
+                className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
+              />
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
+              {searchKeyword && (
+                <button
+                  type="button"
+                  onClick={() => setSearchKeyword('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-ink3 hover:text-ink"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        // 편집 리본 — 상단 고정 바 바로 아래에 붙는다
+        editingToolbar={editingTarget ? (
+        <WorkPlanOfficeRibbonToolbar
+          dateTitle={
+            editingTarget.targetUser && editingTarget.targetUser.id !== actor.id
+              ? `${editingTarget.targetUser.name}(${editingTarget.targetUser.position || '팀원'}) · ${dayTitle(editingTarget.date)}`
+              : dayTitle(editingTarget.date)
+          }
+          targetUser={editingTarget.targetUser}
+          actor={actor}
+          content={editingContent}
+          onContentChange={setEditingContent}
+          editor={cellEditor}
+          onAddMeeting={() => setMeetingModal({ date: editingTarget.date })}
+          todayEvents={editingDateEvents}
+          isSaving={isSavingPlan}
+          conflictError={conflictError}
+          onSave={async (forceOverwrite) => {
+            if (!editingTarget) return;
+            setIsSavingPlan(true);
+            setConflictError(null);
+            try {
+              if (!editingContent.trim()) {
+                if (editingTarget.plan) {
+                  await removePlan(editingTarget.plan.id, editingTarget.date, editingTarget.targetUser?.id);
+                } else {
+                  await savePlan(
+                    editingTarget.date,
+                    '',
+                    undefined,
+                    editingTarget.targetUser,
+                    undefined,
+                  );
+                }
+              } else {
+                await savePlan(
+                  editingTarget.date,
+                  editingContent.trim(),
+                  editingTarget.plan?.id,
+                  editingTarget.targetUser,
+                  forceOverwrite ? undefined : editingTarget.plan?.updatedAt,
+                );
+              }
+              setEditingTarget(null);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : '';
+              if (
+                msg.includes('먼저 수정') ||
+                msg.includes('먼저 등록') ||
+                (err as { code?: string })?.code === 'CONFLICT'
+              ) {
+                setConflictError(
+                  msg || '다른 사용자가 방금 이 계획을 먼저 수정했습니다. 작성 중인 내용을 안전하게 보존했습니다.',
+                );
+              } else {
+                alert(msg || '저장 중 오류가 발생했습니다.');
+              }
+            } finally {
+              setIsSavingPlan(false);
+            }
+          }}
+          onDelete={
+            editingTarget.plan
+              ? async () => {
+                  if (!window.confirm('이 날짜의 업무계획을 삭제하시겠습니까? (연동된 캘린더 일정도 함께 정리됩니다)')) return;
+                  setIsSavingPlan(true);
+                  try {
+                    await removePlan(editingTarget.plan!.id, editingTarget.date, editingTarget.targetUser?.id);
+                    setEditingTarget(null);
+                  } finally {
+                    setIsSavingPlan(false);
+                  }
+                }
+              : undefined
+          }
+        />
+        ) : null}
         onOpenCompanySchedule={(date, content, planId) =>
           setCompanyScheduleModal({ isOpen: true, date, content, planId })
         }
