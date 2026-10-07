@@ -115,6 +115,8 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useNotifications } from '@/features/notification/useNotifications';
 import { syncPushToken, onForegroundMessage } from '@/shared/lib/messaging';
+import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/shared/lib/transientPushNotification';
+import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 
 import { usePermission } from '@/features/auth/usePermission';
 
@@ -148,25 +150,30 @@ export default function App() {
     void onForegroundMessage(async (p) => {
       try {
         if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        if (shouldSuppressChatPopup(p.roomId)) return;
         const isChat = Boolean(p.roomId || p.type === '메신저');
-        const body = isChat ? '새로운 메시지가 도착했습니다.' : p.body;
+        const body = p.body || (isChat ? '새로운 메시지가 도착했습니다.' : '');
         const data = { type: p.type, roomId: p.roomId, docId: p.docId, linkUrl: p.linkUrl };
         const reg = await navigator.serviceWorker?.getRegistration();
         if (reg) {
-          await reg.showNotification(p.title, {
+          const options: NotificationOptions & { renotify: boolean } = {
             body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
             data,
             // 서비스워커 쪽과 같은 규칙 — 일정 알림은 병합되고 스스로 사라진다.
             tag: p.roomId || p.docId || p.linkUrl || undefined,
-            requireInteraction: Boolean(p.roomId || p.docId),
-          });
+            requireInteraction: false,
+            // 같은 방의 이전 알림을 교체해도 새 메시지의 배너를 다시 표시한다.
+            renotify: Boolean(p.roomId || p.docId),
+          };
+          await showTransientPushNotification(reg, p.title, options);
         } else {
-          new Notification(p.title, { body, icon: '/icons/icon-192.png' });
+          const notification = new Notification(p.title, { body, icon: '/icons/icon-192.png' });
+          setTimeout(() => notification.close(), PUSH_NOTIFICATION_DURATION_MS);
         }
-      } catch {
-        /* 미지원 환경(iOS 비PWA 등) 무시 */
+      } catch (error) {
+        console.warn('[push] PC 알림 표시 실패', error);
       }
     });
   }, [user?.id, isMobilePwa]);

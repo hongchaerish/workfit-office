@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -16,7 +17,7 @@ import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
-import { buildCalendarMonth, calendarToday, moveCalendarMonth } from '@/domain/calendarEvent/calendarDate';
+import { buildCalendarMonth, calendarToday, moveCalendarMonth, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useHolidays } from '@/features/holiday/useHolidays';
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -26,8 +27,23 @@ export default function MobileCalendarScreen() {
   const me = user?.id || '';
 
   const todayStr = useMemo(() => calendarToday(), []);
-  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
-  const [currentMonth, setCurrentMonth] = useState<string>(() => todayStr.slice(0, 7));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedDate = searchParams.get('date');
+  const initialDate = linkedDate && isValidCalendarDate(linkedDate) ? linkedDate : todayStr;
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(initialDate);
+  const [currentMonth, setCurrentMonth] = useState<string>(() => initialDate.slice(0, 7));
+
+  // 처음 진입할 때뿐 아니라 이미 열린 달력의 알림도 해당 날짜로 이동한다.
+  useEffect(() => {
+    if (!searchParams.has('date')) return;
+    if (linkedDate && isValidCalendarDate(linkedDate)) {
+      setSelectedDateStr(linkedDate);
+      setCurrentMonth(linkedDate.slice(0, 7));
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('date');
+    setSearchParams(next, { replace: true });
+  }, [linkedDate, searchParams, setSearchParams]);
 
   // 일정 등록 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);

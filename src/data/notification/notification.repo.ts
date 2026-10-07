@@ -10,6 +10,7 @@ import {
 import { dbDriver } from '@/shared/lib/dbDriver';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { notificationSchema, type LiveNotification } from '@/domain/liveNotification/schema';
+import { markOpenedDocumentNotifications } from './approvalNotificationRead';
 
 /**
  * 실시간 알림 Repository — Firestore→Appwrite 이관 PoC(Phase 1) **Realtime 검증 대상**.
@@ -23,6 +24,7 @@ const COLL = 'notifications';
 
 interface NotificationBackend {
   list(userId: string): Promise<LiveNotification[]>;
+  listUnreadApprovals(userId: string): Promise<LiveNotification[]>;
   create(noti: LiveNotification): Promise<LiveNotification>;
   markAsRead(id: string): Promise<void>;
   markAllAsRead(userId: string): Promise<void>;
@@ -54,6 +56,9 @@ function isPendingApprovalRequest(n: LiveNotification, docId: string): boolean {
 // 1) In-memory 백엔드 (미설정 폴백)
 // ─────────────────────────────────────────────────────────────
 class MemoryBackend implements NotificationBackend {
+  async listUnreadApprovals(userId: string) {
+    return (await this.list(userId)).filter(n => n.type === '결재' && !n.read);
+  }
   private rows: LiveNotification[] = [];
   private listeners = new Set<() => void>();
   private emit() {
@@ -105,6 +110,9 @@ class MemoryBackend implements NotificationBackend {
 // 2) Firestore 백엔드 (현행 — onSnapshot 실시간)
 // ─────────────────────────────────────────────────────────────
 class FirestoreBackend implements NotificationBackend {
+  async listUnreadApprovals(userId: string) {
+    return (await this.list(userId)).filter(n => n.type === '결재' && !n.read);
+  }
   newId() {
     return doc(collection(db!, COLL)).id;
   }
@@ -163,6 +171,21 @@ class FirestoreBackend implements NotificationBackend {
 //    ⚠️ 구독 수신은 컬렉션에 read 권한이 있어야 한다(보고서 이슈: 권한 [] → 이벤트 미수신).
 // ─────────────────────────────────────────────────────────────
 class AppwriteBackend implements NotificationBackend {
+  async listUnreadApprovals(userId: string): Promise<LiveNotification[]> {
+    const rows: LiveNotification[] = [];
+    let cursor: string | undefined;
+    // 기존 목록의 100건 제한과 별개로 읽음 처리 대상은 끝까지 조회한다.
+    for (;;) {
+      const res = await this.dbs.listDocuments(APPWRITE_DATABASE_ID, COLL, [
+        Query.equal('userId', userId), Query.equal('read', false),
+        Query.limit(100), ...(cursor ? [Query.cursorAfter(cursor)] : []),
+      ]);
+      rows.push(...res.documents.map(row => this.fromRow(row)).filter(notNull).filter(n => n.type === '결재'));
+      if (res.documents.length < 100) break;
+      cursor = res.documents[res.documents.length - 1].$id;
+    }
+    return rows;
+  }
   private get dbs() {
     return databases!;
   }
@@ -275,6 +298,9 @@ function selectBackend(): NotificationBackend {
 const backend: NotificationBackend = selectBackend();
 
 export const notificationRepo = {
+  markDocumentNotificationsRead(userId: string, docId: string, openedAt: number, isCurrent?: () => boolean): Promise<void> {
+    return markOpenedDocumentNotifications(backend, userId, docId, openedAt, isCurrent);
+  },
   list(userId: string): Promise<LiveNotification[]> {
     return backend.list(userId);
   },

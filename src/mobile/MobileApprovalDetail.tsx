@@ -16,6 +16,7 @@ import { fieldText, getCellMergeInfo, type CellMerge, type OrgLite } from '@/mod
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
 import { downloadFile } from '@/shared/lib/download';
+import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 
 const FALLBACK_CLOSING: Record<string, string> = {
   기안: '위와 같이 기안하오니 재가하여 주시기 바랍니다.',
@@ -148,6 +149,8 @@ export default function MobileApprovalDetail() {
     if (doc.steps.some((s) => s.approverId === me && s.kind !== '참조')) return true;
     return false;
   })();
+
+  useDocumentNotificationRead(me, viewMode === 'compact' && canAccessDocument ? doc?.id : undefined);
 
   const isMaskingActive = !canViewSecret;
 

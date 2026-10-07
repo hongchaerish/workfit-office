@@ -229,7 +229,7 @@ export default function StandaloneDockScreen() {
       {/* 메신저 본문 패널 */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="menu-scroll h-full overflow-y-auto">
-          <MessengerPanel />
+          <MessengerPanel isVisible={!msgNotiView} />
         </div>
 
         {/* 메신저 알림 기록 슬라이드 오버레이 */}

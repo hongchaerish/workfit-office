@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X, Paperclip, Pencil, Download } from 'lucide-react';
@@ -20,6 +20,7 @@ import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
+import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 
 /** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
 export function fmtTime(iso?: string): string {
@@ -90,7 +91,7 @@ function downloadAttachment(att: Attachment) {
 import { usePermission } from '@/features/auth/usePermission';
 
 /** 메신저 패널 — 방 목록 ↔ 대화 뷰 2-state 전환. */
-export function MessengerPanel() {
+export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const { user } = useAuth();
   const { isAdmin: isSuperAdmin } = usePermission();
   const me = user?.id ?? 'U001';
@@ -104,6 +105,11 @@ export function MessengerPanel() {
   const presenceMap = useAllUserPresences();
   const [q, setQ] = useState('');
   const openRoom = rooms.find((r) => r.id === openRoomId) ?? null;
+
+  useLayoutEffect(() => {
+    if (!isVisible || composing || !openRoom) return;
+    return registerViewedChatRoom(openRoom.id);
+  }, [isVisible, composing, openRoom?.id]);
 
   // 알림 클릭(데스크톱) → 지정된 방 열기. 마운트 직후 대기값 소비 + 이후 이벤트 수신.
   useEffect(() => {

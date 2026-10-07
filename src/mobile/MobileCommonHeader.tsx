@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, LayoutGrid, MessageSquare } from 'lucide-react';
+import MobileNotificationBell from './MobileNotificationBell';
 
 interface MobileCommonHeaderProps {
   title: string;
@@ -7,6 +8,7 @@ interface MobileCommonHeaderProps {
   onBack?: () => void;
   showHome?: boolean;
   showLauncher?: boolean;
+  showNotifications?: boolean;
   rightAction?: React.ReactNode;
 }
 
@@ -16,6 +18,7 @@ export default function MobileCommonHeader({
   onBack,
   showHome = true,
   showLauncher = true,
+  showNotifications = true,
   rightAction,
 }: MobileCommonHeaderProps) {
   const nav = useNavigate();
@@ -55,6 +58,7 @@ export default function MobileCommonHeader({
 
       <div className="flex items-center gap-1">
         {rightAction}
+        {showNotifications && <MobileNotificationBell />}
 
         {showHome && (
           <button

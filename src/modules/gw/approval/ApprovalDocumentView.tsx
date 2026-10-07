@@ -16,6 +16,7 @@ import { RelatedDocDetailModal } from './RelatedDocDetailModal';
 import { ShieldAlert, Lock, AlertTriangle, RotateCcw } from 'lucide-react';
 import { downloadFile } from '@/shared/lib/download';
 import { useDocPostReads } from '@/features/gw/usePostReadShares';
+import { useDocumentNotificationRead } from '@/features/notification/useDocumentNotificationRead';
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -427,6 +428,8 @@ export function ApprovalDocumentView({
       longTextFields: longTexts,
     };
   }, [form, doc.fieldValues, amountField]);
+
+  useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
   if (!canAccessDocument && postReadQuery.isLoading) {
     // 후열 전달 여부를 확인하기 전에 "열람 불가"를 잠깐 띄우지 않는다.

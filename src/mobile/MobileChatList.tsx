@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Search, Pin, Bell } from 'lucide-react';
+import { LayoutGrid, Search, Pin } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
-import { enablePushForUser } from '@/shared/lib/messaging';
+import MobileNotificationBell from './MobileNotificationBell';
 import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { useAllUserPresences, useMyPresence } from '@/features/userPresence/useUserPresence';
@@ -47,7 +47,6 @@ export default function MobileChatList() {
       return approvers.includes(me) || approvers.some((id) => preds.includes(id));
     }).length;
   }, [byBox, me, preds]);
-  const [notice, setNotice] = useState('');
   const [q, setQ] = useState('');
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -59,13 +58,6 @@ export default function MobileChatList() {
   const hiddenIds = useHiddenRooms(me);
 
   const leave = useLeaveRoom();
-
-  const enablePush = async () => {
-    setNotice('알림 설정 중…');
-    const res = await enablePushForUser(me);
-    setNotice(res.ok ? '✅ 알림이 켜졌습니다.' : `⚠️ 알림 실패 — ${res.error}`);
-    setTimeout(() => setNotice(''), 6000);
-  };
 
   const handleLeaveRoom = async (roomId: string) => {
     const room = rooms.find((r) => r.id === roomId);
@@ -150,14 +142,7 @@ export default function MobileChatList() {
             )}
           </button>
 
-          {/* 푸시 알림 켜기 버튼 (헤더 직접 노출) */}
-          <button
-            onClick={enablePush}
-            title="알림 켜기"
-            className="grid h-8.5 w-8.5 place-items-center rounded-xl hover:bg-white/10 active:scale-95 transition-all text-white"
-          >
-            <Bell size={18} strokeWidth={2} />
-          </button>
+          <MobileNotificationBell />
 
           {/* 내 프로필 아바타 + 근무 상태 인디케이터 (탭 시 상태 관리 바텀시트 오픈) */}
           <button
@@ -187,12 +172,6 @@ export default function MobileChatList() {
           </button>
         </div>
       </header>
-
-      {notice && (
-        <div className="px-4 py-2 text-[11.5px] font-semibold text-navy animate-in fade-in" style={{ background: '#c7ecc5' }}>
-          {notice}
-        </div>
-      )}
 
       {/* 검색 + 새 대화 */}
       <div className="flex items-center gap-2 border-b border-black/5 bg-white px-4 py-2.5">

@@ -50,6 +50,15 @@ export function notificationPermission(): NotificationPermission | 'unsupported'
   return Notification.permission;
 }
 
+async function registerPushServiceWorker(): Promise<ServiceWorkerRegistration> {
+  const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { updateViaCache: 'none' });
+  // 화면을 다시 열지 않아도 최신 표시 코드를 설치한다. 실패해도 기존 푸시는 유지한다.
+  try { await registration.update(); }
+  catch (error) { console.warn('[push] 서비스워커 업데이트 확인 실패', error); }
+  await navigator.serviceWorker.ready;
+  return registration;
+}
+
 /**
  * 알림 권한 요청 + FCM 토큰 발급 + users.fcmToken 저장.
  * 성공 시 토큰, 실패/미지원/거부 시 null. (반드시 사용자 제스처에서 호출 — 특히 iOS)
@@ -62,8 +71,7 @@ export async function enablePushForUser(userId: string): Promise<{ ok: boolean; 
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return { ok: false, error: `알림 권한: ${permission}` };
 
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    await navigator.serviceWorker.ready;
+    const swReg = await registerPushServiceWorker();
     signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (!token) return { ok: false, error: '토큰 발급 실패(null)' };
@@ -89,8 +97,7 @@ export async function syncPushToken(userId: string): Promise<void> {
   const msg = await getMsg();
   if (!msg) return;
   try {
-    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    await navigator.serviceWorker.ready;
+    const swReg = await registerPushServiceWorker();
     signalClientMode(swReg);
     const token = await getToken(msg, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) await userRepo.updateFcmToken(userId, token);
