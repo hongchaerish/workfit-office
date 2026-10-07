@@ -3,6 +3,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { usePermission } from '@/features/auth/usePermission';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
+import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getPredecessorsOf, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
@@ -136,15 +137,6 @@ export function ApprovalDocumentView({
     const u = org.userById(id) || users.find((x) => x.id === id);
     return u?.position ?? '';
   };
-  const sealOf = (id: string) => {
-    const u = org.userById(id) || users.find((x) => x.id === id);
-    if (!u) return '';
-    return u.signType === 'signature' ? (u.signUrl ?? '') : (u.sealUrl ?? '');
-  };
-  const isSignatureOf = (id: string) => {
-    const u = org.userById(id) || users.find((x) => x.id === id);
-    return u?.signType === 'signature';
-  };
 
 
 
@@ -277,20 +269,13 @@ export function ApprovalDocumentView({
   // 기안자 스냅샷 우선 조회 정의
   const drafterName = doc.drafterName || org.userById(doc.drafterId)?.name || doc.drafterId;
   const drafterPos = doc.drafterPos || org.userById(doc.drafterId)?.position || '';
-  const drafterSeal = () => {
-    if (doc.drafterSignType) {
-      return doc.drafterSignType === 'signature'
-        ? (doc.drafterSignUrl ?? '')
-        : (doc.drafterSealUrl ?? '');
-    }
-    return sealOf(doc.drafterId);
-  };
-  const isDrafterSignature = () => {
-    if (doc.drafterSignType) {
-      return doc.drafterSignType === 'signature';
-    }
-    return isSignatureOf(doc.drafterId);
-  };
+  const drafterSignature = resolveSignatureSnapshot({
+    signType: doc.drafterSignType,
+    signUrl: doc.drafterSignUrl,
+    sealUrl: doc.drafterSealUrl,
+  });
+  const drafterSeal = () => drafterSignature.url;
+  const isDrafterSignature = () => drafterSignature.isSignature;
 
 
 
@@ -571,7 +556,7 @@ export function ApprovalDocumentView({
           <h1 className="mt-6 flex-1 text-center text-[26px] font-extrabold tracking-[0.15em] text-[#111]">{docTitle}</h1>
           {(doc.status === '완료' || doc.status === '시행대기' || doc.status === '취소완료') && (
             <div className="relative">
-              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} sealOf={sealOf} isSignatureOf={isSignatureOf} isPostApproval={doc.isPostApproval} />
+              <ApprovalStampTable steps={steps} nameOf={nameOf} posOf={posOf} isPostApproval={doc.isPostApproval} />
               {doc.status === '취소완료' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="border-4 border-dashed border-red-600/80 text-red-600/90 font-black text-[20px] tracking-[0.2em] px-4 py-1 rounded-xl rotate-[-12deg] bg-white/80 backdrop-blur-2xs shadow-sm">
@@ -1097,13 +1082,13 @@ export function ApprovalDocumentView({
             ) : (
               // 도장 모드
               drafterSeal() ? (
-                // (3) 도장 이미지가 있는 경우: (인) 링 위에 도장 오버레이
-                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#c0392b] select-none">
-                  <span className="text-[12.5px] font-bold text-[#c0392b] z-30 select-none">(인)</span>
+                // (3) 도장 이미지가 있는 경우: (인) 표기 위에 등록 도장만 표시
+                <span className="relative inline-flex h-[44px] w-[44px] items-center justify-center select-none bg-white">
+                  <span className="text-[12.5px] font-bold text-[#c0392b]/35 z-10 select-none">(인)</span>
                   <img
                     src={drafterSeal()}
                     alt="인감"
-                    className="absolute inset-0 h-full w-full object-contain opacity-80 z-20 pointer-events-none mix-blend-multiply"
+                    className="absolute inset-0 h-full w-full object-contain z-20 pointer-events-none"
                   />
                 </span>
               ) : (
