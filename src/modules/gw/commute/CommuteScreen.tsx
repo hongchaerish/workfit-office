@@ -191,6 +191,78 @@ export default function CommuteScreen() {
     [profileByEmpMap, normName],
   );
 
+  // 직책/직급 서열 가중치 (1순위: 위원장/대표이사 -> 2순위: 부위원장 -> 3순위: 상무/손승원/본부장/이사/임원)
+  const getJobTitleRank = useCallback((position?: string | null, name?: string | null, jobTitle?: string | null) => {
+    const pos = (position || '').trim();
+    const n = (name || '').trim();
+    const title = (jobTitle || '').trim();
+
+    if (
+      n === '위원장' ||
+      pos === '위원장' ||
+      title === '위원장' ||
+      ((n.includes('대표') || pos.includes('대표') || title.includes('대표') || title.includes('위원장')) &&
+        !n.includes('부위원') && !pos.includes('부위원') && !title.includes('부위원'))
+    ) {
+      return 1;
+    }
+    if (n.includes('부위원') || pos.includes('부위원') || title.includes('부위원')) {
+      return 2;
+    }
+    if (
+      n.includes('손승원') ||
+      pos.includes('상무') ||
+      title.includes('상무') ||
+      pos.includes('전무') ||
+      title.includes('전무') ||
+      pos.includes('부사장') ||
+      title.includes('부사장') ||
+      title.includes('본부장') ||
+      title.includes('임원') ||
+      pos.includes('이사')
+    ) {
+      return 3;
+    }
+    if (title.includes('센터장') || title.includes('소장') || title.includes('실장')) {
+      return 4;
+    }
+    if (title.includes('팀장') || title.includes('부서장')) {
+      return 5;
+    }
+    if (title.includes('부팀장') || title.includes('파트장') || title.includes('그룹장')) {
+      return 6;
+    }
+    return 10;
+  }, []);
+
+  const compareEmployees = useCallback(
+    (
+      a: { name?: string | null; position?: string | null; jobTitle?: string | null },
+      b: { name?: string | null; position?: string | null; jobTitle?: string | null },
+    ) => {
+      const nameA = (a.name || '').trim();
+      const nameB = (b.name || '').trim();
+      const posA = a.position || userByEmpMap.get(nameA)?.position || '';
+      const posB = b.position || userByEmpMap.get(nameB)?.position || '';
+      const titleA = a.jobTitle || userByEmpMap.get(nameA)?.jobTitle || '';
+      const titleB = b.jobTitle || userByEmpMap.get(nameB)?.jobTitle || '';
+
+      // 1순위: 최고위 임원급 서열 (1: 위원장/대표이사 -> 2: 부위원장 -> 3: 상무/손승원)
+      const rankA = getJobTitleRank(posA, nameA, titleA);
+      const rankB = getJobTitleRank(posB, nameB, titleB);
+      if (rankA !== rankB) return rankA - rankB;
+
+      // 2순위: 직급 순위 (org.rankOf)
+      const posRankA = org.rankOf(posA);
+      const posRankB = org.rankOf(posB);
+      if (posRankA !== posRankB) return posRankA - posRankB;
+
+      // 3순위: 이름 가나다순
+      return nameA.localeCompare(nameB, 'ko');
+    },
+    [getJobTitleRank, userByEmpMap, org],
+  );
+
   // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (임직원 DB 미등록자 및 근태관리 OFF 대상자 100% 원천 배제)
   const employees = useMemo(() => {
     const list = [
@@ -250,8 +322,8 @@ export default function CommuteScreen() {
       });
     }
 
-    return list;
-  }, [allEmployees, allUsers, userByEmpMap, user?.dept, user?.name, normName, isExcludedAttendance]);
+    return list.sort(compareEmployees);
+  }, [allEmployees, allUsers, userByEmpMap, user?.dept, user?.name, normName, isExcludedAttendance, compareEmployees]);
 
   const getHireDateForEmp = useCallback(
     (empName?: string | null, empId?: number | null) => {
@@ -405,13 +477,18 @@ export default function CommuteScreen() {
       };
     });
 
-    return buildLeaveLedger(
+    const result = buildLeaveLedger(
       empInput,
       employeeProfiles,
       approvals,
       adjustments,
       { mode: ledgerMode, holidays },
     );
+
+    return {
+      entries: result.entries.sort(compareEmployees),
+      summary: result.summary,
+    };
   }, [
     canAll,
     employees,
@@ -423,6 +500,7 @@ export default function CommuteScreen() {
     adjustments,
     ledgerMode,
     holidays,
+    compareEmployees,
   ]);
 
   // 내 근태 한 달치 레코드
@@ -593,8 +671,8 @@ export default function CommuteScreen() {
       });
     }
 
-    return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [scopedEmployees, monthAllQuery.data, month, evaluate, approvalDaysOf, getHireDateForEmp, userByEmpMap, normName, allEmployees]);
+    return list.sort(compareEmployees);
+  }, [scopedEmployees, monthAllQuery.data, month, evaluate, approvalDaysOf, getHireDateForEmp, userByEmpMap, normName, allEmployees, compareEmployees]);
 
   // 글로벌 필터 적용된 PersonRows
   const filteredPersonRows = useMemo(() => {

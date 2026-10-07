@@ -69,7 +69,7 @@ const GwCommunity = lazy(() => import('@/modules/gw/community/CommunityScreen'))
 const GwEmployee = lazy(() => import('@/modules/gw/employee/EmployeeScreen'));
 const GwCalendar = lazy(() => import('@/modules/gw/calendar/CalendarScreen'));
 const GwResource = lazy(() => import('@/modules/gw/resource/ResourceScreen'));
-// const GwTask = lazy(() => import('@/modules/gw/task/TaskScreen'));
+const GwTask = lazy(() => import('@/modules/gw/task/TaskScreen'));
 const GwWorkPlan = lazy(() => import('@/modules/gw/task/WorkPlanScreen'));
 const GwSurvey = lazy(() => import('@/modules/gw/survey/SurveyScreen'));
 // const GwMail = lazy(() => import('@/modules/gw/mail/MailScreen'));
@@ -225,7 +225,7 @@ export default function App() {
       <Route path="/gw/employee" element={<ProtectedRoute url="/gw/employee"><GwEmployee /></ProtectedRoute>} />
       <Route path="/gw/calendar" element={<ProtectedRoute url="/gw/calendar"><GwCalendar /></ProtectedRoute>} />
       <Route path="/gw/resource" element={<ProtectedRoute url="/gw/resource"><GwResource /></ProtectedRoute>} />
-      <Route path="/gw/task" element={<ProtectedRoute url="/gw/task"><GwComingSoon /></ProtectedRoute>} />
+      <Route path="/gw/task" element={<ProtectedRoute url="/gw/task"><GwTask /></ProtectedRoute>} />
       <Route path="/gw/work-plan" element={<ProtectedRoute url="/gw/work-plan"><GwWorkPlan /></ProtectedRoute>} />
       <Route path="/gw/survey" element={<ProtectedRoute url="/gw/survey"><GwSurvey /></ProtectedRoute>} />
       <Route path="/gw/mail" element={<ProtectedRoute url="/gw/mail"><GwComingSoon /></ProtectedRoute>} />

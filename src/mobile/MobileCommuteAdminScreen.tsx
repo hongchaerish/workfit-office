@@ -14,6 +14,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import { commutePolicy } from '@/domain/security/policy/commutePolicy';
+import { useOrgTree } from '@/features/gw/useOrgTree';
 import MobileCommonHeader from './MobileCommonHeader';
 
 const pad = (v: number) => String(v).padStart(2, '0');
@@ -50,15 +51,35 @@ export default function MobileCommuteAdminScreen() {
     return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
   }, [usersQuery.data]);
 
-  // 2. 내부 시야(Scope) 필터링: commutePolicy 정밀 판정
+  const org = useOrgTree();
+
+  // 2. 내부 시야(Scope) 필터링 및 서열 정렬: commutePolicy 정밀 판정
   //    - 임원 / 전사 인사담당자 ➔ 전사 임직원 (ALL)
   //    - 부서장 / 팀장 ➔ 소속 팀원만 (TEAM)
   const targetUsers = useMemo(() => {
-    return allUsers.filter((u) => commutePolicy.canViewEmployee(securityContext, {
+    const list = allUsers.filter((u) => commutePolicy.canViewEmployee(securityContext, {
       name: u.name,
       dept: u.dept,
     }));
-  }, [allUsers, securityContext]);
+
+    return list.sort((a, b) => {
+      const getRank = (pos?: string, name?: string) => {
+        const p = (pos || '').trim();
+        const n = (name || '').trim();
+        if (n.includes('대표') || p.includes('대표') || n === '위원장' || p === '위원장') return 1;
+        if (n.includes('부위원') || p.includes('부위원')) return 2;
+        if (n.includes('손승원') || p.includes('상무') || p.includes('전무') || p.includes('부사장') || p.includes('이사')) return 3;
+        return 10;
+      };
+      const rankA = getRank(a.position, a.name);
+      const rankB = getRank(b.position, b.name);
+      if (rankA !== rankB) return rankA - rankB;
+      const posA = org.rankOf(a.position);
+      const posB = org.rankOf(b.position);
+      if (posA !== posB) return posA - posB;
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  }, [allUsers, securityContext, org]);
 
   // 3. 당일 출퇴근 기록 및 휴가/외근 일정
   const { data: dayRecords = [] } = useCommuteDay(selectedDateStr);
