@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useUsers } from '@/features/user/useUsers';
+import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot } from '@/features/userPresence/PresenceIndicator';
 import { useChatRooms, useCreateRoom } from '@/features/chat/useChatRooms';
@@ -24,6 +25,7 @@ export default function MobileContactScreen() {
   const [selectedDept, setSelectedDept] = useState('ALL');
 
   const { data: users = [] } = useUsers();
+  const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const presenceMap = useAllUserPresences();
   const { data: rooms = [] } = useChatRooms(me);
   const createRoom = useCreateRoom();
@@ -32,6 +34,15 @@ export default function MobileContactScreen() {
   const activeUsers = useMemo(() => {
     return users.filter((u) => u.status === '사용' && !u.resignedAt);
   }, [users]);
+
+  // 개인이메일은 인사정보(employeeProfiles)에 저장됨
+  const personalEmailMap = useMemo(() => {
+    const map = new Map<string, string>();
+    employeeProfiles.forEach((p) => {
+      if (p.personalEmail) map.set(p.userId || p.id, p.personalEmail);
+    });
+    return map;
+  }, [employeeProfiles]);
 
   // 부서 목록 추출
   const departments = useMemo(() => {
@@ -55,11 +66,12 @@ export default function MobileContactScreen() {
           u.dept.toLowerCase().includes(kw) ||
           (u.position ?? '').toLowerCase().includes(kw) ||
           phone.includes(kw) ||
-          (u.email ?? '').toLowerCase().includes(kw)
+          (u.email ?? '').toLowerCase().includes(kw) ||
+          (personalEmailMap.get(u.id) ?? '').toLowerCase().includes(kw)
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [activeUsers, selectedDept, query]);
+  }, [activeUsers, selectedDept, query, personalEmailMap]);
 
   // 1:1 대화 시작 핸들러
   const handleStartChat = async (targetUserId: string) => {
@@ -159,6 +171,8 @@ export default function MobileContactScreen() {
             const presence = presenceMap[u.id];
             const isMe = u.id === me;
             const initials = u.name.slice(-2);
+            const personalEmail = personalEmailMap.get(u.id) ?? '';
+            const showBothEmails = Boolean(u.email && personalEmail && u.email !== personalEmail);
 
             return (
               <div
@@ -204,6 +218,18 @@ export default function MobileContactScreen() {
                       <p className="text-[11px] text-ink2 mt-0.5 truncate">
                         {u.dept} {u.jobTitle ? `· ${u.jobTitle}` : ''}
                       </p>
+                      {showBothEmails && (
+                        <div className="mt-1 space-y-0.5 font-mono text-[10.5px]">
+                          <a href={`mailto:${u.email}`} className="flex items-center gap-1 min-w-0 text-ink2">
+                            <span className="shrink-0 rounded bg-teal-soft/40 px-1 font-sans text-[9px] font-bold text-teal">회사</span>
+                            <span className="truncate">{u.email}</span>
+                          </a>
+                          <a href={`mailto:${personalEmail}`} className="flex items-center gap-1 min-w-0 text-ink3">
+                            <span className="shrink-0 rounded bg-panel-alt px-1 font-sans text-[9px] font-bold text-ink3">개인</span>
+                            <span className="truncate">{personalEmail}</span>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
 

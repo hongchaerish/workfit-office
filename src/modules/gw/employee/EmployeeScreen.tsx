@@ -294,7 +294,8 @@ export default function EmployeeScreen() {
         !q ||
         e.name.toLowerCase().includes(q) ||
         e.employeeNo.toLowerCase().includes(q) ||
-        (e.email && e.email.toLowerCase().includes(q));
+        (e.email && e.email.toLowerCase().includes(q)) ||
+        (e.personalEmail && e.personalEmail.toLowerCase().includes(q));
 
       return matchDept && matchPos && matchStatus && matchAttendance && matchQuery;
     });
@@ -800,10 +801,10 @@ export default function EmployeeScreen() {
                     <th className="py-2.5 px-3 text-center w-12">사진</th>
                     <th className="py-2.5 px-3 w-28">사번</th>
                     <th className="py-2.5 px-3 w-28">이름</th>
-                    <th className="py-2.5 px-3">부서</th>
+                    <th className="py-2.5 px-3 min-w-[140px]">부서</th>
                     <th className="py-2.5 px-3 w-24">직급</th>
                     <th className="py-2.5 px-3 w-24">직책</th>
-                    <th className="py-2.5 px-3">이메일</th>
+                    <th className="py-2.5 px-3 min-w-[220px]">이메일</th>
                     <th className="py-2.5 px-3 w-36">연락처</th>
                     <th className="py-2.5 px-3 text-center w-20">재직상태</th>
                     <th className="py-2.5 px-3 text-center w-24">근태관리</th>
@@ -832,7 +833,7 @@ export default function EmployeeScreen() {
                             {e.isPending ? (
                               <span className="text-amber-600 font-medium text-[11px]">발령대기 (미지정)</span>
                             ) : (
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
                                 <span>{e.dept}</span>
                                 {(() => {
                                   const concCount = departmentMembers.filter(
@@ -852,7 +853,22 @@ export default function EmployeeScreen() {
                           </td>
                           <td className="py-2 px-3 text-[11.5px] text-ink2">{e.position}</td>
                           <td className="py-2 px-3 text-[11.5px] text-ink3">{e.duty}</td>
-                          <td className="py-2 px-3 truncate font-mono text-[11px] text-ink2">{e.email || '-'}</td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">
+                            {e.email && e.personalEmail && e.email !== e.personalEmail ? (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1" title={e.email}>
+                                  <span className="shrink-0 rounded bg-teal-soft/40 px-1 font-sans text-[9px] font-bold text-teal">회사</span>
+                                  <span className="whitespace-nowrap">{e.email}</span>
+                                </div>
+                                <div className="flex items-center gap-1" title={e.personalEmail}>
+                                  <span className="shrink-0 rounded bg-panel-alt px-1 font-sans text-[9px] font-bold text-ink3">개인</span>
+                                  <span className="whitespace-nowrap text-ink3">{e.personalEmail}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              e.email || '-'
+                            )}
+                          </td>
                           <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
                           <td className="py-2 px-3 text-center">
                             <span
