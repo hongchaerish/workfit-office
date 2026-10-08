@@ -4,6 +4,7 @@ import { LayoutGrid, Search, Pin } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
+import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
 import { useUsers } from '@/features/user/useUsers';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import MobileNotificationBell from './MobileNotificationBell';
@@ -14,19 +15,6 @@ import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndi
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
-
-// 고정/숨김 상태를 사용자별로 안전하게 분리 저장.
-const pinKeyOf = (me: string) => `workfit-pinned-rooms-${me}`;
-
-
-function loadIds(key: string): string[] {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : [];
-  } catch {
-    return [];
-  }
-}
 
 /** 모바일 채팅방 목록 — 검색·상대 이름·상단 고정·숨김·새 대화. */
 export default function MobileChatList() {
@@ -51,10 +39,8 @@ export default function MobileChatList() {
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
-    const userPinned = loadIds(pinKeyOf(me));
-    return userPinned.length > 0 ? userPinned : loadIds('workfit-pinned-rooms');
-  });
+  // 상단 고정 — 웹 메신저와 같은 저장소(features/chat/pinnedRooms)
+  const pinnedIds = usePinnedRooms(me);
   const hiddenIds = useHiddenRooms(me);
 
   const leave = useLeaveRoom();
@@ -71,11 +57,7 @@ export default function MobileChatList() {
     }
   };
 
-  const togglePin = (roomId: string) => {
-    const next = pinnedIds.includes(roomId) ? pinnedIds.filter((id) => id !== roomId) : [...pinnedIds, roomId];
-    setPinnedIds(next);
-    localStorage.setItem(pinKeyOf(me), JSON.stringify(next));
-  };
+  const togglePin = (roomId: string) => togglePinnedRoom(me, roomId);
 
   const hideRoom = (roomId: string) => hideRoomFor(me, roomId);
 
@@ -91,15 +73,12 @@ export default function MobileChatList() {
     const visible = rooms.filter((r) => !hiddenIds.includes(r.id) || (unread[r.id] ?? 0) > 0);
     const named = visible.map((r) => ({ ...r, displayName: getRoomDisplayName(r, me, users) }));
     const filtered = kw ? named.filter((r) => r.displayName.toLowerCase().includes(kw)) : named;
-    return [...filtered].sort((a, b) => {
-      const ap = pinnedIds.includes(a.id);
-      const bp = pinnedIds.includes(b.id);
-      if (ap && !bp) return -1;
-      if (!ap && bp) return 1;
+    const byRecent = [...filtered].sort((a, b) => {
       const at = a.lastMessage?.at ? new Date(a.lastMessage.at).getTime() : 0;
       const bt = b.lastMessage?.at ? new Date(b.lastMessage.at).getTime() : 0;
       return bt - at;
     });
+    return sortPinnedFirst(byRecent, pinnedIds);
   }, [rooms, hiddenIds, unread, users, me, kw, pinnedIds]);
 
   const sheetActions: SheetAction[] = sheetRoom

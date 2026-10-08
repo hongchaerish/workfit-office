@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
+import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useSendMessage, useSendRich, useEditRich, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
@@ -129,6 +130,10 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   }, []);
 
   const hiddenIds = useHiddenRooms(me);
+  /** 상단 고정한 방 — PWA 와 같은 저장 키(같은 브라우저면 함께 보인다) */
+  const pinnedIds = usePinnedRooms(me);
+  /** 방 우클릭 메뉴 */
+  const [roomMenu, setRoomMenu] = useState<{ roomId: string; x: number; y: number } | null>(null);
 
   // [＋]로 숨긴 방을 다시 열면(1:1은 기존 방 재사용) 그 즉시 숨김을 푼다 — 메시지를 안 보내고 나와도 목록에 남게.
   const handleCreated = (id: string) => {
@@ -156,9 +161,25 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const visibleRooms = useMemo(() => {
     const list = rooms.filter((r) => !hiddenIds.includes(r.id) || (unreadMap[r.id] ?? 0) > 0);
     const kw = q.trim().toLowerCase();
-    if (!kw) return list;
-    return list.filter((r) => getRoomDisplayName(r, me, users).toLowerCase().includes(kw));
-  }, [rooms, hiddenIds, me, q, users, unreadMap]);
+    const filtered = kw ? list.filter((r) => getRoomDisplayName(r, me, users).toLowerCase().includes(kw)) : list;
+    // 고정한 방을 맨 위로(고정한 순서), 나머지는 최근 대화순 그대로
+    return sortPinnedFirst(filtered, pinnedIds);
+  }, [rooms, hiddenIds, me, q, users, unreadMap, pinnedIds]);
+
+  // 우클릭 메뉴는 바깥을 누르거나 Esc·스크롤하면 닫는다
+  useEffect(() => {
+    if (!roomMenu) return;
+    const close = () => setRoomMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [roomMenu]);
 
   if (composing) {
     return <NewRoomView me={me} onCancel={() => setComposing(false)} onCreated={handleCreated} />;
@@ -211,12 +232,35 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
             const isDirect = r.type === 'direct';
             const otherId = isDirect ? r.members.find((m) => m !== me) : null;
             const otherPresence = otherId ? presenceMap[otherId] : null;
+            const pinned = pinnedIds.includes(r.id);
             return (
               <div
                 key={r.id}
                 onClick={() => setOpenRoomId(r.id)}
-                className="group relative flex items-center gap-3 border-b border-border px-4 py-3 hover:bg-panel-alt cursor-pointer"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  // 화면 배율(body zoom) 안의 고정 위치라 좌표를 배율로 나눈다
+                  const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
+                  setRoomMenu({ roomId: r.id, x: e.clientX / zoom, y: e.clientY / zoom });
+                }}
+                className={`group relative flex items-center gap-3 border-b border-border px-4 py-3 hover:bg-panel-alt cursor-pointer ${pinned ? 'bg-amber-50/60 dark:bg-amber-500/5' : ''}`}
               >
+                {/* 왼쪽 위 📌 — 누르면 상단 고정/해제. 고정한 방은 늘 보이고, 아니면 마우스를 올렸을 때만 */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePinnedRoom(me, r.id);
+                  }}
+                  title={pinned ? '고정 해제' : '상단 고정'}
+                  aria-label={pinned ? '고정 해제' : '상단 고정'}
+                  aria-pressed={pinned}
+                  className={`absolute left-1 top-1 z-10 grid h-5 w-5 place-items-center rounded text-[11px] leading-none transition-opacity hover:bg-black/5 ${
+                    pinned ? 'opacity-100' : 'opacity-0 grayscale group-hover:opacity-60 hover:!opacity-100'
+                  }`}
+                >
+                  📌
+                </button>
                 <div className="relative shrink-0">
                   <span
                     style={{ background: r.color + '22', color: r.color }}
@@ -266,6 +310,41 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
           })
         )}
       </div>
+      {roomMenu && createPortal(
+        <div
+          role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{ left: roomMenu.x, top: roomMenu.y }}
+          className="fixed z-[200] w-40 overflow-hidden rounded-lg border border-border bg-panel py-1 text-[12px] shadow-xl"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              togglePinnedRoom(me, roomMenu.roomId);
+              setRoomMenu(null);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-panel-alt"
+          >
+            <span>📌</span>
+            {pinnedIds.includes(roomMenu.roomId) ? '고정 해제' : '상단 고정'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const id = roomMenu.roomId;
+              setRoomMenu(null);
+              handleHideRoom(id);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-panel-alt"
+          >
+            <X size={12} className="text-ink3" />
+            대화방 숨기기
+          </button>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
