@@ -10,6 +10,7 @@ import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock, requestOpenChatRoom } from './QuickDock';
 import { ToastFeed } from './ToastFeed';
+import { ScrollTopButton } from './ScrollTopButton';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useToastNotificationsTrigger } from '@/features/notification/useNotifications';
@@ -271,6 +272,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
 
       <QuickDock open={dockOpen} setOpen={setDockOpen} />
       <ToastFeed />
+      <ScrollTopButton />
 
       {/* 하단 푸터 */}
       <footer
