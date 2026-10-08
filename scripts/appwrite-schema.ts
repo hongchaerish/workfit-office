@@ -131,6 +131,11 @@ const COLLECTIONS: CollectionDef[] = [
       S('deletedAt', 40),
       S('deletedBy', 64),
       S('deletedByName', 128),
+      // 서식 메시지(rich) — 본문(서식 문서 JSON)·첨부 목록·멘션 (domain/chatMessage/richBody)
+      S('format', 10),
+      S('body', 100000),
+      J('attachments', 20000),
+      SA('mentions', 64),
     ],
     indexes: [IX('roomId', ['roomId']), IX('at', ['at'])],
   },

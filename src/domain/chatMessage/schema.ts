@@ -27,6 +27,8 @@ export const attachmentSchema = z.object({
   mime: z.string(),
   /** 저장소 경로 — 메시지 삭제 시 파일까지 지우는 데 쓴다. 예전 메시지에는 없다. */
   path: z.string().optional(),
+  /** 서식 메시지(rich)에서 본문 속 사진이 이 첨부를 가리키는 id. */
+  id: z.string().optional(),
 });
 export type Attachment = z.infer<typeof attachmentSchema>;
 
@@ -72,6 +74,18 @@ export const chatMessageSchema = z.object({
   readBy: z.array(z.string()).default([]),
   isEdited: z.boolean().optional().default(false),
   reactions: z.record(z.string(), z.array(z.string())).optional().default({}),
+  /**
+   * 본문 형식. 없거나 'plain' 이면 text 를 그대로 그린다.
+   * 'rich' 는 body(서식 문서 JSON — domain/chatMessage/richBody)와 attachments 를 그리고,
+   * text 에는 평문 요약(검색·알림·미리보기·답장 인용용)을 담는다. 메시지 1건이 글·사진·파일을 모두 담는다.
+   */
+  format: z.enum(['plain', 'rich']).optional(),
+  /** rich 본문 — 서식 문서 JSON 문자열 */
+  body: z.string().nullable().optional(),
+  /** rich 메시지의 첨부(본문 속 사진 + 파일). 본문 속 사진은 attachments[].id 로 가리킨다. */
+  attachments: z.array(attachmentSchema).optional(),
+  /** rich 본문에서 @멘션한 사용자 id */
+  mentions: z.array(z.string()).optional(),
   /** 삭제(모두에게서) 시각·삭제자. 삭제되지 않은 메시지는 null. (domain/chatMessage/deletion) */
   deletedAt: z.string().nullable().optional(),
   deletedBy: z.string().nullable().optional(),

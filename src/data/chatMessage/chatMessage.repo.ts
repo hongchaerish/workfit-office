@@ -129,6 +129,16 @@ class AppwriteBackend implements ChatMessageBackend {
       replyTo: m.replyTo ? JSON.stringify(m.replyTo) : null,
       approvalPayload: m.approvalPayload ? JSON.stringify(m.approvalPayload) : null,
       reactions: m.reactions ? JSON.stringify(m.reactions) : null,
+      // 서식 메시지(rich) 칸은 format 이 있을 때만 싣는다 — 속성이 아직 없는 DB에서도 평문 메시지는 그대로 동작하게.
+      // (서식 메시지를 지우면 format='plain' 으로 바뀌어 본문·첨부를 비워 쓴다)
+      ...(m.format
+        ? {
+            format: m.format,
+            body: m.format === 'rich' ? (m.body ?? null) : null,
+            attachments: m.format === 'rich' && m.attachments?.length ? JSON.stringify(m.attachments) : null,
+            mentions: m.format === 'rich' ? (m.mentions ?? []) : [],
+          }
+        : {}),
       // 삭제 정보는 삭제된 메시지에만 싣는다 — 속성이 아직 없는 DB에서도 일반 전송·읽음 처리가 깨지지 않게.
       ...(m.deletedAt ? { deletedAt: m.deletedAt, deletedBy: m.deletedBy ?? null, deletedByName: m.deletedByName ?? null } : {}),
     };
@@ -151,6 +161,10 @@ class AppwriteBackend implements ChatMessageBackend {
       replyTo: parseJson(row.replyTo),
       approvalPayload: parseJson(row.approvalPayload),
       reactions: parseJson(row.reactions) ?? {},
+      format: row.format === 'rich' || row.format === 'plain' ? row.format : undefined,
+      body: typeof row.body === 'string' ? row.body : null,
+      attachments: parseJson(row.attachments) ?? undefined,
+      mentions: Array.isArray(row.mentions) ? row.mentions : undefined,
       deletedAt: (row.deletedAt as string | null | undefined) ?? null,
       deletedBy: (row.deletedBy as string | null | undefined) ?? null,
       deletedByName: (row.deletedByName as string | null | undefined) ?? null,
@@ -295,6 +309,20 @@ export const chatMessageRepo = {
     await backend.save({ ...cur, text, isEdited: true });
   },
 
+  /** 서식 메시지 수정 — 본문·요약·첨부·멘션을 바꾸고 isEdited. 빠진 첨부 파일은 저장소에서도 지운다. */
+  async updateRich(
+    id: string,
+    patch: { body: string; text: string; attachments: Attachment[]; mentions: string[] },
+  ): Promise<ChatMessage> {
+    const cur = (await backend.loadAll()).find((m) => m.id === id);
+    if (!cur) throw new Error(`메시지를 찾을 수 없습니다: ${id}`);
+    const next: ChatMessage = { ...cur, format: 'rich', ...patch, isEdited: true };
+    await backend.save(next);
+    const kept = new Set(patch.attachments.map((a) => a.path).filter(Boolean));
+    for (const att of cur.attachments ?? []) if (att.path && !kept.has(att.path)) await fileStorage.remove(att.path);
+    return next;
+  },
+
   /** 메시지 이모지 반응 수정 */
   async updateReactions(id: string, reactions: Record<string, string[]>): Promise<void> {
     const cur = (await backend.loadAll()).find((m) => m.id === id);
@@ -320,6 +348,7 @@ export const chatMessageRepo = {
       await backend.save(reply);
     }
     if (cur.attachment?.path) await fileStorage.remove(cur.attachment.path);
+    for (const att of cur.attachments ?? []) if (att.path) await fileStorage.remove(att.path);
     return deleted;
   },
 

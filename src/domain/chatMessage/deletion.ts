@@ -51,6 +51,8 @@ export function applyDeletion(message: ChatMessage, actor: { id: string; name: s
     replyTo: null,
     reactions: {},
     isEdited: false,
+    // 서식 메시지였다면 본문·첨부·멘션도 비운다. format 을 'plain' 으로 남겨 저장소가 이 칸들을 비워 쓰게 한다.
+    ...(message.format === 'rich' ? { format: 'plain' as const, body: null, attachments: [], mentions: [] } : {}),
     deletedAt: now.toISOString(),
     deletedBy: actor.id,
     deletedByName: actor.name,

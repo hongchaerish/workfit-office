@@ -20,6 +20,7 @@ import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
+import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
@@ -586,7 +587,7 @@ export default function MobileChatThread() {
                   me={me}
                   group={room?.type === 'group'}
                   roomMembers={room?.members ?? []}
-                  onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
+                  onOpenImage={(att, list) => setViewer({ attachments: list.length ? list : [att], initialIdx: Math.max(0, list.indexOf(att)) })}
                   showTime={showTime}
                   showProfile={!groupedWithPrev}
                   isEditing={editingMessageId === m.id}
@@ -739,7 +740,7 @@ export default function MobileChatThread() {
               >
                 텍스트 복사
               </button>
-              {sheetMessage.senderId === me && sheetMessage.type === 'text' && (
+              {sheetMessage.senderId === me && sheetMessage.type === 'text' && sheetMessage.format !== 'rich' && (
                 <button
                   onClick={() => {
                     setEditingMessageId(sheetMessage.id);
@@ -1141,6 +1142,20 @@ function MessageBubble({
     body = (
       <div className="rounded-2xl border border-dashed border-black/15 px-3 py-2 text-[12.5px] italic text-ink3 select-none">
         {DELETED_MESSAGE_TEXT}
+      </div>
+    );
+  } else if (m.format === 'rich') {
+    // 서식 메시지(데스크톱에서 보낸 글·서식·본문 속 사진·파일 한 건)
+    body = (
+      <div
+        onContextMenu={(e) => { e.preventDefault(); onLongPress(m); }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="max-w-full min-w-0 rounded-2xl px-3 py-2 text-[13px] select-none -webkit-touch-callout-none"
+        style={mine ? { background: '#bae0ff', color: '#1c2536' } : { background: '#fff', color: '#1a202c' }}
+      >
+        <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} />
       </div>
     );
   } else {

@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, Paperclip, Pencil, Download } from 'lucide-react';
+import { Search, X, Paperclip, Pencil, Download, Type } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { useChatThread, useSendMessage, useSendRich, useEditRich, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { ChatRichEditor, type ChatRichEditorHandle, type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
+import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
+import { isEmptyRich, isPlainOnlyRich, parseRichBody, plainTextOfRich } from '@/domain/chatMessage/richBody';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
@@ -287,7 +290,6 @@ function MessengerThread({
   const { data: messages = [] } = useChatThread(room.id);
   const { data: rooms = [] } = useChatRooms(me);
   const send = useSendMessage(room.id);
-  const sendFile = useSendAttachments(room.id);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -335,7 +337,6 @@ function MessengerThread({
     }
   };
 
-  const [text, setText] = useState('');
   const [inviting, setInviting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<{ m: ChatMessage; x: number; y: number; mine: boolean } | null>(null);
@@ -381,16 +382,14 @@ function MessengerThread({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** 서식 입력창(Teams 방식) — 글·서식·본문 속 사진·@멘션 */
+  const composerRef = useRef<ChatRichEditorHandle>(null);
+  /** 확장 편집기 모드 — 서식 도구 막대, Enter 줄바꿈(Ctrl+Enter 전송) */
+  const [formatMode, setFormatMode] = useState(false);
+  /** 확장 모드의 서식 도구 막대 자리 — 입력창 위 한 줄 전체 */
+  const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
+  const sendRich = useSendRich(room.id);
   const readonly = room.type === 'notice';
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    const nextHeight = Math.min(Math.max(el.scrollHeight, 24), 84);
-    el.style.height = `${nextHeight}px`;
-  }, [text]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -455,6 +454,16 @@ function MessengerThread({
       window.alert('내보내는 중 오류가 발생했습니다.');
     }
   };
+  /** @멘션 후보 — 이 방 참여자(나 제외) */
+  const mentionCandidates = useMemo<MentionCandidate[]>(
+    () =>
+      room.members
+        .filter((id) => id !== me)
+        .map((id) => users.find((u) => u.id === id))
+        .filter((u): u is NonNullable<typeof u> => Boolean(u))
+        .map((u) => ({ id: u.id, name: u.name, position: u.position, dept: u.dept })),
+    [room.members, users, me],
+  );
   const memberDetails = useMemo(() => {
     return room.members
       .map((mId) => users.find((u) => u.id === mId))
@@ -471,15 +480,21 @@ function MessengerThread({
 
   const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
 
+  /** 첨부 — 사진은 입력창의 커서 자리(본문 속 사진)에, 그 밖의 파일은 아래 첨부 목록에 올린다. */
   const handleFilesAttach = (files: FileList | File[]) => {
     const list = Array.from(files);
     const validFiles: StagedFile[] = [];
+    const inlineImages: File[] = [];
     for (const file of list) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
         window.alert(`파일 [${file.name}]이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
         continue;
       }
       const isImg = file.type.startsWith('image/');
+      if (isImg && composerRef.current) {
+        inlineImages.push(file);
+        continue;
+      }
       validFiles.push({
         id: `${file.name}-${Date.now()}-${Math.random()}`,
         file,
@@ -489,6 +504,7 @@ function MessengerThread({
     if (validFiles.length > 0) {
       setAttachedFiles((prev) => [...prev, ...validFiles]);
     }
+    if (inlineImages.length > 0) composerRef.current?.insertImages(inlineImages);
   };
 
   const removeAttachedFile = (id: string) => {
@@ -635,41 +651,41 @@ function MessengerThread({
     prevLengthRef.current = filteredMessages.length;
   }, [filteredMessages.length, room.id]);
 
+  /**
+   * 전송 — 메시지 1건.
+   * 꾸밈·사진·멘션·첨부가 하나도 없으면 예전처럼 평문 메시지, 아니면 서식 메시지(본문 + 첨부)로 보낸다.
+   */
   const submit = async () => {
-    const t = text.trim();
-    if (!t && attachedFiles.length === 0) return;
-    if (sendFile.isPending) return;
+    const draft = composerRef.current?.getDraft();
+    if (!draft) return;
+    const hasFiles = attachedFiles.length > 0;
+    if (isEmptyRich(draft.doc) && !hasFiles) return;
+    if (sendRich.isPending) return;
 
-    if (attachedFiles.length > 0) {
-      try {
-        // 여러 장을 한 번에 — 하나씩 떨어져 올라가지 않고 한 묶음(그리드)으로 보이게
-        await sendFile.mutateAsync({
-          files: attachedFiles.map((f) => f.file),
-          senderId: me,
-          senderName: meName,
-          text: t,
-          replyTo: replyTo
-            ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo as any) }
-            : null,
-        });
+    const reply = replyTo
+      ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo as any) }
+      : null;
+    const reset = () => {
+      composerRef.current?.clear();
+      setReplyTo(null);
+    };
 
-        clearAttachedFiles(attachedFiles);
-        setText('');
-        setReplyTo(null);
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-      }
-    } else {
-      send.mutate({
-        text: t,
+    if (!hasFiles && isPlainOnlyRich(draft.doc)) {
+      send.mutate({ text: plainTextOfRich(draft.doc), senderId: me, senderName: meName, replyTo: reply });
+      reset();
+      return;
+    }
+    try {
+      await sendRich.mutateAsync({
+        draft: { doc: draft.doc, pendingImages: draft.pendingImages, files: attachedFiles.map((f) => f.file) },
         senderId: me,
         senderName: meName,
-        replyTo: replyTo
-          ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo as any) }
-          : null,
+        replyTo: reply,
       });
-      setText('');
-      setReplyTo(null);
+      clearAttachedFiles(attachedFiles);
+      reset();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
     }
   };
 
@@ -1121,40 +1137,49 @@ function MessengerThread({
             </div>
           )}
 
-          <div className="flex items-end gap-1.5 rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
+          <div className="rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
+          {formatMode && <div ref={setToolbarEl} className="px-1 pt-0.5" />}
+          <div className="flex items-end gap-1.5">
             <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={sendFile.isPending}
+              disabled={sendRich.isPending}
               title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
               className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none mb-0.5"
             >
               <Paperclip size={16} />
             </button>
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onPaste={handlePaste}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
-              className="flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink3 resize-none min-h-[24px] max-h-[84px] py-1 leading-normal menu-scroll"
-              style={{ overflowY: text.split('\n').length > 3 ? 'auto' : 'hidden' }}
+            <button
+              type="button"
+              onClick={() => setFormatMode((v) => !v)}
+              title={formatMode ? '서식 도구 닫기' : '서식 (굵게·목록·표·코드…) — 확장 모드에서는 Enter 줄바꿈, Ctrl+Enter 전송'}
+              aria-pressed={formatMode}
+              className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full select-none mb-0.5 ${formatMode ? 'bg-teal-soft text-teal' : 'text-ink3 hover:bg-panel-alt'}`}
+            >
+              <Type size={16} />
+            </button>
+            <ChatRichEditor
+              ref={composerRef}
+              expanded={formatMode}
+              members={mentionCandidates}
+              disabled={sendRich.isPending}
+              onSubmit={() => void submit()}
+              onFiles={handleFilesAttach}
+              maxHeight={formatMode ? 260 : 160}
+              toolbarContainer={formatMode ? toolbarEl : null}
+              placeholder={formatMode ? '메시지 입력 (Ctrl+Enter 전송)' : '메시지 입력 (@멘션, 사진 붙여넣기)'}
             />
             <button
               type="button"
-              onClick={submit}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber text-[14px] text-white select-none hover:bg-amber-dark transition-colors mb-0.5"
+              onClick={() => void submit()}
+              disabled={sendRich.isPending}
+              title={formatMode ? '보내기 (Ctrl+Enter)' : '보내기 (Enter)'}
+              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber disabled:opacity-50 text-[14px] text-white select-none hover:bg-amber-dark transition-colors mb-0.5"
             >
               ↑
             </button>
+          </div>
           </div>
         </div>
       )}
@@ -1483,6 +1508,55 @@ function CompositeMessageBubble({
   );
 }
 
+/** 전달할 첨부 — 저장소 경로 없이(파일 삭제는 원본 메시지만 한다) */
+function withoutStoragePath(att: Attachment): Attachment {
+  const { path: _path, ...rest } = att;
+  return rest;
+}
+
+/** 서식 메시지 수정 — 말풍선 자리에서 편집기를 열고 저장(Ctrl+Enter)·취소 */
+function RichEditBox({ message, onDone }: { message: ChatMessage; onDone: () => void }) {
+  const editorRef = useRef<ChatRichEditorHandle>(null);
+  const editRich = useEditRich(message.roomId);
+  const initialDoc = useMemo(() => parseRichBody(message.body), [message.body]);
+  const save = async () => {
+    const draft = editorRef.current?.getDraft();
+    if (!draft) return;
+    if (isEmptyRich(draft.doc) && !(message.attachments ?? []).some((a) => !a.mime.startsWith('image/'))) {
+      window.alert('내용을 입력해 주세요.');
+      return;
+    }
+    try {
+      await editRich.mutateAsync({ message, draft: { ...draft, files: [] }, actorName: message.senderName });
+      onDone();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '수정에 실패했습니다.');
+    }
+  };
+  return (
+    <div className="flex w-[min(420px,100%)] flex-col gap-1 rounded-xl border border-[#bae0ff] bg-[#f8fbfe] px-2 py-1.5">
+      <ChatRichEditor
+        ref={editorRef}
+        expanded
+        initialDoc={initialDoc}
+        initialAttachments={message.attachments}
+        onSubmit={() => void save()}
+        disabled={editRich.isPending}
+        maxHeight={240}
+      />
+      <div className="flex items-center justify-between gap-1 text-[9.5px]">
+        <span className="text-ink3">Ctrl+Enter 저장 · 사진은 붙여넣어 추가</span>
+        <span className="flex gap-1">
+          <button onClick={onDone} className="rounded bg-[#bae0ff]/30 px-1.5 py-0.5 text-ink2 hover:bg-[#bae0ff]/50">취소</button>
+          <button onClick={() => void save()} disabled={editRich.isPending} className="rounded bg-amber px-1.5 py-0.5 text-white hover:bg-amber-dark disabled:opacity-50">
+            {editRich.isPending ? '...' : '저장'}
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({
   m,
   me,
@@ -1549,7 +1623,9 @@ function MessageBubble({
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body: ReactNode;
-  if (isEditing) {
+  if (isEditing && m.format === 'rich') {
+    body = <RichEditBox message={m} onDone={onCancelEdit} />;
+  } else if (isEditing) {
     body = (
       <div className="flex flex-col gap-1 w-full min-w-[180px]">
         <textarea
@@ -1641,6 +1717,17 @@ function MessageBubble({
     body = (
       <div className="rounded-xl border border-dashed border-border px-3 py-2 text-[11.5px] italic text-ink3 select-none min-w-0 max-w-full">
         {DELETED_MESSAGE_TEXT}
+      </div>
+    );
+  } else if (m.format === 'rich') {
+    // 서식 메시지 — 글·서식·본문 속 사진·파일이 한 말풍선(메시지 1건)
+    body = (
+      <div
+        style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
+        className={`max-w-full min-w-0 rounded-xl px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,48,0.05)] cursor-text ${mine ? '' : 'border border-border bg-panel text-ink'} ${isSearchActive ? 'ring-2 ring-amber' : ''}`}
+        onContextMenu={onContextMenu}
+      >
+        <RichMessageBody body={m.body} attachments={m.attachments} mine={mine} onOpenImage={onOpenImage} />
       </div>
     );
   } else {
@@ -2289,13 +2376,16 @@ function DesktopForwardModal({
             senderName: meName,
             text: msg.text,
             type: msg.type,
-            attachment: msg.attachment,
+            // 저장소 경로(path)는 빼고 전달한다 — 전달본을 지울 때 원본 메시지의 파일까지 지워지지 않게
+            attachment: msg.attachment ? withoutStoragePath(msg.attachment) : null,
             replyTo: msg.replyTo,
             approvalPayload: msg.approvalPayload,
             at,
             readBy: [me],
             isEdited: false,
             reactions: {},
+            // 서식 메시지는 본문·첨부째 그대로 전달한다(멘션은 원래 방 사람이라 비운다)
+            ...(msg.format === 'rich' ? { format: 'rich' as const, body: msg.body ?? null, attachments: (msg.attachments ?? []).map(withoutStoragePath), mentions: [] } : {}),
           };
           await chatMessageRepo.append(newMsg);
           await chatRoomRepo.updateLastMessage(targetRoomId, {

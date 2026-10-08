@@ -13,6 +13,7 @@ import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead 
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { requestOpenChatRoom } from './QuickDock';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import defaultLogo from '@/assets/logo.png';
 
@@ -319,6 +320,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                         setNotiOpen(false);
                         if (n.type === '메신저') {
                           setDockOpen('msg');
+                          // @멘션 알림은 그 대화방을 바로 연다(linkUrl: /?openChat=<방>)
+                          const roomId = n.linkUrl ? new URL(n.linkUrl, window.location.origin).searchParams.get('openChat') : null;
+                          if (roomId) requestOpenChatRoom(roomId);
                         } else if (n.linkUrl) {
                           navigate(n.linkUrl);
                         }

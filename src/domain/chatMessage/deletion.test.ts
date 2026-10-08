@@ -74,3 +74,20 @@ test('삭제된 메시지를 인용한 답장의 미리보기 문구도 지운�
   assert.deepEqual(changed.map((m) => m.id), ['m2']);
   assert.equal(changed[0].replyTo?.text, DELETED_MESSAGE_TEXT);
 });
+
+test('서식 메시지를 지우면 본문·첨부·멘션도 비우고 format=plain 으로 남긴다(저장소가 칸을 비워 쓰게)', () => {
+  const rich = msg({
+    format: 'rich',
+    body: '{"type":"doc","content":[]}',
+    attachments: [{ id: 'img-1', url: 'u', name: 'a.png', size: 1, mime: 'image/png', path: 'chat/R/a.png' }],
+    mentions: ['U2'],
+  });
+  const deleted = applyDeletion(rich, { id: 'U1', name: '홍' }, new Date('2026-10-08T07:00:00Z'));
+  assert.equal(deleted.format, 'plain');
+  assert.equal(deleted.body, null);
+  assert.deepEqual(deleted.attachments, []);
+  assert.deepEqual(deleted.mentions, []);
+  assert.equal(deleted.text, DELETED_MESSAGE_TEXT);
+  // 평문 메시지는 서식 칸을 건드리지 않는다
+  assert.equal('format' in applyDeletion(msg(), { id: 'U1', name: '홍' }, new Date()), false);
+});
