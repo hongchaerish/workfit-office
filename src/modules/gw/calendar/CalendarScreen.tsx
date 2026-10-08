@@ -90,7 +90,9 @@ function LocalCalendarScreen() {
     setSearchParams(next, { replace: true });
   }, [linkedDate, searchParams, setSearchParams]);
   const [demoUserId, setDemoUserId] = useState('U009');
-  const { userRoles } = usePermission();
+  const { userRoles, isOperator, isExecutive } = usePermission();
+  /** 사내행사 등록 권한 — 달력 칸의 +와 [+ 사내행사] 버튼(사내행사 전용)은 이 권한이 있을 때만 보인다. */
+  const canManageCompanyEvent = isOperator || isExecutive;
   const org = useOrgTree();
 
   const [modalTarget, setModalTarget] = useState<{
@@ -99,6 +101,8 @@ function LocalCalendarScreen() {
     initialTitle?: string;
     initialEventType?: CalendarEventType;
     initialAttendees?: string[];
+    /** 달력 칸의 +로 연 등록 — 사내행사만 고를 수 있다. */
+    companyEventOnly?: boolean;
   } | null>(null);
   const [notice, setNotice] = useState('');
   /** 내 일정 / 팀 일정. 열람 범위가 없으면 아래에서 내 일정으로 고정된다. */
@@ -396,13 +400,14 @@ function LocalCalendarScreen() {
     initialTitle?: string;
     initialEventType?: CalendarEventType;
     initialAttendees?: string[];
+    companyEventOnly?: boolean;
   }) => {
     setModalTarget(target);
   };
 
-  if (loading) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">일정을 불러오는 중…</div>;
-  if (queryError) return <div className="grid min-h-[60vh] place-items-center px-5 text-center text-[12px] font-semibold text-danger">일정을 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
-  if (!actor) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
+  if (loading) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">일정을 불러오는 중…</div>;
+  if (queryError) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center px-5 text-center text-[12px] font-semibold text-danger">일정을 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
+  if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
@@ -439,10 +444,15 @@ function LocalCalendarScreen() {
 
       {notice && <div aria-live="polite" className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2 text-[10.5px] font-semibold text-teal">{notice}</div>}
 
-      {/* 2열 레이아웃: 좌측(선택한 날의 상세 일정 + 내 To-Do) / 우측(컴팩트 월간 캘린더) */}
-      <div className="mt-5 flex flex-col xl:flex-row items-start gap-4">
+      {/*
+        2열 레이아웃: 좌측(선택한 날의 상세 일정 + 내 To-Do) / 우측(월간 캘린더).
+        화면 배율(body zoom)을 따라가도록 뷰포트 대신 컨테이너 폭으로 나눈다.
+        좌측은 좁게 두고 달력에 폭을 몰아 줘 칸 안의 중요 일정이 잘리지 않게 한다.
+      */}
+      <div className="@container mt-5">
+      <div className="flex flex-col items-start gap-4 @min-[860px]:flex-row">
         {/* ── 좌측 패널: 선택한 날의 상세 일정 & 내 업무계획(To-Do) ── */}
-        <aside className="w-full xl:w-[350px] 2xl:w-[380px] shrink-0 space-y-3.5">
+        <aside className="w-full shrink-0 space-y-3.5 @min-[860px]:w-[250px] @min-[1200px]:w-[280px]">
           {/* 선택일 헤더 카드 */}
           <div className="rounded-xl border border-border bg-panel p-3.5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -465,13 +475,16 @@ function LocalCalendarScreen() {
                 )}
               </div>
 
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => openEventModal({ date: selectedDate })}
-              >
-                + 일정 추가
-              </Button>
+              {/* 캘린더에서 직접 등록하는 일정은 사내행사뿐이다 — 등록 권한(운영자·임원)이 있을 때만 보인다 */}
+              {canManageCompanyEvent && (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => openEventModal({ date: selectedDate, companyEventOnly: true })}
+                >
+                  + 사내행사
+                </Button>
+              )}
             </div>
           </div>
 
@@ -696,9 +709,9 @@ function LocalCalendarScreen() {
 
           {/* 팀 조회의 로딩·오류는 격자 자리에만 그린다 */}
           {isTeam && teamQuery.isLoading ? (
-            <div className="grid min-h-[40vh] place-items-center rounded-xl border border-border bg-panel text-[12px] font-semibold text-ink3">팀 일정을 불러오는 중…</div>
+            <div className="grid min-h-[calc(40vh/var(--font-scale,1))] place-items-center rounded-xl border border-border bg-panel text-[12px] font-semibold text-ink3">팀 일정을 불러오는 중…</div>
           ) : isTeam && teamQuery.error ? (
-            <div className="grid min-h-[40vh] place-items-center gap-2 rounded-xl border border-border bg-panel px-5 text-center text-[12px] font-semibold text-danger">
+            <div className="grid min-h-[calc(40vh/var(--font-scale,1))] place-items-center gap-2 rounded-xl border border-border bg-panel px-5 text-center text-[12px] font-semibold text-danger">
               팀 일정을 불러오지 못했습니다.
               <Button onClick={() => teamQuery.refetch()}>다시 시도</Button>
             </div>
@@ -711,7 +724,7 @@ function LocalCalendarScreen() {
               holidays={holidays}
               importantByDate={importantByDate}
               onSelectDate={(date) => setSelectedDate(date)}
-              onAddOn={(date) => openEventModal({ date })}
+              onAddOn={canManageCompanyEvent ? (date) => openEventModal({ date, companyEventOnly: true }) : undefined}
               onSelectEvent={(event) => {
                 if (isTeam && isMaskedForSupervisor(actor.id, event)) return;
                 openEventModal({ date: event.date, event });
@@ -722,8 +735,7 @@ function LocalCalendarScreen() {
           )}
         </div>
       </div>
-
-
+      </div>
 
       {modalTarget && (
         <CalendarEventModal
@@ -734,6 +746,7 @@ function LocalCalendarScreen() {
           initialTitle={modalTarget.initialTitle}
           initialEventType={modalTarget.initialEventType}
           initialAttendees={modalTarget.initialAttendees}
+          companyEventOnly={modalTarget.companyEventOnly}
           myProjects={myProjects}
           deptName={
             modalTarget.event?.ownerUserId

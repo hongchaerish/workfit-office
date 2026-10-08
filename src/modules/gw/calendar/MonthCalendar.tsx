@@ -14,8 +14,8 @@ interface MonthCalendarProps {
   importantByDate?: Map<string, string>;
   /** 날짜를 선택했을 때(좌측 패널 연동). */
   onSelectDate: (date: string) => void;
-  /** 그 날짜로 새 일정을 등록한다(칸 우상단 +). */
-  onAddOn: (date: string) => void;
+  /** 그 날짜로 사내행사를 등록한다(칸 우상단 +). 없으면 +를 그리지 않는다(등록 권한 없음). */
+  onAddOn?: (date: string) => void;
   onSelectEvent: (event: CalendarEvent) => void;
   /** 칩에 붙일 소유자 이름(팀 일정). null이면 안 붙인다 — 내 일정에 내 이름을 붙일 이유는 없다. */
   ownerNameOf?: (event: CalendarEvent) => string | null;
@@ -104,11 +104,6 @@ export default function MonthCalendar({
                         {holidayName}
                       </span>
                     )}
-                    {important && (
-                      <span className="truncate text-[9.5px] font-bold leading-tight text-rose-600 dark:text-rose-400" title={important}>
-                        {important.split('\n')[0]}
-                      </span>
-                    )}
                   </div>
                   {/*
                     등록 버튼은 평소 숨긴다 — 42칸 전부에 +가 떠 있으면 달력이 시끄럽다.
@@ -116,16 +111,24 @@ export default function MonthCalendar({
                     막지 않는다(pointer-events는 포인터 입력에만 관여한다). 터치 기기에는
                     hover가 없으므로 칸을 눌러 열리는 목록의 '일정 추가'가 등록 경로가 된다.
                   */}
+                  {onAddOn && (
                   <button
                     type="button"
                     onClick={(clicked) => { clicked.stopPropagation(); onAddOn(cell.date); }}
-                    aria-label={`${cell.date}에 일정 등록`}
-                    title="일정 등록"
+                    aria-label={`${cell.date}에 사내행사 등록`}
+                    title="사내행사 등록"
                     className="pointer-events-none grid h-5 w-5 shrink-0 place-items-center rounded text-[12px] font-bold leading-none text-ink3 opacity-0 transition hover:bg-teal-soft/60 hover:text-teal focus:pointer-events-auto focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-teal/40 group-hover:pointer-events-auto group-hover:opacity-100"
                   >
                     +
                   </button>
+                  )}
                 </div>
+                {/* 중요 일정은 날짜 옆에 끼우지 않고 한 줄을 따로 줘 두 줄까지 보인다. */}
+                {important && (
+                  <span className="mt-0.5 line-clamp-2 whitespace-pre-line break-keep px-0.5 text-[9.5px] font-bold leading-snug text-rose-600 dark:text-rose-400" title={important}>
+                    {important}
+                  </span>
+                )}
                 <span className="mt-0.5 block space-y-0.5">
                   {rows.slice(0, 3).map((event) => {
                     const owner = ownerNameOf?.(event) ?? null;

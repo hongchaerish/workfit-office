@@ -41,6 +41,8 @@ interface CalendarEventModalProps {
   initialTitle?: string;
   initialEventType?: CalendarEventType;
   initialAttendees?: string[];
+  /** 사내행사 전용 등록(달력 칸의 +). 유형 선택지를 사내행사 하나로 묶는다. */
+  companyEventOnly?: boolean;
   /** 새 일정의 공개 범위 기본값. 회의는 넘기지 않아도 전사 공개가 기본이다. */
   initialVisibility?: CalendarVisibility;
   /** 내가 참여 중인 프로젝트. 프로젝트 공유 대상으로 고를 수 있다. */
@@ -69,6 +71,7 @@ export default function CalendarEventModal({
   initialTitle,
   initialEventType,
   initialAttendees,
+  companyEventOnly = false,
   initialVisibility,
   myProjects,
   deptName,
@@ -100,10 +103,10 @@ export default function CalendarEventModal({
   const [memo, setMemo] = useState(event?.memo ?? '');
   // 회의는 전사에 보이는 것이 기본(알림은 참석자에게만 — domain/calendarEvent/meeting.ts).
   const [visibility, setVisibility] = useState<CalendarVisibility>(
-    event?.visibility ?? initialVisibility ?? (initialEventType === 'MEETING' ? MEETING_DEFAULT_VISIBILITY : 'PRIVATE'),
+    companyEventOnly ? 'COMPANY' : event?.visibility ?? initialVisibility ?? (initialEventType === 'MEETING' ? MEETING_DEFAULT_VISIBILITY : 'PRIVATE'),
   );
   const [eventType, setEventType] = useState<CalendarEventType>(
-    event?.eventType ?? initialEventType ?? (event?.visibility === 'COMPANY' ? 'COMPANY_EVENT' : 'GENERAL'),
+    companyEventOnly ? 'COMPANY_EVENT' : event?.eventType ?? initialEventType ?? (event?.visibility === 'COMPANY' ? 'COMPANY_EVENT' : 'GENERAL'),
   );
   const [attendeeUserIds, setAttendeeUserIds] = useState<string[]>(
     event?.attendeeUserIds ?? initialAttendees ?? [],
@@ -266,6 +269,8 @@ export default function CalendarEventModal({
           ? '공유받은 일정'
           : event
           ? `${CALENDAR_EVENT_TYPE_LABELS[eventType]?.label ?? '일정'} 수정`
+          : companyEventOnly
+          ? '사내행사 등록'
           : '새 일정 등록'
       }
       width={Math.min(640, window.innerWidth - 32)}
@@ -321,7 +326,7 @@ export default function CalendarEventModal({
           {/* 1. 일정 유형 선택 칩 (외근·출장, 휴가는 전자결재 전용이므로 신규 등록 목록에서 제외) */}
           <Field label="일정 유형" required>
             <div className="flex flex-wrap gap-1.5">
-              {(isApprovalEvent || !CREATABLE_EVENT_TYPES.includes(eventType)
+              {(isApprovalEvent || companyEventOnly || !CREATABLE_EVENT_TYPES.includes(eventType)
                 ? [eventType]
                 : CREATABLE_EVENT_TYPES
               ).map((typeKey) => {
