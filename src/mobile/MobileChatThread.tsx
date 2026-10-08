@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
-import { isSameMinute, processMessageBundles, isGroupedWithPrevious, type RenderMessageItem } from '@/features/chat/messageBundles';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
@@ -82,7 +82,12 @@ export default function MobileChatThread() {
   const handleDeleteMessage = async (msg: ChatMessage) => {
     if (!window.confirm("이 메시지를 모든 참여자의 화면에서 삭제할까요?\n삭제하면 되돌릴 수 없습니다.")) return;
     try {
-      await deleteMessage.mutateAsync({ messageId: msg.id, actor: { id: me, name: meName } });
+      // 한 말풍선에 든 것(사진 여러 장·글+사진)은 함께 지운다
+      const now = new Date();
+      const ids = bubbleMessagesOf(processedItems, msg)
+        .filter((m) => canDeleteMessage(m, me, now).allowed)
+        .map((m) => m.id);
+      await deleteMessage.mutateAsync({ messageIds: ids.length ? ids : [msg.id], actor: { id: me, name: meName } });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "삭제에 실패했습니다.");
     }

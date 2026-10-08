@@ -7,7 +7,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
-import { isSameMinute, processMessageBundles, isGroupedWithPrevious, type RenderMessageItem } from '@/features/chat/messageBundles';
+import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
 import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
@@ -297,7 +297,12 @@ function MessengerThread({
   const handleDeleteMessage = async (msg: ChatMessage) => {
     if (!window.confirm('이 메시지를 모든 참여자의 화면에서 삭제할까요?\n삭제하면 되돌릴 수 없습니다.')) return;
     try {
-      await deleteMessage.mutateAsync({ messageId: msg.id, actor: { id: me, name: meName } });
+      // 한 말풍선에 든 것(사진 여러 장·글+사진)은 함께 지운다
+      const now = new Date();
+      const ids = bubbleMessagesOf(processedItems, msg)
+        .filter((m) => canDeleteMessage(m, me, now).allowed)
+        .map((m) => m.id);
+      await deleteMessage.mutateAsync({ messageIds: ids.length ? ids : [msg.id], actor: { id: me, name: meName } });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : '삭제에 실패했습니다.');
     }
@@ -1861,7 +1866,11 @@ function ImageViewer({
         </button>
       </div>
 
-      <div className="relative flex w-full max-w-full items-center justify-center h-[75vh]" onClick={(e) => e.stopPropagation()}>
+      {/*
+        사진 자리 = 위 제목줄과 아래 확대 막대 사이. vh 는 화면 배율(body zoom)이 한 번 더 곱해져
+        화면보다 커지므로(75vh → 실제 111%) 쓰지 않고 오버레이 기준으로 위아래를 비운다.
+      */}
+      <div className="absolute inset-x-6 bottom-16 top-14 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
         {hasPrev && (
           <button
             onClick={handlePrev}
@@ -2323,7 +2332,7 @@ function DesktopForwardModal({
   return (
     <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div 
-        className="flex w-[450px] max-h-[90vh] flex-col rounded-xl bg-white p-5 shadow-2xl select-none" 
+        className="flex w-[450px] max-h-[calc(90vh/var(--font-scale,1))] flex-col rounded-xl bg-white p-5 shadow-2xl select-none" 
         onClick={(e) => e.stopPropagation()}
         style={{ color: '#1c2536' }}
       >

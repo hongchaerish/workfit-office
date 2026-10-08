@@ -1,4 +1,5 @@
 import type { Attachment, ChatMessage } from '@/domain/chatMessage/schema';
+import { isDeletedMessage } from '@/domain/chatMessage/deletion';
 
 /**
  * 메신저 말풍선 묶기 규칙 — 데스크톱·모바일 공용.
@@ -26,8 +27,33 @@ export interface RenderMessageItem {
   files?: Attachment[];
 }
 
-/** 사진/파일/텍스트 묶음으로 이어 붙일 수 있는 시간차(동일 전송 배치). */
+/** 예전 사진 묶음 규칙의 시간차 — 아래 시점 이전 메시지에만 쓴다. */
 const BUNDLE_GAP_MS = 60_000;
+/**
+ * 이 시각 이전 메시지만 "60초 안에 이어 올라온 사진은 한 묶음" 규칙을 쓴다.
+ * 그때까지는 여러 장을 보내도 사진마다 따로(다른 시각에) 저장돼, 이 규칙이 있어야 한 묶음으로 보였다.
+ * 그 뒤로는 한 번에 보낸 것이 같은 배치로 저장되므로, 엔터를 따로 친 전송은 따로 보여야 한다.
+ */
+const LEGACY_BUNDLE_BEFORE = '2026-10-02T00:00:00';
+
+/** 메시지 id `<방>-<일련번호>` 를 나눈다. 한 번에 보낸 묶음은 일련번호가 1씩 이어진다(buildAttachmentBatch). */
+function idSequence(id: string): { prefix: string; n: number } | null {
+  const m = /^(.*)-(\d+)$/.exec(id);
+  return m ? { prefix: m[1], n: Number(m[2]) } : null;
+}
+
+/**
+ * 같은 전송(엔터 한 번)에서 나온 연속 메시지인가.
+ * 저장 시각은 초 단위라, 같은 초에 엔터를 두 번 쳐도 시각이 같다 — 그래서 id 일련번호가
+ * 바로 이어지는지까지 본다. id 형식이 다르면 예전처럼 같은 시각이면 같은 전송으로 본다.
+ */
+export function isSameSendBatch(prev: ChatMessage, next: ChatMessage): boolean {
+  if (prev.senderId !== next.senderId || prev.at !== next.at) return false;
+  const a = idSequence(prev.id);
+  const b = idSequence(next.id);
+  if (a && b && a.prefix === b.prefix) return b.n === a.n + 1;
+  return true;
+}
 
 /**
  * 동일한 발신자가 함께 보낸 첨부파일(이미지, 일반 파일)과 본문 텍스트를
@@ -47,6 +73,19 @@ export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] 
       continue;
     }
 
+    // 한 말풍선(같은 전송)을 통째로 지우면 메시지마다 '삭제된 메시지'가 남는다 — 한 줄로 보인다
+    if (isDeletedMessage(cur)) {
+      const group: ChatMessage[] = [cur];
+      let j = i + 1;
+      while (j < msgs.length && isDeletedMessage(msgs[j]) && isSameSendBatch(group[group.length - 1], msgs[j])) {
+        group.push(msgs[j]);
+        j++;
+      }
+      items.push({ type: 'message', message: cur, bundleMessages: group.length > 1 ? group : undefined });
+      i = j;
+      continue;
+    }
+
     // 첨부파일(이미지 또는 일반파일)이 있는 메시지로부터 번들 탐색 시작
     // 또는 뒤따라오는 첨부들과 한 묶음인 경우
     const hasAtt = Boolean(cur.attachment);
@@ -54,7 +93,7 @@ export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] 
     if (!hasAtt) {
       // 텍스트 단독 메시지인 경우, 바로 뒤에 같은 시각(같은 배치)의 첨부들이 없으면 단독 처리
       const next = msgs[i + 1];
-      const isNextSameBatch = next && next.senderId === cur.senderId && Boolean(next.attachment) && (next.at === cur.at);
+      const isNextSameBatch = next && Boolean(next.attachment) && isSameSendBatch(cur, next);
       if (!isNextSameBatch) {
         items.push({ type: 'message', message: cur });
         i++;
@@ -74,11 +113,12 @@ export function processMessageBundles(msgs: ChatMessage[]): RenderMessageItem[] 
       const prev = bundle[bundle.length - 1];
       const gap = new Date(next.at).getTime() - new Date(prev.at).getTime();
 
-      // 한 번에 보낸 묶음은 모두 같은 시각으로 저장된다(buildAttachmentBatch) — 글은 이때만 합친다.
-      // 따로 올린 글 없는 첨부가 60초 안에 이어지면 예전 사진 묶음처럼 합친다.
-      // 그 밖의 글은 별개 메시지다(합치면 답장·삭제 대상이 사라진다).
-      const sameBatch = next.at === cur.at;
-      const followingAttachment = Boolean(next.attachment) && !next.text && Boolean(prev.attachment)
+      // 엔터 한 번에 보낸 것(같은 배치)만 합친다 — 같은 시각이라도 따로 보낸 사진·글은 별개 메시지다.
+      // 예외: 배치 저장 이전의 옛 메시지는 사진마다 따로 저장됐으므로, 글 없는 사진이 60초 안에
+      // 이어지면 예전처럼 한 묶음으로 보여 준다.
+      const sameBatch = isSameSendBatch(prev, next);
+      const isLegacy = prev.at < LEGACY_BUNDLE_BEFORE && next.at < LEGACY_BUNDLE_BEFORE;
+      const followingAttachment = isLegacy && Boolean(next.attachment) && !next.text && Boolean(prev.attachment)
         && gap >= 0 && gap <= BUNDLE_GAP_MS;
 
       if (sameBatch || followingAttachment) {
@@ -170,3 +210,8 @@ export function imageBundleRows(count: number): number[] {
   return rows;
 }
 
+/** 이 메시지가 속한 말풍선의 모든 메시지 — 삭제처럼 말풍선 단위로 처리할 때 쓴다. */
+export function bubbleMessagesOf(items: RenderMessageItem[], message: ChatMessage): ChatMessage[] {
+  const item = items.find((it) => it.message.id === message.id || it.bundleMessages?.some((m) => m.id === message.id));
+  return item?.bundleMessages?.length ? item.bundleMessages : [message];
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ChatMessage } from '@/domain/chatMessage/schema';
-import { imageBundleRows, isGroupedWithPrevious, processMessageBundles } from './messageBundles';
+import { bubbleMessagesOf, imageBundleRows, isGroupedWithPrevious, processMessageBundles } from './messageBundles';
 
 const msg = (id: string, over: Partial<ChatMessage> = {}): ChatMessage => ({
   id,
@@ -89,4 +89,35 @@ test('processMessageBundles: 사진 뒤에 따로 보낸 글은 카드에 합치
   ]);
   assert.deepEqual(items.map((i) => i.message.id), ['p1', 't1', 't2', 't3']);
   assert.deepEqual(items.map((i) => i.type), ['message', 'message', 'message', 'message']);
+});
+
+test('엔터를 따로 친 전송은 같은 초여도 별개 메시지 — 사진 하나 보내고 바로 또 사진 하나', () => {
+  const at = '2026-10-08T15:00:00';
+  const items = processMessageBundles([msg('R-1791440000000', { at }), msg('R-1791440000850', { at })]);
+  assert.deepEqual(items.map((i) => i.type), ['message', 'message']);
+});
+
+test('엔터 한 번에 보낸 묶음(일련번호가 이어짐)은 한 카드', () => {
+  const at = '2026-10-08T15:00:00';
+  const items = processMessageBundles([msg('R-1000', { at }), msg('R-1001', { at }), msg('R-1002', { at, type: 'text', attachment: null, text: '설명' })]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, 'composite-bundle');
+});
+
+test('새 메시지는 60초 안에 이어 보낸 사진이라도 따로 보낸 것이면 묶지 않는다(옛 규칙은 10/2 이전만)', () => {
+  const items = processMessageBundles([
+    msg('R-1791440000000', { at: '2026-10-08T15:00:00' }),
+    msg('R-1791440030000', { at: '2026-10-08T15:00:30' }),
+  ]);
+  assert.deepEqual(items.map((i) => i.type), ['message', 'message']);
+});
+
+test('말풍선을 통째로 지우면 삭제 안내는 한 줄, bubbleMessagesOf 는 말풍선 전체를 돌려준다', () => {
+  const at = '2026-10-08T15:00:00';
+  const del = { type: 'text' as const, attachment: null, text: '삭제된 메시지입니다.', deletedAt: '2026-10-08T06:01:00Z' };
+  const items = processMessageBundles([msg('R-1000', { at, ...del }), msg('R-1001', { at, ...del }), msg('R-9000', { at: '2026-10-08T15:02:00', type: 'text', attachment: null, text: '다음' })]);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].bundleMessages?.length, 2);
+  const live = processMessageBundles([msg('R-2000', { at }), msg('R-2001', { at })]);
+  assert.deepEqual(bubbleMessagesOf(live, live[0].message).map((m) => m.id), ['R-2000', 'R-2001']);
 });

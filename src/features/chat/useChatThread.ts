@@ -110,12 +110,17 @@ export function useEditMessage(roomId: string) {
 export function useDeleteMessage(roomId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ messageId, actor }: { messageId: string; actor: { id: string; name: string } }) => {
-      const deleted = await chatMessageRepo.deleteMessage(messageId, actor);
+    /** 한 말풍선의 메시지들을 함께 지운다(사진 여러 장 등). 하나만 지울 때도 배열로 넘긴다. */
+    mutationFn: async ({ messageIds, actor }: { messageIds: string[]; actor: { id: string; name: string } }) => {
+      let lastDeleted: ChatMessage | null = null;
+      for (const messageId of messageIds) {
+        lastDeleted = await chatMessageRepo.deleteMessage(messageId, actor);
+      }
+      if (!lastDeleted) return;
       const room = await chatRoomRepo.get(roomId);
       const last = room?.lastMessage;
-      if (last && last.at === deleted.at && last.senderId === deleted.senderId) {
-        await chatRoomRepo.updateLastMessage(roomId, { ...last, text: deleted.text });
+      if (last && last.at === lastDeleted.at && last.senderId === lastDeleted.senderId) {
+        await chatRoomRepo.updateLastMessage(roomId, { ...last, text: lastDeleted.text });
       }
     },
     onSuccess: () => {
