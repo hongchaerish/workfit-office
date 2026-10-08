@@ -54,6 +54,20 @@ interface WeekBlock {
   days: DayInfo[];
 }
 
+/** 오늘 열은 하늘색 세로선으로 위아래를 이어서, 아래쪽 행에서도 오늘 칸을 바로 찾게 한다 */
+const dayColBorderClass = (isToday: boolean) =>
+  isToday ? 'border-x-2 border-sky-200/80 dark:border-sky-800/70' : 'border-r border-border last:border-r-0';
+
+/** 본표와 상단 고정 날짜 머리행이 같은 열 너비를 쓰도록 공유한다 */
+const MATRIX_COLGROUP = (
+  <colgroup>
+    <col style={{ width: '95px' }} />
+    {Array.from({ length: 7 }, (_, i) => (
+      <col key={i} style={{ width: 'calc((100% - 95px) / 7)' }} />
+    ))}
+  </colgroup>
+);
+
 interface WorkPlanTeamMonthlyMatrixProps {
   actor: User;
   todayStr: string;
@@ -106,6 +120,9 @@ export function WorkPlanTeamMonthlyMatrix({
   const stickyBarRef = useRef<HTMLDivElement>(null);
   const weekHeaderRefs = useRef(new Map<number, HTMLTableRowElement>());
   const [visibleWeekNum, setVisibleWeekNum] = useState<number | null>(null);
+  /** 본표 가로 스크롤 영역 — 상단 고정 날짜 머리행의 가로 위치를 맞추는 데 쓴다 */
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const stickyWeekScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 공휴일 데이터 조회 및 날짜별 매핑
   const holidaysQuery = useHolidays();
@@ -337,6 +354,9 @@ export function WorkPlanTeamMonthlyMatrix({
       weekHeaderRefs.current.forEach((row, weekNum) => {
         if (row.getBoundingClientRect().top <= barBottom + 8 && (current === null || weekNum > current)) current = weekNum;
       });
+      // 표 끝을 지나 스크롤했으면 고정 날짜 머리행을 내린다
+      const tableBottom = tableScrollRef.current?.getBoundingClientRect().bottom ?? Infinity;
+      if (tableBottom <= barBottom + 48) current = null;
       setVisibleWeekNum(current);
     };
     update();
@@ -362,11 +382,86 @@ export function WorkPlanTeamMonthlyMatrix({
   };
 
   const [yearNum, monthNum] = currentMonth.split('-').map(Number);
+  const stickyWeek = visibleWeekNum !== null ? weeks.find((w) => w.weekNum === visibleWeekNum) : undefined;
+
+  /** 주차 날짜 머리행의 칸들 (주차 이름 + 월~일) — 본표와 상단 고정 머리행이 함께 쓴다 */
+  const renderWeekHeaderCells = (week: WeekBlock) => (
+    <>
+      {/* 주차 성명 열 헤더 */}
+      <th className="border-r border-border p-2 text-center text-[11px] font-bold text-ink bg-panel-alt/80">
+        <div className="flex flex-col items-center justify-center gap-0.5">
+          <span className="text-[11.5px] font-extrabold text-ink flex items-center gap-1">
+            <span>{week.weekNum}주차</span>
+          </span>
+          {week.hasToday ? (
+            <span className="rounded bg-teal px-1.5 py-0.2 text-[8px] font-bold text-white shadow-2xs">
+              이번 주
+            </span>
+          ) : (
+            <span className="text-[9px] text-ink3 font-medium">
+              {week.days[0].monthNum}/{week.days[0].dayNum}~{week.days[6].monthNum}/{week.days[6].dayNum}
+            </span>
+          )}
+        </div>
+      </th>
+
+      {/* 월 ~ 일 (7개 요일 열 헤더) */}
+      {week.days.map((d) => {
+        const isOtherMonth = !d.inCurrentMonth;
+        const targetMonth = d.dateStr.slice(0, 7);
+
+        // 빨간날(일요일 또는 공휴일): 연한 살구/장미톤, 토요일: 연한 파랑
+        const headerBg = d.isRedDay
+          ? 'bg-rose-100/75 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-extrabold'
+          : d.isSat
+          ? 'bg-blue-100/75 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+          : d.isToday
+          ? 'bg-teal-50 dark:bg-teal-950/30 text-teal font-extrabold'
+          : 'bg-panel-alt/60 text-ink';
+
+        return (
+          <th
+            key={d.dateStr}
+            onClick={() => {
+              if (isOtherMonth) {
+                setCurrentMonth(targetMonth);
+              }
+            }}
+            className={`${dayColBorderClass(d.isToday)} p-1.5 text-center transition-all ${headerBg} ${
+              isOtherMonth
+                ? 'opacity-40 hover:opacity-100 hover:bg-teal-soft/30 hover:text-teal cursor-pointer'
+                : ''
+            }`}
+          >
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-[12px] font-extrabold">{d.dayNum}</span>
+                <span className="text-[10px] opacity-80">({d.weekdayKo})</span>
+                {isOtherMonth && (
+                  <span className="text-[8.5px] font-semibold text-teal opacity-90">
+                    ({d.monthNum}월)
+                  </span>
+                )}
+                {d.isToday && (
+                  <span className="rounded bg-teal px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
+                    오늘
+                  </span>
+                )}
+              </div>
+            </div>
+          </th>
+        );
+      })}
+    </>
+  );
+
+  const weekHeaderRowClass = (week: WeekBlock) => (week.hasToday ? 'bg-teal-soft/20' : 'bg-panel-alt/75');
 
   return (
     <div className="space-y-4">
       {/* ── 월간 상단 툴바 + 편집 리본 (스크롤해도 상단 고정) ── */}
-      <div ref={stickyBarRef} className="sticky top-0 z-40 space-y-1.5">
+      <div ref={stickyBarRef} className="sticky top-0 z-40">
+      <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
@@ -405,10 +500,6 @@ export function WorkPlanTeamMonthlyMatrix({
             )}
           </h2>
 
-          <span className="text-[11px] font-semibold text-ink3 ml-2">
-            ({members.length}명 조회 · 총 {weeks.length}주차)
-          </span>
-
           {currentMonth === todayStr.slice(0, 7) && (
             <button
               type="button"
@@ -441,19 +532,36 @@ export function WorkPlanTeamMonthlyMatrix({
       {editingToolbar}
       </div>
 
+      {/* 스크롤 중인 주차의 날짜·요일 머리행 — 아래쪽 사람 행에서도 날짜가 보이도록 상단 바 아래에 붙인다.
+          본표는 가로 스크롤 래퍼 안에 있어 머리행에 sticky를 걸 수 없으므로 같은 열 구성으로 따로 그린다. */}
+      {stickyWeek && (
+        <div
+          ref={(el) => {
+            stickyWeekScrollRef.current = el;
+            if (el && tableScrollRef.current) el.scrollLeft = tableScrollRef.current.scrollLeft;
+          }}
+          className="absolute inset-x-0 top-full mt-1.5 overflow-hidden rounded-lg border border-border bg-panel shadow-md"
+        >
+          <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-[11px]">
+            {MATRIX_COLGROUP}
+            <thead>
+              <tr className={weekHeaderRowClass(stickyWeek)}>{renderWeekHeaderCells(stickyWeek)}</tr>
+            </thead>
+          </table>
+        </div>
+      )}
+      </div>
+
       {/* ── 일주일 단위로 끊어서 아래로 이어지는 단일 통합 매트릭스 표 (가로너비 일치 & 일체형 엑셀 뷰) ── */}
-      <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-xs scrollbar-thin">
+      <div
+        ref={tableScrollRef}
+        onScroll={(e) => {
+          if (stickyWeekScrollRef.current) stickyWeekScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+        }}
+        className="overflow-x-auto rounded-xl border border-border bg-panel shadow-xs scrollbar-thin"
+      >
         <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-[11px] select-text">
-          <colgroup>
-            <col style={{ width: '95px' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-            <col style={{ width: 'calc((100% - 95px) / 7)' }} />
-          </colgroup>
+          {MATRIX_COLGROUP}
 
           <tbody>
             {weeks.map((week, wIdx) => {
@@ -466,75 +574,9 @@ export function WorkPlanTeamMonthlyMatrix({
                       else weekHeaderRefs.current.delete(week.weekNum);
                       if (week.hasToday) currentWeekRef.current = row;
                     }}
-                    className={`border-b border-border ${wIdx > 0 ? 'border-t-2 border-t-border' : ''} ${
-                      week.hasToday ? 'bg-teal-soft/20' : 'bg-panel-alt/75'
-                    }`}
+                    className={`border-b border-border ${wIdx > 0 ? 'border-t-2 border-t-border' : ''} ${weekHeaderRowClass(week)}`}
                   >
-                    {/* 주차 성명 열 헤더 */}
-                    <th className="border-r border-border p-2 text-center text-[11px] font-bold text-ink bg-panel-alt/80">
-                      <div className="flex flex-col items-center justify-center gap-0.5">
-                        <span className="text-[11.5px] font-extrabold text-ink flex items-center gap-1">
-                          <span>{week.weekNum}주차</span>
-                        </span>
-                        {week.hasToday ? (
-                          <span className="rounded bg-teal px-1.5 py-0.2 text-[8px] font-bold text-white shadow-2xs">
-                            이번 주
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-ink3 font-medium">
-                            {week.days[0].monthNum}/{week.days[0].dayNum}~{week.days[6].monthNum}/{week.days[6].dayNum}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-
-                    {/* 월 ~ 일 (7개 요일 열 헤더) */}
-                    {week.days.map((d) => {
-                      const isOtherMonth = !d.inCurrentMonth;
-                      const targetMonth = d.dateStr.slice(0, 7);
-
-                      // 빨간날(일요일 또는 공휴일): 연한 살구/장미톤, 토요일: 연한 파랑
-                      const headerBg = d.isRedDay
-                        ? 'bg-rose-100/75 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-extrabold'
-                        : d.isSat
-                        ? 'bg-blue-100/75 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
-                        : d.isToday
-                        ? 'bg-teal-50 dark:bg-teal-950/30 text-teal font-extrabold'
-                        : 'bg-panel-alt/60 text-ink';
-
-                      return (
-                        <th
-                          key={d.dateStr}
-                          onClick={() => {
-                            if (isOtherMonth) {
-                              setCurrentMonth(targetMonth);
-                            }
-                          }}
-                          className={`border-r border-border p-1.5 text-center last:border-r-0 transition-all ${headerBg} ${
-                            isOtherMonth
-                              ? 'opacity-40 hover:opacity-100 hover:bg-teal-soft/30 hover:text-teal cursor-pointer'
-                              : ''
-                          }`}
-                        >
-                          <div className="flex flex-col items-center justify-center gap-0.5">
-                            <div className="flex items-center justify-center gap-1">
-                              <span className="text-[12px] font-extrabold">{d.dayNum}</span>
-                              <span className="text-[10px] opacity-80">({d.weekdayKo})</span>
-                              {isOtherMonth && (
-                                <span className="text-[8.5px] font-semibold text-teal opacity-90">
-                                  ({d.monthNum}월)
-                                </span>
-                              )}
-                              {d.isToday && (
-                                <span className="rounded bg-teal px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
-                                  오늘
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </th>
-                      );
-                    })}
+                    {renderWeekHeaderCells(week)}
                   </tr>
 
                   {/* ── 전사 공통 중요 일정 행 (사용자 요청: 모든 임직원이 작성 및 공유) ── */}
@@ -556,7 +598,7 @@ export function WorkPlanTeamMonthlyMatrix({
                         <td
                           key={dayStr}
                           onClick={() => onOpenCompanySchedule?.(dayStr, content, cPlan?.id)}
-                          className={`p-1.5 align-top border-r border-border last:border-r-0 cursor-pointer transition-colors group relative ${
+                          className={`p-1.5 align-top ${dayColBorderClass(d.isToday)} cursor-pointer transition-colors group relative ${
                             isRedDay
                               ? 'bg-rose-50/40 dark:bg-rose-950/15 hover:bg-rose-50/70 dark:hover:bg-rose-950/30'
                               : d.isSat
@@ -652,7 +694,7 @@ export function WorkPlanTeamMonthlyMatrix({
                             const cellBgClass = isEditingThisCell
                               ? 'bg-blue-50/60 dark:bg-blue-950/20'
                               : editTier === 1
-                              ? 'bg-white dark:bg-panel shadow-2xs border-l-2 border-r-2 border-teal/40 dark:border-teal/50'
+                              ? 'bg-white dark:bg-panel shadow-2xs'
                               : d.isRedDay
                               ? 'bg-rose-50/30 dark:bg-rose-950/15'
                               : d.isSat
@@ -662,6 +704,10 @@ export function WorkPlanTeamMonthlyMatrix({
                               : d.isToday
                               ? 'bg-teal-50/20 dark:bg-teal-950/15'
                               : 'bg-transparent hover:bg-panel-alt/20';
+
+                            // 내가 오늘 작성할 칸은 하늘색으로 네 변을 모두 둘러 가장 눈에 띄게 한다 (편집 중에도 유지)
+                            const cellBorderClass =
+                              editTier === 1 ? 'border-2 border-sky-300 dark:border-sky-600' : dayColBorderClass(d.isToday);
 
                             return (
                               <td
@@ -674,7 +720,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                     onOpenEditor(dayStr, plan, member);
                                   }
                                 }}
-                                className={`p-2 align-top border-r border-border last:border-r-0 transition-colors min-h-[85px] relative cursor-pointer ${cellBgClass} ${
+                                className={`p-2 align-top ${cellBorderClass} transition-colors min-h-[85px] relative cursor-pointer ${cellBgClass} ${
                                   !d.inCurrentMonth ? 'opacity-50' : ''
                                 }`}
                               >
