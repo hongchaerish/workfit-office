@@ -249,7 +249,7 @@ export default function ApprovalMonitorScreen() {
         </div>
 
         {/* 우: 결재 상세 뷰 및 결재 흐름 상세 (페이지 스크롤 시 sticky 상단 고정) */}
-        <div className="flex flex-col gap-4 sticky top-4">
+        <div className="flex flex-col gap-4 sticky top-[calc(var(--shell-top)+16px)]">
           {selDoc ? (
             <>
               {/* 결재 진행 상황 타임라인 패널 */}

@@ -47,7 +47,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
       <div className="space-y-6">
         {groupedByDate.map((group) => (
           <div key={group.dateKey} className="space-y-3">
-            <div className="sticky top-0 z-20 flex items-center justify-between backdrop-blur-md bg-panel/90 py-1.5 px-1 border-b border-border/60">
+            <div className="sticky top-[var(--shell-top)] z-20 flex items-center justify-between backdrop-blur-md bg-panel/90 py-1.5 px-1 border-b border-border/60">
               <div className="flex items-baseline gap-2">
                 <h3 className="text-sm font-extrabold text-ink">{group.displayDate}</h3>
                 <span className="text-[11px] font-mono text-ink3">

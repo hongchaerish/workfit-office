@@ -8,6 +8,13 @@
   --color-navy-custom: #1243b5;
   --color-navy-text: #ffffff;
   --font-scale: 1.48;
+  /* 고정된 최상단 바 높이 — 데스크톱 화면(AppShell)이 켤 때 58px 로 바꾼다. 그 아래 sticky 요소들이 이만큼 띄운다. */
+  --shell-top: 0px;
+}
+
+/* 화면 안에서 요소로 스크롤해 갈 때(scrollIntoView 등) 고정 상단 바에 가리지 않게 */
+html {
+  scroll-padding-top: var(--shell-top);
 }
 
 /* ──────────────────────────────────────────────────────────────

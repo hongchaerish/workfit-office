@@ -199,7 +199,7 @@ export default function SettingsScreen() {
       {/* 메인 2열 레이아웃 - 좌측 정렬 및 전폭 확장 */}
       <div className="mt-5 flex gap-6 items-start w-full">
         {/* 좌측: 탭 리스트 (내용 높이에 딱 맞춰 상단 고정) */}
-        <div className="w-48 shrink-0 rounded-xl border border-border bg-panel p-2 flex flex-col gap-1 sticky top-4 shadow-xs">
+        <div className="w-48 shrink-0 rounded-xl border border-border bg-panel p-2 flex flex-col gap-1 sticky top-[calc(var(--shell-top)+16px)] shadow-xs">
           <div className="px-2.5 py-1 rounded bg-panel-alt text-[10px] font-extrabold tracking-wider uppercase text-ink3 mb-1">
             일반 설정
           </div>

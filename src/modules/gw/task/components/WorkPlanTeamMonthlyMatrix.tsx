@@ -460,7 +460,7 @@ export function WorkPlanTeamMonthlyMatrix({
   return (
     <div className="space-y-4">
       {/* ── 월간 상단 툴바 + 편집 리본 (스크롤해도 상단 고정) ── */}
-      <div ref={stickyBarRef} className="sticky top-0 z-40">
+      <div ref={stickyBarRef} className="sticky top-[var(--shell-top)] z-40">
       <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-panel p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">

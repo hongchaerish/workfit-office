@@ -113,6 +113,15 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
   const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
   const [dockOpen, setDockOpen] = useState<string | null>(null);
 
+  // 최상단 바(Topbar)는 스크롤해도 고정된다 — 그 높이를 알려 sticky 요소들이 바로 아래에 붙게 한다
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--shell-top', '58px');
+    return () => {
+      root.style.removeProperty('--shell-top');
+    };
+  }, []);
+
   useEffect(() => {
     const userTheme = loadUserTheme(user?.id);
     applyTheme(userTheme.headerBg, userTheme.pointColor, userTheme.btnColor, userTheme.fontScale);

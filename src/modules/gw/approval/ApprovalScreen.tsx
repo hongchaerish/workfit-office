@@ -557,7 +557,7 @@ export default function ApprovalScreen() {
     <div className="w-full px-6 pt-2 pb-6 min-w-[920px]">
       <div className="flex gap-4 items-start w-full">
         {/* 좌: 함 탭 (사이드바 - 상단 밀착형) */}
-        <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[8px] z-10">
+        <div className="w-[160px] rounded-xl border border-border bg-panel p-2 flex flex-col gap-1.5 self-start shadow-sm shrink-0 sticky top-[calc(var(--shell-top)+8px)] z-10">
 
           <button
             onClick={() => setShowFormSelectModal(true)}
@@ -994,7 +994,7 @@ export default function ApprovalScreen() {
           <div className="flex items-start gap-4">
             {/* 목록 — 문서를 열기 전에는 전체 너비, 열면 왼쪽 340px(여러 문서를 빠르게 넘겨보기 좋게 분할 유지) */}
             {(
-              <div className={`min-w-0 flex flex-col self-start ${selDoc ? `w-[340px] shrink-0 sticky top-[8px] ${isListCollapsed ? 'hidden' : ''}` : 'flex-1'}`}>
+              <div className={`min-w-0 flex flex-col self-start ${selDoc ? `w-[340px] shrink-0 sticky top-[calc(var(--shell-top)+8px)] ${isListCollapsed ? 'hidden' : ''}` : 'flex-1'}`}>
               <div className="overflow-hidden rounded-xl border border-border bg-panel flex flex-col min-w-0 shadow-sm animate-fadeIn">
 
                 {/* 목록 데이터 영역 */}
