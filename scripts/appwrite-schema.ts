@@ -284,7 +284,8 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
-    // 조직도 > 좌석배치도. 배치도 한 장 = 문서 하나, 좌석 배열은 JSON 문자열(seats).
+    // 조직도 > 좌석배치도. 배치도 한 장 = 문서 하나, 격자(칸 수·블록 목록)는 JSON 문자열(grid).
+    // imagePath·imageUrl·seats 는 첫 버전(이미지 위 좌석 찍기)의 속성 — 지금은 쓰지 않는다.
     id: 'seatLayouts',
     name: '좌석 배치도',
     attributes: [
@@ -292,6 +293,7 @@ const COLLECTIONS: CollectionDef[] = [
       S('imagePath', 500),
       S('imageUrl', 4000),
       S('seats', 200000),
+      S('grid', 200000),
       INT('sortOrder'),
       S('updatedBy', 64),
       S('updatedAt', 40),

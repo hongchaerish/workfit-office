@@ -1,46 +1,63 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addSeat, assignSeat, clampPercent, moveSeat, nextSeatId, removeSeat, setSeatLabel } from './engine';
-import type { Seat } from './schema';
+import { addBlock, assignSeat, canPlace, nextBlockId, placeBlock, rectFromCells, rectsOverlap, removeBlock, resizeGrid, updateBlock } from './engine';
+import { buildHqTemplateGrid } from './template';
+import type { SeatBlock, SeatGrid } from './schema';
 
-const seat = (id: string, userId: string | null = null): Seat => ({ id, x: 10, y: 10, userId, label: '' });
+const block = (id: string, col: number, row: number, colSpan = 4, rowSpan = 2, userId: string | null = null): SeatBlock => ({
+  id, kind: 'seat', col, row, colSpan, rowSpan, userId, label: '',
+});
+const grid = (...blocks: SeatBlock[]): SeatGrid => ({ cols: 20, rows: 10, blocks });
 
-test('좌표는 0~100 안으로 자르고 소수 둘째 자리까지 맞춘다', () => {
-  assert.equal(clampPercent(-5), 0);
-  assert.equal(clampPercent(120), 100);
-  assert.equal(clampPercent(33.3333), 33.33);
-  assert.equal(clampPercent(Number.NaN), 0);
+test('겹침 판정 — 맞닿기만 하면 겹치지 않는다', () => {
+  assert.equal(rectsOverlap(block('a', 0, 0), block('b', 4, 0)), false);
+  assert.equal(rectsOverlap(block('a', 0, 0), block('b', 3, 1)), true);
 });
 
-test('새 좌석 ID는 기존 ID와 겹치지 않는다', () => {
-  assert.equal(nextSeatId([]), 'S1');
-  assert.equal(nextSeatId([seat('S1'), seat('S3')]), 'S4');
-  assert.equal(nextSeatId([seat('S3'), seat('S2')]), 'S4');
+test('드래그한 두 칸으로 사각형 — 방향과 무관', () => {
+  assert.deepEqual(rectFromCells({ col: 5, row: 4 }, { col: 2, row: 1 }), { col: 2, row: 1, colSpan: 4, rowSpan: 4 });
 });
 
-test('좌석 추가·이동·삭제', () => {
-  const { seats, seat: added } = addSeat([], 150, 20);
-  assert.equal(added.x, 100);
-  assert.equal(added.userId, null);
-  const moved = moveSeat(seats, added.id, 40, 50);
-  assert.deepEqual([moved[0].x, moved[0].y], [40, 50]);
-  assert.equal(removeSeat(moved, added.id).length, 0);
+test('블록 추가: 격자 밖이나 겹치면 거부, ID 는 겹치지 않게', () => {
+  const g = grid(block('B1', 0, 0));
+  assert.equal(addBlock(g, { col: 2, row: 0, colSpan: 2, rowSpan: 2 }, 'seat'), null);
+  assert.equal(addBlock(g, { col: 18, row: 0, colSpan: 4, rowSpan: 2 }, 'seat'), null);
+  const added = addBlock(g, { col: 4, row: 0, colSpan: 4, rowSpan: 2 }, 'room', '탕비실');
+  assert.equal(added?.block.id, 'B2');
+  assert.equal(added?.block.label, '탕비실');
+  assert.equal(nextBlockId([block('B1', 0, 0), block('B3', 0, 0)]), 'B4');
 });
 
-test('한 사람은 한 자리에만 앉는다 — 다른 자리로 옮기면 이전 자리는 비워진다', () => {
-  const seats = [seat('S1', 'U1'), seat('S2'), seat('S3', 'U2')];
-  const next = assignSeat(seats, 'S2', 'U1');
-  assert.equal(next.find((s) => s.id === 'S1')?.userId, null);
-  assert.equal(next.find((s) => s.id === 'S2')?.userId, 'U1');
-  assert.equal(next.find((s) => s.id === 'S3')?.userId, 'U2');
+test('옮기기·크기 바꾸기: 자기 자리와는 겹쳐도 되고, 남과 겹치면 그대로', () => {
+  const g = grid(block('B1', 0, 0), block('B2', 4, 0));
+  assert.equal(placeBlock(g, 'B1', { col: 1, row: 0, colSpan: 3, rowSpan: 2 }).blocks[0].col, 1);
+  assert.equal(placeBlock(g, 'B1', { col: 2, row: 0, colSpan: 4, rowSpan: 2 }), g);
+  assert.equal(canPlace(g, { col: 0, row: 2, colSpan: 8, rowSpan: 2 }), true);
 });
 
-test('null 을 넣으면 그 자리만 비운다', () => {
-  const next = assignSeat([seat('S1', 'U1'), seat('S2', 'U2')], 'S1', null);
-  assert.deepEqual(next.map((s) => s.userId), [null, 'U2']);
+test('좌석 지정: 한 사람 한 자리, 좌석이 아니면 지정하지 않는다', () => {
+  let g = grid(block('B1', 0, 0, 4, 2, 'U1'), block('B2', 4, 0));
+  g = assignSeat(g, 'B2', 'U1');
+  assert.deepEqual(g.blocks.map((b) => b.userId), [null, 'U1']);
+  g = updateBlock(g, 'B2', { kind: 'room', label: '회의실' });
+  assert.equal(g.blocks[1].userId, null);
+  assert.equal(assignSeat(g, 'B2', 'U9').blocks[1].userId, null);
+  assert.equal(removeBlock(g, 'B1').blocks.length, 1);
 });
 
-test('좌석 이름은 30자까지만 남긴다', () => {
-  const next = setSeatLabel([seat('S1')], 'S1', '가'.repeat(40));
-  assert.equal(next[0].label.length, 30);
+test('격자 줄이기: 블록이 밖으로 나가면 거부', () => {
+  const g = grid(block('B1', 10, 5));
+  assert.equal(resizeGrid(g, 12, 10), null);
+  assert.deepEqual(resizeGrid(g, 14, 7), { ...g, cols: 14, rows: 7 });
+});
+
+test('본사 템플릿: 블록끼리 겹치지 않고 격자 안, 좌석은 모두 공석(사람·메모 없음)', () => {
+  const t = buildHqTemplateGrid();
+  for (const b of t.blocks) {
+    assert.ok(b.col + b.colSpan <= t.cols && b.row + b.rowSpan <= t.rows, `${b.id} 격자 밖`);
+    for (const o of t.blocks) if (o !== b) assert.equal(rectsOverlap(b, o), false, `${b.id}·${o.id} 겹침`);
+  }
+  const seats = t.blocks.filter((b) => b.kind === 'seat');
+  assert.equal(seats.length, 25);
+  assert.ok(seats.every((b) => b.userId === null && b.label === ''));
 });
