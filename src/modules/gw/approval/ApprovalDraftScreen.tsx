@@ -78,6 +78,23 @@ function AutosaveIndicator({ at }: { at: number | null }) {
   );
 }
 
+/** 결재선 패널 폭(px, 배율 적용 전). 기본값은 문서(A4) 영역이 넉넉하도록 예전 410~430px보다 좁게 잡았다. */
+const LINE_PANEL_DEFAULT = 340;
+const LINE_PANEL_MIN = 300;
+const LINE_PANEL_MAX = 640;
+const LINE_PANEL_WIDTH_KEY = 'approval_draft_line_panel_width';
+/** A4 문서(800px) + 좌우 여백 — 이만큼은 항상 문서에 남긴다. 남지 않으면 결재선은 서랍(Drawer)으로 연다. */
+const DOC_SHEET_SPACE = 800 + 64;
+
+/** 현재 화면 배율(body zoom) */
+function getFontScale(): number {
+  try {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
+  } catch {
+    return 1;
+  }
+}
+
 export default function ApprovalDraftScreen() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -303,15 +320,64 @@ function ApprovalDraftInner({
     approvalProcessRepo.isOptionEnabled('dept_agreement').then(setIsAgreementEnabled);
   }, []);
 
+  // 결재선 패널 폭 — 왼쪽 가장자리를 끌어 조절하고, 이 브라우저에 기억한다 (더블클릭 시 기본값)
+  const [linePanelWidth, setLinePanelWidth] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(LINE_PANEL_WIDTH_KEY));
+      return saved >= LINE_PANEL_MIN && saved <= LINE_PANEL_MAX ? saved : LINE_PANEL_DEFAULT;
+    } catch {
+      return LINE_PANEL_DEFAULT;
+    }
+  });
+  /** 화면 배율을 뺀 실제 CSS 폭 — 패널 최대 폭 계산에 쓴다 */
+  const [viewportCssWidth, setViewportCssWidth] = useState(() => window.innerWidth / getFontScale());
+
   useEffect(() => {
     const handleResize = () => {
-      const w = window.innerWidth;
-      setIsWideScreen(w >= 1200);
+      // innerWidth 는 화면 배율(body zoom)이 빠진 값이라 배율로 나눠 실제 배치 폭으로 판단한다
+      const cssWidth = window.innerWidth / getFontScale();
+      setViewportCssWidth(cssWidth);
+      const wide = cssWidth >= DOC_SHEET_SPACE + LINE_PANEL_MIN;
+      setIsWideScreen(wide);
+      if (wide) setDrawerOpen(false);
     };
     window.addEventListener('resize', handleResize);
     handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  /** 문서(A4) 자리를 남기는 범위 안에서만 패널을 넓힌다 */
+  const linePanelMaxNow = Math.max(LINE_PANEL_MIN, Math.min(LINE_PANEL_MAX, viewportCssWidth - DOC_SHEET_SPACE));
+  const linePanelWidthNow = Math.min(linePanelWidth, linePanelMaxNow);
+
+  const startLinePanelResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = linePanelWidthNow;
+    const scale = getFontScale();
+    let latest = startWidth;
+    const onMove = (ev: PointerEvent) => {
+      // 마우스 좌표는 화면 px, 폭은 배율 적용 전 CSS px 라서 배율로 나눈다. 왼쪽으로 끌면 넓어진다.
+      latest = Math.round(Math.min(linePanelMaxNow, Math.max(LINE_PANEL_MIN, startWidth + (startX - ev.clientX) / scale)));
+      setLinePanelWidth(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.style.removeProperty('cursor');
+      document.body.style.removeProperty('user-select');
+      try { localStorage.setItem(LINE_PANEL_WIDTH_KEY, String(latest)); } catch { /* 저장 못 해도 이번 화면에서는 유지 */ }
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const resetLinePanelWidth = () => {
+    setLinePanelWidth(LINE_PANEL_DEFAULT);
+    try { localStorage.removeItem(LINE_PANEL_WIDTH_KEY); } catch { /* noop */ }
+  };
 
   const handleFilesUpload = async (files: File[]) => {
     if (files.length === 0) return;
@@ -1739,7 +1805,7 @@ function ApprovalDraftInner({
         </div>
       )}
       {/* 기안 워크스페이스 본문 메인 레이아웃 (세로 완전 분리: 좌측 #878d90 공문서 캔버스 + 우측 세로 고정 결재선 사이드바) */}
-      <div className="flex flex-1 w-full bg-[#878d90] min-h-[calc(100vh-53px)]">
+      <div className="flex flex-1 w-full bg-[#878d90] min-h-[calc(100vh/var(--font-scale,1)-53px)]">
         {/* 중앙 A4 문서 캔버스 (배경색 #878d90으로 백색 A4 용지와 완벽한 대비 및 세로 스크롤) */}
         <div className="flex-1 min-w-0 px-4 sm:px-8 py-8 overflow-y-auto flex flex-col items-center bg-[#878d90] transition-colors">
           {cancelTargetDoc && (
@@ -1805,9 +1871,23 @@ function ApprovalDraftInner({
 
         {/* [3단] 우측 결재선 전용 고정 사이드바 — 공문서 공간과 세로 경계선으로 완벽 분리, 상단부터 바닥까지 100% 꽉 채움 */}
         {isWideScreen && (
+          // 높이: body zoom 이 vh 에 한 번 더 곱해지므로 배율로 나눠 실제 화면 높이에 맞춘다
           <aside
-            className="w-[410px] xl:w-[430px] shrink-0 border-l border-slate-400/40 dark:border-slate-700 bg-panel sticky top-[53px] h-[calc(100vh-53px)] flex flex-col z-20 shadow-md"
+            style={{ width: linePanelWidthNow }}
+            className="relative shrink-0 border-l border-slate-400/40 dark:border-slate-700 bg-panel sticky top-[53px] h-[calc(100vh/var(--font-scale,1)-53px)] flex flex-col z-20 shadow-md"
           >
+            {/* 폭 조절 손잡이 — 왼쪽 경계를 끌어 넓히거나 좁힌다 */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="결재선 패널 폭 조절"
+              title="끌어서 폭 조절 · 더블클릭하면 기본 폭"
+              onPointerDown={startLinePanelResize}
+              onDoubleClick={resetLinePanelWidth}
+              className="group absolute inset-y-0 -left-1.5 z-30 w-3 cursor-col-resize"
+            >
+              <div className="mx-auto h-full w-0.5 bg-transparent transition-colors group-hover:bg-teal/60" />
+            </div>
             {/* 패널 내부 헤더 — 패널 상단 고정 */}
             <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-3">
               <span className="text-[13px] font-extrabold text-ink flex items-center gap-1.5">
@@ -1845,7 +1925,7 @@ function ApprovalDraftInner({
 
       {/* 해상도 작을 때 우측 결재선 Drawer (header z-[200]보다 높은 z-[300] 지정) */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-[300] flex justify-end bg-black/40 xl:hidden" onClick={() => setDrawerOpen(false)}>
+        <div className="fixed inset-0 z-[300] flex justify-end bg-black/40" onClick={() => setDrawerOpen(false)}>
           <div className="h-full w-full max-w-lg bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
               <span className="text-[15px] font-bold text-ink flex items-center gap-1.5">
