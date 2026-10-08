@@ -15,6 +15,8 @@ interface ReservationDetailModalProps {
   onClose: () => void;
   /** 취소 가능한 예약이면 부모가 넘긴다. 없으면 조회 전용. 마감 검증은 저장 계층이 한다. */
   onRequestCancel?: () => void;
+  /** 시간 변경 가능한 예약이면 부모가 넘긴다(취소와 같은 권한·마감). */
+  onRequestReschedule?: () => void;
   /** 승인 대기 예약의 승인권자에게만 부모가 넘긴다. 승인은 사유 없이 즉시 처리한다. */
   onApprove?: () => void;
   onRequestReject?: () => void;
@@ -33,7 +35,7 @@ function DetailItem({ label, children, wide = false }: { label: string; children
   );
 }
 
-export default function ReservationDetailModal({ reservation, resource, users, showPrivateDetails, onClose, onRequestCancel, onApprove, onRequestReject, approving = false, actionError = '' }: ReservationDetailModalProps) {
+export default function ReservationDetailModal({ reservation, resource, users, showPrivateDetails, onClose, onRequestCancel, onRequestReschedule, onApprove, onRequestReject, approving = false, actionError = '' }: ReservationDetailModalProps) {
   const requester = users.find((user) => user.id === reservation.requesterUserId);
   const approver = users.find((user) => user.id === reservation.approverUserId);
   const attendeeNames = reservation.attendeeUserIds
@@ -47,9 +49,12 @@ export default function ReservationDetailModal({ reservation, resource, users, s
       onClose={onClose}
       title={<span className="inline-flex flex-wrap items-center gap-2"><span>예약 상세</span><ReservationStatusBadge status={reservation.status} /></span>}
       width={Math.min(640, window.innerWidth - 32)}
-      footer={(onRequestCancel || onApprove || onRequestReject) && (
+      footer={(onRequestCancel || onRequestReschedule || onApprove || onRequestReject) && (
         <div className="flex w-full items-center justify-between gap-2">
-          {onRequestCancel ? <Button variant="danger" onClick={onRequestCancel}>예약 취소</Button> : <span />}
+          <div className="flex items-center gap-1.5">
+            {onRequestCancel && <Button variant="danger" onClick={onRequestCancel}>예약 취소</Button>}
+            {onRequestReschedule && <Button onClick={onRequestReschedule}>시간 변경</Button>}
+          </div>
           <div className="flex items-center gap-1.5">
             {onRequestReject && <Button variant="danger" disabled={approving} onClick={onRequestReject}>반려</Button>}
             {onApprove && <Button variant="primary" disabled={approving} onClick={onApprove}>{approving ? '처리 중…' : '승인'}</Button>}

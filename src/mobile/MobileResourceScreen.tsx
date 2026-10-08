@@ -15,7 +15,15 @@ import {
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useResources } from '@/features/resource/useResources';
 import { useReservations, useCreateReservation } from '@/features/resource/useReservations';
-import { formatResourceTime } from '@/modules/gw/resource/resourceDate';
+import { useDepartments } from '@/features/department/useDepartments';
+import { resolveDeptId } from '@/domain/department/engine';
+import type { Resource } from '@/domain/resource/schema';
+import {
+  combineLocalDateTime,
+  dateRangeIso,
+  defaultReservationWindow,
+  formatResourceTime,
+} from '@/modules/gw/resource/resourceDate';
 import MobileCommonHeader from './MobileCommonHeader';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -37,12 +45,19 @@ export default function MobileResourceScreen() {
   const [formStart, setFormStart] = useState('09:00');
   const [formEnd, setFormEnd] = useState('11:00');
   const [formPurpose, setFormPurpose] = useState('');
+  const [formAttendees, setFormAttendees] = useState(1);
   const [formError, setFormError] = useState('');
 
   const resourcesQuery = useResources();
   const resources = resourcesQuery.data ?? [];
+  // 점검·미사용 자원은 신청 단계에서 거부되므로 선택지에 올리지 않는다.
+  const bookableResources = useMemo(() => resources.filter((r) => r.status === 'ACTIVE'), [resources]);
+  const formResource = bookableResources.find((r) => r.id === formResourceId) ?? null;
+  const departments = useDepartments().data ?? [];
 
-  const reservationsQuery = useReservations({ from: selectedDateStr, to: selectedDateStr });
+  // 예약 시각은 ISO(UTC)로 저장되므로 날짜 문자열이 아니라 그날 0시~익일 0시(KST) 구간으로 거른다.
+  const dayRange = useMemo(() => dateRangeIso(selectedDateStr), [selectedDateStr]);
+  const reservationsQuery = useReservations(dayRange);
   const reservations = reservationsQuery.data ?? [];
 
   const createReservation = useCreateReservation();
@@ -88,10 +103,32 @@ export default function MobileResourceScreen() {
     }
   };
 
+  // 자원을 고르면 그 자원의 운영시간·슬롯 단위에 맞는 기본 시간대로 맞춘다.
+  const selectFormResource = (resource: Resource | undefined) => {
+    setFormResourceId(resource?.id ?? '');
+    setFormError('');
+    if (!resource) return;
+    const window = defaultReservationWindow(resource, selectedDateStr);
+    if (window.date === selectedDateStr) {
+      setFormStart(window.start);
+      setFormEnd(window.end);
+    } else {
+      // 선택한 날의 운영시간이 이미 끝났으면 운영 시작 시각을 기본값으로 둔다.
+      setFormStart(resource.availableFrom);
+      setFormEnd(defaultReservationWindow(resource, window.date).end);
+    }
+  };
+
+  const openForm = (resource: Resource | undefined) => {
+    selectFormResource(resource);
+    setFormAttendees(1);
+    setIsModalOpen(true);
+  };
+
   // 예약 신청 핸들러
   const handleCreateReservation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formResourceId) {
+    if (!formResource) {
       setFormError('자원을 선택해주세요.');
       return;
     }
@@ -113,14 +150,15 @@ export default function MobileResourceScreen() {
       await createReservation.mutateAsync({
         actor: user,
         request: {
-          resourceId: formResourceId,
-          requesterDeptId: user.dept || null,
+          resourceId: formResource.id,
+          requesterDeptId: resolveDeptId(departments, user.dept),
           title: formTitle.trim(),
           purpose: formPurpose.trim() || '회의 및 업무 목적',
-          startAt: `${selectedDateStr}T${formStart}:00.000Z`,
-          endAt: `${selectedDateStr}T${formEnd}:00.000Z`,
+          // 입력 시각은 KST 벽시계 — 'Z'를 붙이면 9시간 밀려 운영시간 밖으로 거부된다.
+          startAt: combineLocalDateTime(selectedDateStr, formStart),
+          endAt: combineLocalDateTime(selectedDateStr, formEnd),
           quantity: 1,
-          attendeeCount: 1,
+          attendeeCount: formResource.typeCode === 'ROOM' ? formAttendees : null,
           attendeeUserIds: [user.id],
         },
       });
@@ -129,8 +167,9 @@ export default function MobileResourceScreen() {
       setFormTitle('');
       setFormPurpose('');
       reservationsQuery.refetch();
-    } catch {
-      setFormError('예약 생성에 실패했습니다.');
+    } catch (caught) {
+      // 충돌·운영시간·과거 시각 등 도메인 사유를 그대로 보여줘야 사용자가 고칠 수 있다.
+      setFormError(caught instanceof Error ? caught.message : '예약 생성에 실패했습니다.');
     }
   };
 
@@ -142,11 +181,7 @@ export default function MobileResourceScreen() {
         rightAction={
           <button
             type="button"
-            onClick={() => {
-              setFormResourceId(resources[0]?.id || '');
-              setFormError('');
-              setIsModalOpen(true);
-            }}
+            onClick={() => openForm(bookableResources[0])}
             className="grid h-8 w-8 place-items-center rounded-xl bg-teal text-white shadow-2xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
             title="예약 신청"
           >
@@ -192,7 +227,7 @@ export default function MobileResourceScreen() {
         ) : (
           resources.map((res) => {
             const resReservations = reservations.filter(
-              (r) => r.resourceId === res.id && r.status !== 'CANCELLED' && r.status !== 'REJECTED'
+              (r) => r.resourceId === res.id && (r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'COMPLETED')
             );
 
             return (
@@ -213,17 +248,17 @@ export default function MobileResourceScreen() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormResourceId(res.id);
-                      setFormError('');
-                      setIsModalOpen(true);
-                    }}
-                    className="rounded-xl bg-teal-soft/20 px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors"
-                  >
-                    예약하기
-                  </button>
+                  {res.status === 'ACTIVE' ? (
+                    <button
+                      type="button"
+                      onClick={() => openForm(res)}
+                      className="rounded-xl bg-teal-soft/20 px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors"
+                    >
+                      예약하기
+                    </button>
+                  ) : (
+                    <span className="rounded-xl bg-panel-alt px-2.5 py-1 text-[11px] font-bold text-ink3">예약 불가</span>
+                  )}
                 </div>
 
                 {/* 해당 자원의 오늘 예약 내역 */}
@@ -287,10 +322,10 @@ export default function MobileResourceScreen() {
                 <label className="text-[11px] font-bold text-ink3 block mb-1">대상 자원</label>
                 <select
                   value={formResourceId}
-                  onChange={(e) => setFormResourceId(e.target.value)}
+                  onChange={(e) => selectFormResource(bookableResources.find((r) => r.id === e.target.value))}
                   className="h-9 w-full rounded-xl border border-border bg-panel px-3 text-[12.5px] text-ink outline-none focus:border-teal"
                 >
-                  {resources.map((r) => (
+                  {bookableResources.map((r) => (
                     <option key={r.id} value={r.id}>
                       [{getTypeName(r.typeCode)}] {r.name}
                     </option>
@@ -314,6 +349,7 @@ export default function MobileResourceScreen() {
                   <label className="text-[11px] font-bold text-ink3 block mb-1">시작 시각</label>
                   <input
                     type="time"
+                    step={(formResource?.slotMinutes ?? 30) * 60}
                     value={formStart}
                     onChange={(e) => setFormStart(e.target.value)}
                     className="h-9 w-full rounded-xl border border-border bg-panel px-2.5 text-[12px] text-ink outline-none focus:border-teal"
@@ -323,12 +359,33 @@ export default function MobileResourceScreen() {
                   <label className="text-[11px] font-bold text-ink3 block mb-1">종료 시각</label>
                   <input
                     type="time"
+                    step={(formResource?.slotMinutes ?? 30) * 60}
                     value={formEnd}
                     onChange={(e) => setFormEnd(e.target.value)}
                     className="h-9 w-full rounded-xl border border-border bg-panel px-2.5 text-[12px] text-ink outline-none focus:border-teal"
                   />
                 </div>
               </div>
+
+              {formResource && (
+                <p className="text-[10.5px] text-ink3">
+                  {formResource.approvalMode === 'INSTANT' ? '즉시 확정' : '담당자 승인 필요'} · {formResource.slotMinutes}분 단위 · 운영 {formResource.availableFrom}~{formResource.availableTo}
+                </p>
+              )}
+
+              {formResource?.typeCode === 'ROOM' && (
+                <div>
+                  <label className="text-[11px] font-bold text-ink3 block mb-1">참석 인원 (최대 {formResource.capacity}명)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={formResource.capacity ?? undefined}
+                    value={formAttendees}
+                    onChange={(e) => setFormAttendees(Number(e.target.value) || 1)}
+                    className="h-9 w-full rounded-xl border border-border bg-panel px-3 text-[12.5px] text-ink outline-none focus:border-teal"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-[11px] font-bold text-ink3 block mb-1">사용 목적 (선택)</label>
@@ -354,7 +411,7 @@ export default function MobileResourceScreen() {
                   disabled={createReservation.isPending}
                   className="flex-1 rounded-xl bg-teal py-2 text-[12px] font-bold text-white shadow-xs hover:opacity-90 disabled:opacity-50"
                 >
-                  {createReservation.isPending ? '신청 중…' : '예약 완료'}
+                  {createReservation.isPending ? '신청 중…' : formResource?.approvalMode === 'APPROVAL' ? '승인 요청' : '예약 확정'}
                 </button>
               </div>
             </form>

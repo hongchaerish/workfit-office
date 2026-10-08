@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, runTransaction, setDoc } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
 import { databases, APPWRITE_DATABASE_ID, Query, safeDocId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
@@ -26,6 +26,23 @@ export interface CrudBackend<T> {
   remove(id: string): Promise<void>;
 }
 
+/** 같은 ID 문서가 이미 있어 `insert` 가 거부됐다. 호출부는 새 ID로 다시 시도한다. */
+export class DocumentExistsError extends Error {
+  constructor(public readonly coll: string, public readonly id: string) {
+    super(`'${coll}/${id}' 문서가 이미 존재합니다.`);
+    this.name = 'DocumentExistsError';
+  }
+}
+
+export interface InsertableCrudBackend<T> extends CrudBackend<T> {
+  /**
+   * 신규 전용 저장. 같은 ID 문서가 있으면 덮어쓰지 않고 `DocumentExistsError` 를 던진다.
+   * `save` 는 update→create 순서라 채번이 겹치면 남의 문서를 조용히 덮는다 — 순번 ID를
+   * 클라이언트에서 만드는 컬렉션은 생성에 이것을 쓴다. 컬렉션이 없으면(404) 건너뛰지 않고 던진다.
+   */
+  insert(item: T): Promise<void>;
+}
+
 export interface CrudOpts<T> {
   coll: string;
   /** 안전 파싱: 성공 시 T, 실패 시 null(스킵). 불량 문서 1건이 전체를 깨지 않게. */
@@ -44,7 +61,7 @@ export interface CrudOpts<T> {
   firestoreDecode?: (raw: unknown) => unknown;
 }
 
-export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
+export function createCrudBackend<T>(opts: CrudOpts<T>): InsertableCrudBackend<T> {
   const { coll, parse, idOf, seed, jsonFields = [], stripFields = [], firestoreEncode, firestoreDecode } = opts;
 
   // ── Appwrite 직렬화(중첩 → JSON 문자열) ──
@@ -130,6 +147,15 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
           }
         }
       },
+      async insert(item: T) {
+        const id = safeDocId(idOf(item));
+        try {
+          await dbs().createDocument(APPWRITE_DATABASE_ID, coll, id, toRow(item));
+        } catch (e: any) {
+          if (e?.code === 409) throw new DocumentExistsError(coll, idOf(item));
+          throw e;
+        }
+      },
       async remove(id: string) {
         try {
           await dbs().deleteDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id));
@@ -163,6 +189,14 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
         const payload = firestoreEncode ? firestoreEncode(item) : (item as Record<string, unknown>);
         await setDoc(doc(db!, coll, idOf(item)), payload as Record<string, unknown>);
       },
+      async insert(item: T) {
+        const ref = doc(db!, coll, idOf(item));
+        const payload = firestoreEncode ? firestoreEncode(item) : (item as Record<string, unknown>);
+        await runTransaction(db!, async (tx) => {
+          if ((await tx.get(ref)).exists()) throw new DocumentExistsError(coll, idOf(item));
+          tx.set(ref, payload as Record<string, unknown>);
+        });
+      },
       async remove(id: string) {
         await deleteDoc(doc(db!, coll, id));
       },
@@ -182,6 +216,10 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): CrudBackend<T> {
       const i = mem.findIndex((m) => idOf(m) === idOf(item));
       if (i >= 0) mem[i] = item;
       else mem = [...mem, item];
+    },
+    async insert(item: T) {
+      if (mem.some((m) => idOf(m) === idOf(item))) throw new DocumentExistsError(coll, idOf(item));
+      mem = [...mem, item];
     },
     async remove(id: string) {
       mem = mem.filter((m) => idOf(m) !== id);

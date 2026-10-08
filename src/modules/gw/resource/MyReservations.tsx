@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Reservation, ReservationStatus } from '@/domain/reservation/schema';
+import { RESERVATION_CLOSED_STATUSES, type Reservation, type ReservationStatus } from '@/domain/reservation/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
-import { useCancelReservation } from '@/features/resource/useReservations';
+import { useCancelReservation, useRescheduleReservation } from '@/features/resource/useReservations';
 import { ReservationStatusBadge } from './ResourceBadges';
 import ReservationReasonDialog from './ReservationReasonDialog';
+import ReservationRescheduleDialog from './ReservationRescheduleDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
 
@@ -20,13 +21,17 @@ type Filter = 'UPCOMING' | 'PENDING' | 'HISTORY' | 'ALL';
 
 const filterForReservation = (reservation?: Reservation): Filter => reservation?.status === 'PENDING'
   ? 'PENDING'
-  : reservation && ['REJECTED', 'CANCELLED', 'COMPLETED'].includes(reservation.status) ? 'HISTORY' : 'UPCOMING';
+  : reservation && RESERVATION_CLOSED_STATUSES.includes(reservation.status) ? 'HISTORY' : 'UPCOMING';
 
 export default function MyReservations({ actor, reservations, resources, selectedReservationId, onSelectReservation }: MyReservationsProps) {
   const selectedReservation = reservations.find((row) => row.id === selectedReservationId && row.requesterUserId === actor.id);
   const [filter, setFilter] = useState<Filter>(() => filterForReservation(selectedReservation));
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Reservation | null>(null);
+  const [notice, setNotice] = useState('');
   const cancelReservation = useCancelReservation();
+  const rescheduleReservation = useRescheduleReservation();
+  const rescheduleResource = rescheduleTarget ? resources.find((item) => item.id === rescheduleTarget.resourceId) : undefined;
   const mine = useMemo(() => reservations.filter((row) => row.requesterUserId === actor.id), [actor.id, reservations]);
 
   useEffect(() => {
@@ -36,14 +41,14 @@ export default function MyReservations({ actor, reservations, resources, selecte
   const rows = useMemo(() => mine.filter((row) => {
     if (filter === 'UPCOMING') return row.status === 'CONFIRMED';
     if (filter === 'PENDING') return row.status === 'PENDING';
-    if (filter === 'HISTORY') return ['REJECTED', 'CANCELLED', 'COMPLETED'].includes(row.status);
+    if (filter === 'HISTORY') return RESERVATION_CLOSED_STATUSES.includes(row.status);
     return true;
   }).sort((a, b) => b.startAt.localeCompare(a.startAt)), [filter, mine]);
 
   const counts: Record<Filter, number> = {
     UPCOMING: mine.filter((row) => row.status === 'CONFIRMED').length,
     PENDING: mine.filter((row) => row.status === 'PENDING').length,
-    HISTORY: mine.filter((row) => ['REJECTED', 'CANCELLED', 'COMPLETED'].includes(row.status)).length,
+    HISTORY: mine.filter((row) => RESERVATION_CLOSED_STATUSES.includes(row.status)).length,
     ALL: mine.length,
   };
 
@@ -58,6 +63,8 @@ export default function MyReservations({ actor, reservations, resources, selecte
           </button>
         ))}
       </div>
+
+      {notice && <div className="rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2.5 text-[11px] font-semibold text-teal">{notice}</div>}
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">해당 예약이 없습니다.</div>
@@ -86,6 +93,9 @@ export default function MyReservations({ actor, reservations, resources, selecte
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="text-[9px] font-mono text-ink3">{row.id}</span>
                     <Button onClick={() => onSelectReservation(row)} size="sm">상세</Button>
+                    {cancellable && resource && (
+                      <Button onClick={() => { setNotice(''); setRescheduleTarget(row); }} size="sm">시간 변경</Button>
+                    )}
                     {cancellable && (
                       <Button disabled={cancelReservation.isPending} onClick={() => setCancelTarget(row)} variant="danger" size="sm">예약 취소</Button>
                     )}
@@ -97,6 +107,18 @@ export default function MyReservations({ actor, reservations, resources, selecte
         </div>
       )}
 
+      {rescheduleTarget && rescheduleResource && (
+        <ReservationRescheduleDialog
+          reservation={rescheduleTarget}
+          resource={rescheduleResource}
+          onClose={() => setRescheduleTarget(null)}
+          onSubmit={async (next) => {
+            const updated = await rescheduleReservation.mutateAsync({ actor, id: rescheduleTarget.id, next });
+            setRescheduleTarget(null);
+            setNotice(updated.status === 'PENDING' ? '예약 시간을 변경했습니다. 담당자 재승인을 기다립니다.' : '예약 시간을 변경했습니다.');
+          }}
+        />
+      )}
       {cancelTarget && (
         <ReservationReasonDialog
           title="예약 취소"

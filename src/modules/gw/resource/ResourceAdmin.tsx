@@ -3,8 +3,9 @@ import type { Department } from '@/domain/department/schema';
 import type { Resource, ResourceDraft, ResourceType, ResourceBookingMode, ResourceApprovalMode, ResourceStatus } from '@/domain/resource/schema';
 import { RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
-import { canManageResources } from '@/domain/reservation/engine';
 import { useSaveResource, useDeleteResource } from '@/features/resource/useResources';
+import { useCancelUpcomingByResource } from '@/features/resource/useReservations';
+import { reservationRepo } from '@/data/reservation/reservation.repo';
 import { usePermission } from '@/features/auth/usePermission';
 import { Modal } from '@/shared/ui/Modal';
 import { ResourceStatusBadge } from './ResourceBadges';
@@ -37,24 +38,54 @@ function draftFrom(resource?: Resource): ResourceDraft {
   };
 }
 
-function ResourceEditor({ actor, resource, users, departments, onClose }: { actor: User; resource?: Resource; users: User[]; departments: Department[]; onClose: () => void }) {
+function ResourceEditor({ actor, canManage, resource, users, departments, onClose }: { actor: User; canManage: boolean; resource?: Resource; users: User[]; departments: Department[]; onClose: () => void }) {
   const [draft, setDraft] = useState<ResourceDraft>(() => draftFrom(resource));
   const [error, setError] = useState('');
+  /** 사용 중 → 점검·미사용 전환 시 남은 예정 예약 수. 0보다 크면 처리 방법을 묻는다. */
+  const [affectedCount, setAffectedCount] = useState(0);
+  const [checking, setChecking] = useState(false);
   const saveResource = useSaveResource();
   const deleteResource = useDeleteResource();
+  const cancelUpcoming = useCancelUpcomingByResource();
+  const suspending = Boolean(resource && resource.status === 'ACTIVE' && draft.status !== 'ACTIVE');
   const set = <K extends keyof ResourceDraft>(key: K, value: ResourceDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const inputClass = 'h-9 w-full rounded-lg border border-border bg-panel px-3 text-[11px] text-ink outline-none focus:border-teal';
   const labelClass = 'mb-1.5 block text-[10px] font-bold text-ink2';
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async (cancelReservations: boolean) => {
     setError('');
     try {
-      await saveResource.mutateAsync({ actor, draft, id: resource?.id });
+      await saveResource.mutateAsync({ actor, draft, id: resource?.id, canManage });
+      if (cancelReservations && resource) {
+        const label = draft.status === 'MAINTENANCE' ? '점검' : '미사용';
+        await cancelUpcoming.mutateAsync({ actor, resourceId: resource.id, reason: `자원 ${label} 전환으로 관리자 일괄 취소`, canManage });
+      }
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '자원 저장에 실패했습니다.');
     }
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    // 사용 중 자원을 점검·미사용으로 돌리면 이미 잡힌 예약을 어떻게 할지 먼저 묻는다.
+    if (suspending && resource && affectedCount === 0) {
+      setChecking(true);
+      try {
+        const upcoming = await reservationRepo.listUpcomingByResource(resource.id);
+        if (upcoming.length > 0) {
+          setAffectedCount(upcoming.length);
+          return;
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : '예정 예약을 확인하지 못했습니다.');
+        return;
+      } finally {
+        setChecking(false);
+      }
+    }
+    await save(false);
   };
 
   const handleDelete = async () => {
@@ -62,7 +93,7 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
     if (confirm(`정말 [${resource.name}] 자원을 완전히 삭제하시겠습니까?`)) {
       setError('');
       try {
-        await deleteResource.mutateAsync({ actor, id: resource.id });
+        await deleteResource.mutateAsync({ actor, id: resource.id, canManage });
         onClose();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : '자원 삭제에 실패했습니다.');
@@ -85,7 +116,7 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
         <label><span className={labelClass}>승인 방식</span><select value={draft.approvalMode} onChange={(event) => set('approvalMode', event.target.value as ResourceApprovalMode)} className={inputClass}><option value="INSTANT">즉시 확정</option><option value="APPROVAL">담당자 승인</option></select></label>
         <label><span className={labelClass}>담당자 {draft.approvalMode === 'APPROVAL' && '(필수)'}</span><select required={draft.approvalMode === 'APPROVAL'} value={draft.managerUserId ?? ''} onChange={(event) => set('managerUserId', event.target.value || null)} className={inputClass}><option value="">미지정</option>{users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name} · {user.dept}</option>)}</select></label>
         <label><span className={labelClass}>소유 부서</span><select value={draft.ownerDeptId ?? ''} onChange={(event) => set('ownerDeptId', event.target.value || null)} className={inputClass}><option value="">미지정</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-        <label><span className={labelClass}>상태</span><select value={draft.status} onChange={(event) => set('status', event.target.value as ResourceStatus)} className={inputClass}>{Object.entries(RESOURCE_STATUS_LABELS).map(([status, label]) => <option key={status} value={status}>{label}</option>)}</select></label>
+        <label><span className={labelClass}>상태</span><select value={draft.status} onChange={(event) => { set('status', event.target.value as ResourceStatus); setAffectedCount(0); }} className={inputClass}>{Object.entries(RESOURCE_STATUS_LABELS).map(([status, label]) => <option key={status} value={status}>{label}</option>)}</select></label>
       </div>
 
       <div>
@@ -104,6 +135,19 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
       </div>
 
       {error && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+      {affectedCount > 0 && suspending && (
+        <div className="space-y-2.5 rounded-lg border border-amber/30 bg-amber-soft/25 px-3 py-3 text-[11px] text-ink2">
+          <div className="font-bold text-amber">예정된 예약 {affectedCount}건이 있습니다.</div>
+          <div>자원을 &lsquo;{RESOURCE_STATUS_LABELS[draft.status]}&rsquo;(으)로 바꾸면 새 예약은 막히지만, 이미 잡힌 예약은 그대로 남습니다. 함께 취소할까요?</div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button onClick={() => setAffectedCount(0)}>돌아가기</Button>
+            <Button disabled={saveResource.isPending || cancelUpcoming.isPending} onClick={() => void save(false)}>예약은 유지</Button>
+            <Button disabled={saveResource.isPending || cancelUpcoming.isPending} onClick={() => void save(true)} variant="danger">
+              {cancelUpcoming.isPending ? '취소 중…' : `${affectedCount}건 함께 취소`}
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between border-t border-border pt-4">
         <div>
           {resource && (
@@ -119,8 +163,8 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
         </div>
         <div className="flex gap-2">
           <Button onClick={onClose}>취소</Button>
-          <Button type="submit" disabled={saveResource.isPending} variant="primary">
-            {saveResource.isPending ? '저장 중…' : '저장'}
+          <Button type="submit" disabled={saveResource.isPending || checking || affectedCount > 0} variant="primary">
+            {saveResource.isPending || checking ? '저장 중…' : '저장'}
           </Button>
         </div>
       </div>
@@ -131,8 +175,9 @@ function ResourceEditor({ actor, resource, users, departments, onClose }: { acto
 export default function ResourceAdmin({ actor, resources, users, departments }: ResourceAdminProps) {
   const { isAdmin, canAction } = usePermission();
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
+  const [listError, setListError] = useState('');
   const deleteResource = useDeleteResource();
-  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update') || (actor ? canManageResources(actor, isAdmin) : false);
+  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update');
 
   if (!canManage) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
 
@@ -145,6 +190,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
         </div>
         <Button onClick={() => setEditing('new')} variant="primary">+ 자원 추가</Button>
       </div>
+      {listError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-500">{listError}</div>}
       <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
         <table className="min-w-[900px] w-full border-collapse text-left text-[11px]">
           <thead>
@@ -181,8 +227,12 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
                   <Button onClick={() => setEditing(resource)} size="sm">수정</Button>
                   <Button
                     onClick={async () => {
-                      if (confirm(`정말 [${resource.name}] 자원을 완전히 삭제하시겠습니까?`)) {
-                        await deleteResource.mutateAsync({ actor, id: resource.id });
+                      if (!confirm(`정말 [${resource.name}] 자원을 완전히 삭제하시겠습니까?`)) return;
+                      setListError('');
+                      try {
+                        await deleteResource.mutateAsync({ actor, id: resource.id, canManage });
+                      } catch (caught) {
+                        setListError(caught instanceof Error ? caught.message : '자원 삭제에 실패했습니다.');
                       }
                     }}
                     size="sm"
@@ -197,7 +247,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
         </table>
       </div>
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? '자원 추가' : '자원 수정'} width={Math.min(720, window.innerWidth - 32)}>
-        {editing && <ResourceEditor key={editing === 'new' ? 'new' : editing.id} actor={actor} resource={editing === 'new' ? undefined : editing} users={users} departments={departments} onClose={() => setEditing(null)} />}
+        {editing && <ResourceEditor key={editing === 'new' ? 'new' : editing.id} actor={actor} canManage={canManage} resource={editing === 'new' ? undefined : editing} users={users} departments={departments} onClose={() => setEditing(null)} />}
       </Modal>
     </div>
   );
