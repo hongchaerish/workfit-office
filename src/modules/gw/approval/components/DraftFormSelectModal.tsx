@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -172,12 +172,28 @@ export function DraftFormSelectModal({
     return f ? `${f.name} 서식` : '서식 목록';
   }, [selectedFolderId, search, folders]);
 
+  const pressedOnBackdropRef = useRef(false);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+    // 바깥(어두운 배경)을 누르면 닫는다. 모달 안에서 드래그하다 바깥에서 놓은 경우는 닫지 않도록
+    // 누르기 시작한 곳도 바깥이었는지 함께 확인한다.
+    <div
+      className="@container fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+      onMouseDown={(e) => { pressedOnBackdropRef.current = e.target === e.currentTarget; }}
+      onClick={(e) => {
+        if (pressedOnBackdropRef.current && e.target === e.currentTarget) onClose();
+        pressedOnBackdropRef.current = false;
+      }}
+    >
+      {/* 높이는 vh가 아니라 오버레이 기준(h-full)으로 잡는다 — body zoom(화면 배율)이 vh 값에 한 번 더 곱해져
+          모달이 화면보다 커지고 위쪽 닫기 버튼이 잘리던 문제를 막는다.
+          너비는 카드(210px)가 몇 장 들어가는지에 맞춰 2·3·4장 폭 중 하나로 정해 빈 공간이 남지 않게 한다.
+          (컨테이너 쿼리라 화면 배율이 반영된 실제 폭 기준) 폭 = 분류함 210 + 경계 1 + 좌우 여백 40 + 스크롤바 여유 12
+          + 카드 n×210 + 간격 (n-1)×12 → 2장 695 / 3장 917 / 4장 1139 */}
       <div
-        className="flex h-[82vh] max-h-[720px] w-full max-w-5xl xl:max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
+        className="flex h-full max-h-[600px] w-[695px] max-w-full @min-[917px]:w-[917px] @min-[1139px]:w-[1139px] flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 상단 헤더 */}
@@ -334,7 +350,7 @@ export function DraftFormSelectModal({
             })}
           </div>
 
-          {/* 우측: 서식 카드 그리드 (3~4열) */}
+          {/* 우측: 서식 카드 그리드 — 카드 폭 210px 고정, 열 수는 모달 폭(위 컨테이너 쿼리)에 따라 2~4열 */}
           <div className="p-5 overflow-y-auto bg-panel">
             {/* 1. 상단 1행: 최근 사용 서식 섹션 (동일한 정규 서식 카드 1행 최대 4개 노출 + 가로 구분선) */}
             {recentFormsList.length > 0 && (
@@ -349,7 +365,7 @@ export function DraftFormSelectModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fill,210px)] gap-3">
                   {recentFormsList.map((form) => (
                     <FormCard
                       key={`recent-${form.id}`}
@@ -386,7 +402,7 @@ export function DraftFormSelectModal({
                 {search && <p className="text-xs mt-1">검색어를 다시 확인해주세요.</p>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,210px)] gap-3">
                 {filteredForms.map((form) => (
                   <FormCard
                     key={form.id}
@@ -458,7 +474,7 @@ function FormCard({
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-1">
-                <h3 className="font-extrabold text-[13px] text-ink truncate group-hover:text-teal transition-colors">
+                <h3 className="font-extrabold text-[13px] leading-snug text-ink line-clamp-2 break-keep group-hover:text-teal transition-colors" title={form.name}>
                   {form.name}
                 </h3>
                 {form.system && (

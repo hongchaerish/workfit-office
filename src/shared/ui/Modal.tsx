@@ -13,7 +13,8 @@ interface ModalProps {
 
 /**
  * 공통 모달 — 디자인 토큰 패널(헤더/본문/푸터) 기준.
- * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이 88vh.
+ * 오버레이 클릭·ESC 로 닫힘. 본문은 스크롤, 최대 높이는 화면의 88%.
+ * (body zoom 배율이 vh 에 한 번 더 곱해지므로 --font-scale 로 나눠 실제 화면 기준으로 맞춘다)
  */
 export function Modal({ open, onClose, title, footer, width = 480, children }: ModalProps) {
   useEffect(() => {
@@ -36,7 +37,7 @@ export function Modal({ open, onClose, title, footer, width = 480, children }: M
         role="dialog"
         aria-modal="true"
         style={{ width }}
-        className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-[0_20px_60px_rgba(16,24,48,0.32)]"
+        className="flex max-h-[calc(88vh/var(--font-scale,1))] w-full flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-[0_20px_60px_rgba(16,24,48,0.32)]"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {title && (
