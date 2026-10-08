@@ -227,7 +227,7 @@ export default function MobileResourceScreen() {
         ) : (
           resources.map((res) => {
             const resReservations = reservations.filter(
-              (r) => r.resourceId === res.id && r.status !== 'CANCELLED' && r.status !== 'REJECTED'
+              (r) => r.resourceId === res.id && (r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'COMPLETED')
             );
 
             return (

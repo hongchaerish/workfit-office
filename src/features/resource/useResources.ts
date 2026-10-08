@@ -12,7 +12,7 @@ export function useResources(filter?: ResourceFilter) {
 export function useSaveResource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ actor, draft, id }: { actor: User; draft: ResourceDraft; id?: string }) => resourceRepo.save(actor, draft, id),
+    mutationFn: ({ actor, draft, id, canManage }: { actor: User; draft: ResourceDraft; id?: string; canManage: boolean }) => resourceRepo.save(actor, draft, id, canManage),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }),
   });
 }
@@ -20,7 +20,7 @@ export function useSaveResource() {
 export function useDeleteResource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ actor, id }: { actor: User; id: string }) => resourceRepo.delete(actor, id),
+    mutationFn: ({ actor, id, canManage }: { actor: User; id: string; canManage: boolean }) => resourceRepo.delete(actor, id, canManage),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }),
   });
 }

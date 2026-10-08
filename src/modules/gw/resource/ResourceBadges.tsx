@@ -9,6 +9,7 @@ const RESERVATION_TONE: Record<ReservationStatus, string> = {
   REJECTED: 'bg-red-500/12 text-red-500',
   CANCELLED: 'bg-ink3/12 text-ink3',
   COMPLETED: 'bg-blue/12 text-blue',
+  EXPIRED: 'bg-ink3/12 text-ink3',
 };
 
 const RESOURCE_TONE: Record<ResourceStatus, string> = {

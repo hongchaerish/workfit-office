@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import { RESOURCE_APPROVAL_MODES } from '@/domain/resource/schema';
 
-export const RESERVATION_STATUSES = ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED'] as const;
+/**
+ * `COMPLETED`·`EXPIRED` 는 **읽을 때 파생**하는 상태라 저장하지 않는다(Appwrite enum 에도 없다).
+ * - COMPLETED: 종료 시각이 지난 확정 예약
+ * - EXPIRED: 승인되지 못한 채 시작 시각이 지난 대기 예약
+ */
+export const RESERVATION_STATUSES = ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED', 'EXPIRED'] as const;
+
+/** 종결 상태 — 더 이상 시간을 점유하지 않고 처리할 것도 없다. 내 예약의 "지난 예약" 묶음. */
+export const RESERVATION_CLOSED_STATUSES: readonly ReservationStatus[] = ['REJECTED', 'CANCELLED', 'COMPLETED', 'EXPIRED'];
 
 export const reservationSchema = z.object({
   id: z.string().min(1),
@@ -59,4 +67,5 @@ export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
   REJECTED: '반려',
   CANCELLED: '취소',
   COMPLETED: '이용 완료',
+  EXPIRED: '승인 기한 만료',
 };

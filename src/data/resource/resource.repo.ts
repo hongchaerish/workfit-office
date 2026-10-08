@@ -71,8 +71,9 @@ export const resourceRepo = {
     return found ? clone(found) : null;
   },
 
-  async save(actor: User, draft: ResourceDraft, id?: string): Promise<Resource> {
-    if (!canManageResources(actor)) {
+  /** `canManage`: 관리자 또는 `S_GW_RESOURCE.update` 권한 — 호출부가 판정해 넘긴다. */
+  async save(actor: User, draft: ResourceDraft, id?: string, canManage = false): Promise<Resource> {
+    if (!canManageResources(actor, canManage)) {
       throw new ReservationError('FORBIDDEN', '관리자만 자원을 등록하거나 수정할 수 있습니다.');
     }
     // 코드 중복·채번·기존 문서 조회가 모두 같은 스냅샷을 봐야 하므로 한 번만 읽는다.
@@ -98,9 +99,22 @@ export const resourceRepo = {
     return clone(valid);
   },
 
-  async delete(actor: User, id: string): Promise<void> {
-    if (!canManageResources(actor)) {
+  /**
+   * 자원 삭제. 예정 예약(대기·확정)이 남아 있으면 막는다 — 지우면 그 예약은 자원을 찾지 못해
+   * 승인·반려·취소가 모두 불가능한 고아가 된다. 지난 예약은 자원명 스냅샷이 있어 남아도 된다.
+   */
+  async delete(actor: User, id: string, canManage = false): Promise<void> {
+    if (!canManageResources(actor, canManage)) {
       throw new ReservationError('FORBIDDEN', '관리자만 자원을 삭제할 수 있습니다.');
+    }
+    // reservation.repo 가 이 모듈을 import 하므로 순환을 피해 호출 시점에 불러온다.
+    const { reservationRepo } = await import('@/data/reservation/reservation.repo');
+    const upcoming = await reservationRepo.listUpcomingByResource(id);
+    if (upcoming.length > 0) {
+      throw new ReservationError(
+        'INVALID_STATUS',
+        `예정된 예약 ${upcoming.length}건이 있어 삭제할 수 없습니다. 자원을 '미사용'으로 바꾸거나 예약을 먼저 정리하세요.`,
+      );
     }
     await backend.remove(id);
   },

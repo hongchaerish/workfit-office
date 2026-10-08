@@ -152,11 +152,13 @@ export function assertNoConflict(
 }
 
 const ALLOWED_TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
-  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-  CONFIRMED: ['CANCELLED', 'COMPLETED'],
+  PENDING: ['CONFIRMED', 'REJECTED', 'CANCELLED', 'EXPIRED'],
+  // CONFIRMED → PENDING: 승인형 자원의 시간을 기존 범위 밖으로 바꾸면 재승인을 받는다.
+  CONFIRMED: ['CANCELLED', 'COMPLETED', 'PENDING'],
   REJECTED: [],
   CANCELLED: [],
   COMPLETED: [],
+  EXPIRED: [],
 };
 
 export function assertReservationTransition(from: ReservationStatus, to: ReservationStatus): void {
@@ -165,8 +167,9 @@ export function assertReservationTransition(from: ReservationStatus, to: Reserva
   }
 }
 
-export function canManageResources(actor: User, isAdmin = true): boolean {
-  return actor.status === '사용' && isAdmin;
+/** 자원 등록·수정·삭제. `canManage` 는 호출부가 관리자 또는 `S_GW_RESOURCE.update` 권한으로 판정해 넘긴다. */
+export function canManageResources(actor: User, canManage = false): boolean {
+  return actor.status === '사용' && canManage;
 }
 
 export function canApproveResource(actor: User, resource: Resource, isAdmin = false): boolean {
@@ -195,8 +198,57 @@ export function assertCancellationAllowed(actor: User, resource: Resource, row: 
   }
 }
 
-export function deriveCompleted(row: Reservation, now = new Date()): Reservation {
-  if (row.status !== 'CONFIRMED' || new Date(row.endAt).getTime() > now.getTime()) return row;
-  assertReservationTransition(row.status, 'COMPLETED');
-  return { ...row, status: 'COMPLETED', version: row.version + 1, updatedAt: now.toISOString() };
+/**
+ * 시간 경과로 바뀌는 상태를 읽을 때 파생한다(저장하지 않는다).
+ * - 확정 예약의 종료 시각이 지나면 COMPLETED
+ * - 대기 예약의 시작 시각이 지나면 EXPIRED — 승인·반려 모두 과거 시각이라 막히므로
+ *   대기로 두면 승인 화면에 영원히 남는다.
+ */
+export function deriveLifecycle(row: Reservation, now = new Date()): Reservation {
+  if (row.status === 'CONFIRMED' && new Date(row.endAt).getTime() <= now.getTime()) {
+    return { ...row, status: 'COMPLETED' };
+  }
+  if (row.status === 'PENDING' && new Date(row.startAt).getTime() <= now.getTime()) {
+    return { ...row, status: 'EXPIRED' };
+  }
+  return row;
+}
+
+export interface RescheduleInput {
+  startAt: string;
+  endAt: string;
+}
+
+export interface ReschedulePlan {
+  status: Extract<ReservationStatus, 'PENDING' | 'CONFIRMED'>;
+  /** 승인을 그대로 유지하는가 — false 면 승인 이력을 지우고 담당자 재승인을 받는다. */
+  keepsApproval: boolean;
+}
+
+/**
+ * 예약 시간 변경 후 상태를 정한다.
+ *
+ * - 즉시확정 자원: 항상 CONFIRMED.
+ * - 승인형 자원: 시간을 바꾸면 재승인(PENDING). 단, 이미 확정된 예약을 **기존 시간 범위 안으로**
+ *   줄이는 변경은 점유가 늘지 않으므로 승인을 유지한다.
+ */
+export function planReschedule(resource: Resource, row: Reservation, next: RescheduleInput): ReschedulePlan {
+  if (resource.approvalMode === 'INSTANT') return { status: 'CONFIRMED', keepsApproval: row.status === 'CONFIRMED' };
+  const within = new Date(next.startAt).getTime() >= new Date(row.startAt).getTime()
+    && new Date(next.endAt).getTime() <= new Date(row.endAt).getTime();
+  if (row.status === 'CONFIRMED' && within) return { status: 'CONFIRMED', keepsApproval: true };
+  return { status: 'PENDING', keepsApproval: false };
+}
+
+/** 시간 변경 권한 — 취소와 같다(본인은 마감 전, 관리자는 언제든). */
+export function assertRescheduleAllowed(actor: User, resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
+  if (!canCancelReservation(actor, row, isAdmin)) {
+    throw new ReservationError('FORBIDDEN', '본인 예약만 변경할 수 있습니다.');
+  }
+  if (row.status !== 'PENDING' && row.status !== 'CONFIRMED') {
+    throw new ReservationError('INVALID_STATUS', '현재 상태에서는 예약을 변경할 수 없습니다.');
+  }
+  if (!isAdmin && new Date(row.startAt).getTime() - now.getTime() < resource.cancelDeadlineMinutes * 60_000) {
+    throw new ReservationError('CANCEL_DEADLINE', `예약 시작 ${resource.cancelDeadlineMinutes}분 전까지만 변경할 수 있습니다.`);
+  }
 }

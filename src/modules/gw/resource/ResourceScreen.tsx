@@ -4,8 +4,8 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useUsers } from '@/features/user/useUsers';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useResources } from '@/features/resource/useResources';
-import { useApproveReservation, useCancelReservation, useRejectReservation, useReservations } from '@/features/resource/useReservations';
-import { canApproveResource, canCancelReservation, canManageResources } from '@/domain/reservation/engine';
+import { useApproveReservation, useCancelReservation, useRejectReservation, useRescheduleReservation, useReservations } from '@/features/resource/useReservations';
+import { canApproveResource, canCancelReservation } from '@/domain/reservation/engine';
 import type { Resource } from '@/domain/resource/schema';
 import type { Reservation } from '@/domain/reservation/schema';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
@@ -17,6 +17,7 @@ import ReservationApprovals from './ReservationApprovals';
 import ResourceAdmin from './ResourceAdmin';
 import ReservationDetailModal from './ReservationDetailModal';
 import ReservationReasonDialog from './ReservationReasonDialog';
+import ReservationRescheduleDialog from './ReservationRescheduleDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
 import { usePermission } from '@/features/auth/usePermission';
@@ -52,11 +53,13 @@ function LocalResourceScreen() {
   /** 상세 모달에서 연 취소·반려 사유 모달의 대상. 목록의 취소·반려는 각 탭 컴포넌트가 따로 연다. */
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Reservation | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Reservation | null>(null);
   /** 상세의 승인은 사유 모달이 없어 실패를 여기(붉은 배너)로 알린다. */
   const [actionError, setActionError] = useState('');
   const cancelReservation = useCancelReservation();
   const approveReservation = useApproveReservation();
   const rejectReservation = useRejectReservation();
+  const rescheduleReservation = useRescheduleReservation();
   const resourcesQuery = useResources();
   const reservationsQuery = useReservations();
   const usersQuery = useUsers();
@@ -70,7 +73,7 @@ function LocalResourceScreen() {
   const requestedTab = searchParams.get('tab') as TabId | null;
   const tab: TabId = requestedTab && requestedTab in TAB_LABELS ? requestedTab : 'overview';
 
-  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update') || (actor ? canManageResources(actor) : false);
+  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update');
   const canApprove = useMemo(() => isAdmin || (actor ? resources.some((resource) => canApproveResource(actor, resource)) : false), [isAdmin, actor, resources]);
   const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove).filter((item) => item !== 'admin' || canManage);
   const loading = resourcesQuery.isLoading || reservationsQuery.isLoading || usersQuery.isLoading || departmentsQuery.isLoading;
@@ -201,6 +204,11 @@ function LocalResourceScreen() {
               ? () => setCancelTarget(selectedReservation)
               : undefined
           }
+          onRequestReschedule={
+            ['PENDING', 'CONFIRMED'].includes(selectedReservation.status) && selectedResource && canCancelReservation(actor, selectedReservation, isAdmin)
+              ? () => setRescheduleTarget(selectedReservation)
+              : undefined
+          }
           onApprove={
             selectedReservation.status === 'PENDING' && selectedResource && canApproveResource(actor, selectedResource, isAdmin)
               ? () => void approveSelected(selectedReservation)
@@ -227,6 +235,18 @@ function LocalResourceScreen() {
             // 상세 모달은 열어 둔다 — 취소 상태와 처리 이력이 바로 보인다.
             setCancelTarget(null);
             setNotice('예약을 취소했습니다.');
+          }}
+        />
+      )}
+      {rescheduleTarget && selectedResource && rescheduleTarget.resourceId === selectedResource.id && (
+        <ReservationRescheduleDialog
+          reservation={rescheduleTarget}
+          resource={selectedResource}
+          onClose={() => setRescheduleTarget(null)}
+          onSubmit={async (next) => {
+            const updated = await rescheduleReservation.mutateAsync({ actor, id: rescheduleTarget.id, next, isAdmin });
+            setRescheduleTarget(null);
+            setNotice(updated.status === 'PENDING' ? '예약 시간을 변경했습니다. 담당자 재승인을 기다립니다.' : '예약 시간을 변경했습니다.');
           }}
         />
       )}

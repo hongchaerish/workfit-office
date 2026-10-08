@@ -133,11 +133,69 @@ test('신청 후 자원 설정이 바뀌어도 대기 예약을 승인할 수 �
   assert.ok(original);
   const { id, createdBy: _cb, createdAt: _ca, updatedBy: _ub, updatedAt: _ua, ...draft } = original;
   // 최대 이용시간을 신청 시간(120분)보다 짧게 줄인다 — 신청 규칙 재검증이면 DURATION 으로 막혔다.
-  await resourceRepo.save(vehicleManager, { ...draft, maxDurationMinutes: 60 }, id);
+  await resourceRepo.save(vehicleManager, { ...draft, maxDurationMinutes: 60 }, id, true);
   try {
     const approved = await reservationRepo.approve(vehicleManager, pending.id);
     assert.equal(approved.status, 'CONFIRMED');
   } finally {
-    await resourceRepo.save(vehicleManager, draft, id);
+    await resourceRepo.save(vehicleManager, draft, id, true);
   }
+});
+
+test('승인형 자원: 확정 예약을 기존 범위 안으로 줄이면 승인 유지, 밖으로 옮기면 재승인', async () => {
+  const pending = await reservationRepo.create(requester, request('RES-0003', futureWindow(24, '09:00', '12:00'), { title: '시간 변경' }));
+  const confirmed = await reservationRepo.approve(vehicleManager, pending.id);
+  assert.equal(confirmed.status, 'CONFIRMED');
+
+  const shrunk = await reservationRepo.reschedule(requester, confirmed.id, { startAt: futureWindow(24, '10:00', '11:00')[0], endAt: futureWindow(24, '10:00', '11:00')[1] });
+  assert.equal(shrunk.status, 'CONFIRMED');
+  assert.equal(shrunk.approvedAt, confirmed.approvedAt);
+
+  const [startAt, endAt] = futureWindow(24, '13:00', '14:00');
+  const moved = await reservationRepo.reschedule(requester, confirmed.id, { startAt, endAt });
+  assert.equal(moved.status, 'PENDING');
+  assert.equal(moved.approvedAt, null);
+  assert.equal(moved.approverUserId, 'U009');
+
+  await assert.rejects(
+    () => reservationRepo.reschedule(otherRequester, moved.id, { startAt: futureWindow(24, '15:00', '16:00')[0], endAt: futureWindow(24, '15:00', '16:00')[1] }),
+    (error) => error instanceof ReservationError && error.code === 'FORBIDDEN',
+  );
+});
+
+test('즉시확정 자원은 시간을 바꿔도 확정이고, 다른 예약과 겹치면 막는다', async () => {
+  const first = await reservationRepo.create(requester, request('RES-0002', futureWindow(25, '09:00', '10:00'), { attendeeCount: 2, title: '변경 대상' }));
+  await reservationRepo.create(otherRequester, request('RES-0002', futureWindow(25, '11:00', '12:00'), { attendeeCount: 2, title: '다른 예약' }));
+
+  const [startAt, endAt] = futureWindow(25, '14:00', '15:00');
+  const moved = await reservationRepo.reschedule(requester, first.id, { startAt, endAt });
+  assert.equal(moved.status, 'CONFIRMED');
+
+  const [clashStart, clashEnd] = futureWindow(25, '11:00', '12:00');
+  await assert.rejects(
+    () => reservationRepo.reschedule(requester, first.id, { startAt: clashStart, endAt: clashEnd }),
+    (error) => error instanceof ReservationError && error.code === 'CONFLICT',
+  );
+});
+
+test('예정 예약이 있는 자원은 삭제할 수 없고, 일괄 취소 후에는 삭제된다', async () => {
+  const created = await resourceRepo.save(vehicleManager, {
+    code: 'TEST-DEL', name: '삭제 테스트 장비', typeCode: 'EQUIPMENT', bookingMode: 'TIME_SLOT', location: '본사', description: '',
+    capacity: null, totalQuantity: 1, unitCode: 'EA', managerUserId: null, ownerDeptId: null, approvalMode: 'INSTANT',
+    slotMinutes: 30, minDurationMinutes: 30, maxDurationMinutes: 480, bufferBeforeMinutes: 0, bufferAfterMinutes: 0,
+    maxAdvanceDays: 60, cancelDeadlineMinutes: 30, availableFrom: '08:00', availableTo: '20:00', status: 'ACTIVE', imageUrl: null, notes: '',
+  }, undefined, true);
+  await reservationRepo.create(requester, request(created.id, futureWindow(26, '09:00', '10:00'), { title: '삭제 막기' }));
+
+  await assert.rejects(
+    () => resourceRepo.delete(vehicleManager, created.id),
+    (error) => error instanceof ReservationError && error.code === 'FORBIDDEN',
+  );
+  await assert.rejects(
+    () => resourceRepo.delete(vehicleManager, created.id, true),
+    (error) => error instanceof ReservationError && error.code === 'INVALID_STATUS',
+  );
+  assert.equal(await reservationRepo.cancelUpcomingByResource(vehicleManager, created.id, '자원 점검', true), 1);
+  await resourceRepo.delete(vehicleManager, created.id, true);
+  assert.equal(await resourceRepo.get(created.id), null);
 });
