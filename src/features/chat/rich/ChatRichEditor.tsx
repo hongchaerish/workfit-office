@@ -4,15 +4,14 @@ import { EditorContent, Extension, useEditor, useEditorState, type Editor } from
 import StarterKit from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import Image from '@tiptap/extension-image';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import Mention from '@tiptap/extension-mention';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, Quote, Code, SquareCode,
-  Link2, Table as TableIcon, Heading, Rows3, Columns3, Trash2,
+  Heading,
 } from 'lucide-react';
 import type { Attachment } from '@/domain/chatMessage/schema';
-import { isSafeHref, type RichNode } from '@/domain/chatMessage/richBody';
+import type { RichNode } from '@/domain/chatMessage/richBody';
 
 /** @멘션 후보 */
 export interface MentionCandidate {
@@ -48,6 +47,8 @@ interface ChatRichEditorProps {
   onEmptyChange?: (empty: boolean) => void;
   /** 편집 영역 최대 높이(px) */
   maxHeight?: number;
+  /** 편집 영역 최소 높이(px) — 서식 모드에서 입력창을 넓힐 때 */
+  minHeight?: number;
   /** 서식 도구 막대를 그릴 자리(입력창 위 한 줄). 없으면 편집 영역 바로 위에 그린다. */
   toolbarContainer?: HTMLElement | null;
 }
@@ -113,7 +114,7 @@ interface MentionState {
  *   확장 모드에서는 Enter 가 줄바꿈이고 Ctrl+Enter 로 보낸다.
  */
 export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorProps>(function ChatRichEditor(
-  { placeholder, disabled, expanded = false, members = [], initialDoc, initialAttachments, onSubmit, onFiles, onEmptyChange, maxHeight = 160, toolbarContainer },
+  { placeholder, disabled, expanded = false, members = [], initialDoc, initialAttachments, onSubmit, onFiles, onEmptyChange, maxHeight = 160, minHeight = 0, toolbarContainer },
   ref,
 ) {
   /** 아직 올리지 않은 사진: id → 파일 / 미리보기 주소 */
@@ -148,8 +149,8 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
         },
         Enter: ({ editor }) => {
           if (expandedRef.current || mentionRef.current) return false;
-          // 목록·코드 블록·표 안에서는 줄바꿈(기본 동작)
-          if (editor.isActive('codeBlock') || editor.isActive('listItem') || editor.isActive('table')) return false;
+          // 목록·코드 블록 안에서는 줄바꿈(기본 동작)
+          if (editor.isActive('codeBlock') || editor.isActive('listItem')) return false;
           submitRef.current();
           return true;
         },
@@ -187,14 +188,11 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
-        link: { openOnClick: false, autolink: true, defaultProtocol: 'https', HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } },
+        // 링크 꾸밈은 쓰지 않는다 — 주소는 보낸 뒤 글자 그대로 자동으로 링크가 된다
+        link: false,
       }),
       Placeholder.configure({ placeholder: () => placeholderRef.current ?? '' }),
       ChatImage.configure({ inline: true, allowBase64: false }),
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableHeader,
-      TableCell,
       Mention.configure({
         HTMLAttributes: { class: 'chat-mention' },
         suggestion: {
@@ -242,7 +240,7 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
       }),
       SubmitKeys,
     ],
-    content: initialDoc ? withImageSrc(initialDoc, (id) => initialAttachments?.find((a) => a.id === id)?.url) : '',
+    content: initialDoc?.content?.length ? withImageSrc(initialDoc, (id) => initialAttachments?.find((a) => a.id === id)?.url) : '',
     editorProps: {
       attributes: { class: 'chat-rich-input', 'aria-label': '메시지 입력', 'aria-multiline': 'true', role: 'textbox' },
       // 외부에서 붙여넣은 HTML 속 사진(외부 주소)은 넣지 않는다 — 사진은 파일로만
@@ -303,7 +301,18 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
   return (
     <div className="chat-rich min-w-0 flex-1">
       {expanded && editor && (toolbarContainer ? createPortal(<ChatFormatToolbar editor={editor} />, toolbarContainer) : <ChatFormatToolbar editor={editor} />)}
-      <div className="menu-scroll overflow-y-auto py-1 text-ink" style={{ maxHeight }}>
+      {/* 서식 모드에서는 최소 높이가 커지며 입력창이 위로 넓어진다(Teams 방식) */}
+      <div
+        className="menu-scroll overflow-y-auto py-1 text-ink transition-[min-height] duration-200 ease-out"
+        style={{ maxHeight, minHeight }}
+        onMouseDown={(e) => {
+          // 넓어진 빈 자리를 눌러도 글을 쓸 수 있게
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            editor?.commands.focus('end');
+          }
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
       {mention && mention.rect && mention.items.length > 0 &&
@@ -351,8 +360,6 @@ function ChatFormatToolbar({ editor }: { editor: Editor }) {
       quote: e.isActive('blockquote'),
       code: e.isActive('code'),
       codeBlock: e.isActive('codeBlock'),
-      link: e.isActive('link'),
-      table: e.isActive('table'),
     }),
   });
 
@@ -372,27 +379,6 @@ function ChatFormatToolbar({ editor }: { editor: Editor }) {
   const sep = <span className="mx-0.5 h-4 w-px bg-border" />;
   const chain = () => editor.chain().focus();
 
-  const setLink = () => {
-    const prev = (editor.getAttributes('link').href as string | undefined) ?? '';
-    const input = window.prompt('링크 주소 (비우면 링크 해제)', prev || 'https://');
-    if (input === null) return;
-    const value = input.trim();
-    if (!value || value === 'https://') {
-      chain().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-    const href = /^[a-z]+:/i.test(value) ? value : `https://${value}`;
-    if (!isSafeHref(href)) {
-      window.alert('http(s) 또는 mailto 주소만 링크로 걸 수 있습니다.');
-      return;
-    }
-    if (editor.state.selection.empty && !s.link) {
-      chain().insertContent({ type: 'text', text: value, marks: [{ type: 'link', attrs: { href } }] }).run();
-    } else {
-      chain().extendMarkRange('link').setLink({ href }).run();
-    }
-  };
-
   return (
     <div className="mb-1 flex flex-wrap items-center gap-0.5 border-b border-border pb-1">
       {btn(s.bold, '굵게 (Ctrl+B)', () => chain().toggleBold().run(), <Bold size={14} />)}
@@ -407,18 +393,6 @@ function ChatFormatToolbar({ editor }: { editor: Editor }) {
       {sep}
       {btn(s.code, '코드', () => chain().toggleCode().run(), <Code size={14} />)}
       {btn(s.codeBlock, '코드 블록', () => chain().toggleCodeBlock().run(), <SquareCode size={14} />)}
-      {btn(s.link, '링크', setLink, <Link2 size={14} />)}
-      {sep}
-      {btn(s.table, '표 넣기 (3×3)', () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), <TableIcon size={14} />)}
-      {s.table && (
-        <>
-          {btn(false, '아래에 행 추가', () => chain().addRowAfter().run(), <Rows3 size={14} />)}
-          {btn(false, '오른쪽에 열 추가', () => chain().addColumnAfter().run(), <Columns3 size={14} />)}
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chain().deleteRow().run()} className="rounded-md px-1.5 py-1 text-[10.5px] font-semibold text-ink2 hover:bg-panel-alt">행 삭제</button>
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chain().deleteColumn().run()} className="rounded-md px-1.5 py-1 text-[10.5px] font-semibold text-ink2 hover:bg-panel-alt">열 삭제</button>
-          {btn(false, '표 삭제', () => chain().deleteTable().run(), <Trash2 size={14} />)}
-        </>
-      )}
     </div>
   );
 }

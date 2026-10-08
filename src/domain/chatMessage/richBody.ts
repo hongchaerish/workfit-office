@@ -110,10 +110,20 @@ function sanitizeNode(node: RichNode, depth: number): RichNode | null {
   return out;
 }
 
-/** 허용 목록 밖의 노드·마크·위험한 링크를 걷어낸 문서. 문서가 아니면 빈 문서. */
+const isBlankParagraph = (n: RichNode) =>
+  n.type === 'paragraph' && (n.content ?? []).every((c) => c.type === 'hardBreak' || (c.type === 'text' && !c.text?.trim()));
+
+/**
+ * 허용 목록 밖의 노드·마크·위험한 링크를 걷어낸 문서. 문서가 아니면 빈 문서.
+ * 앞뒤 빈 문단(편집기가 끝에 남기는 빈 줄, Enter 로 생긴 빈 줄)도 걷어 말풍선 아래가 비지 않게 한다.
+ */
 export function sanitizeRichDoc(doc: unknown): RichNode {
   const clean = doc && typeof doc === 'object' ? sanitizeNode(doc as RichNode, 0) : null;
-  return clean && clean.type === 'doc' ? clean : { type: 'doc', content: [] };
+  if (!clean || clean.type !== 'doc') return { type: 'doc', content: [] };
+  const blocks = [...(clean.content ?? [])];
+  while (blocks.length && isBlankParagraph(blocks[blocks.length - 1])) blocks.pop();
+  while (blocks.length && isBlankParagraph(blocks[0])) blocks.shift();
+  return blocks.length ? { ...clean, content: blocks } : { type: 'doc' };
 }
 
 /** 저장된 본문 문자열 → 정리된 문서(깨진 JSON 이면 빈 문서) */

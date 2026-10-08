@@ -24,8 +24,8 @@ test('모르는 노드·마크와 위험한 링크는 걷어낸다', () => {
       p({ type: 'image', attrs: { src: 'https://evil/x.png' } }),
     ),
   );
-  // 외부 주소 사진은 빠지고 빈 문단만 남는다
-  assert.deepEqual(clean, doc(p(t('안전', [{ type: 'bold' }]), t('링크')), { type: 'paragraph' }));
+  // 외부 주소 사진은 빠지고, 남은 빈 문단은 끝이라 걷어낸다
+  assert.deepEqual(clean, doc(p(t('안전', [{ type: 'bold' }]), t('링크'))));
 });
 
 test('안전한 링크·사진(첨부 id)·멘션은 남긴다', () => {
@@ -42,6 +42,11 @@ test('안전한 링크·사진(첨부 id)·멘션은 남긴다', () => {
 test('깨진 본문 문자열은 빈 문서', () => {
   assert.deepEqual(parseRichBody('{oops'), doc());
   assert.deepEqual(parseRichBody(null), doc());
+});
+
+test('앞뒤 빈 문단은 걷어낸다(가운데 빈 줄은 둔다)', () => {
+  const clean = sanitizeRichDoc(doc(p(), p(t('가')), p(), p(t('나')), p(), p({ type: 'hardBreak' })));
+  assert.deepEqual(clean, doc(p(t('가')), { type: 'paragraph' }, p(t('나'))));
 });
 
 test('평문 요약: 줄·목록·사진·멘션·표', () => {

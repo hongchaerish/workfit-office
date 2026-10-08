@@ -3,6 +3,7 @@ import { Download, FileArchive, FileCode, FileSpreadsheet, FileText } from 'luci
 import type { Attachment } from '@/domain/chatMessage/schema';
 import { imageIdsOfRich, isSafeHref, parseRichBody, type RichNode } from '@/domain/chatMessage/richBody';
 import { downloadAttachment, fmtSize } from '@/mobile/chatUtils';
+import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 
 function fileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase() || '';
@@ -38,7 +39,9 @@ export function RichMessageBody({
   const extras = attachments.filter((a) => !(a.id && inlineIds.has(a.id)));
 
   const renderText = (n: RichNode, key: number): ReactNode => {
-    let el: ReactNode = n.text;
+    // 주소는 글자 그대로 자동 링크(코드·예전 링크 꾸밈 안은 제외)
+    const plain = !(n.marks ?? []).some((m) => m.type === 'code' || m.type === 'link');
+    let el: ReactNode = plain ? <AutoLinkText text={n.text ?? ''} /> : n.text;
     for (const m of n.marks ?? []) {
       if (m.type === 'bold') el = <strong>{el}</strong>;
       else if (m.type === 'italic') el = <em>{el}</em>;

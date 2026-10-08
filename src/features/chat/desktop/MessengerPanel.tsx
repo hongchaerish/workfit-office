@@ -1137,49 +1137,59 @@ function MessengerThread({
             </div>
           )}
 
-          <div className="rounded-2xl border border-border-hi bg-panel py-1 pl-2 pr-1.5">
-          {formatMode && <div ref={setToolbarEl} className="px-1 pt-0.5" />}
-          <div className="flex items-end gap-1.5">
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={sendRich.isPending}
-              title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none mb-0.5"
-            >
-              <Paperclip size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormatMode((v) => !v)}
-              title={formatMode ? '서식 도구 닫기' : '서식 (굵게·목록·표·코드…) — 확장 모드에서는 Enter 줄바꿈, Ctrl+Enter 전송'}
-              aria-pressed={formatMode}
-              className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full select-none mb-0.5 ${formatMode ? 'bg-teal-soft text-teal' : 'text-ink3 hover:bg-panel-alt'}`}
-            >
-              <Type size={16} />
-            </button>
-            <ChatRichEditor
-              ref={composerRef}
-              expanded={formatMode}
-              members={mentionCandidates}
-              disabled={sendRich.isPending}
-              onSubmit={() => void submit()}
-              onFiles={handleFilesAttach}
-              maxHeight={formatMode ? 260 : 160}
-              toolbarContainer={formatMode ? toolbarEl : null}
-              placeholder={formatMode ? '메시지 입력 (Ctrl+Enter 전송)' : '메시지 입력 (@멘션, 사진 붙여넣기)'}
-            />
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={sendRich.isPending}
-              title={formatMode ? '보내기 (Ctrl+Enter)' : '보내기 (Enter)'}
-              className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber disabled:opacity-50 text-[14px] text-white select-none hover:bg-amber-dark transition-colors mb-0.5"
-            >
-              ↑
-            </button>
-          </div>
+          {/*
+            입력창 — 글은 맨 왼쪽부터, 첨부·서식·보내기 버튼은 오른쪽에 모은다.
+            [서식]을 누르면 입력창이 위로 넓어지고 맨 위에 서식 도구 막대가 생긴다(Teams 방식).
+          */}
+          <div className={`rounded-2xl border bg-panel py-1 pl-3 pr-1.5 transition-shadow duration-200 ${formatMode ? 'border-teal/50 shadow-[0_4px_16px_rgba(16,24,48,0.10)]' : 'border-border-hi'}`}>
+            {formatMode && <div ref={setToolbarEl} className="pt-0.5" />}
+            <div className={`flex gap-1.5 ${formatMode ? 'flex-col' : 'items-end'}`}>
+              <ChatRichEditor
+                ref={composerRef}
+                expanded={formatMode}
+                members={mentionCandidates}
+                disabled={sendRich.isPending}
+                onSubmit={() => void submit()}
+                onFiles={handleFilesAttach}
+                minHeight={formatMode ? 120 : 0}
+                maxHeight={formatMode ? 300 : 160}
+                toolbarContainer={formatMode ? toolbarEl : null}
+                placeholder={formatMode ? '메시지 입력 (Ctrl+Enter 전송)' : '메시지 입력 (@멘션, 사진 붙여넣기)'}
+              />
+              <div className="mb-0.5 flex shrink-0 items-center gap-0.5 self-end">
+                <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={sendRich.isPending}
+                  title={`파일·사진 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
+                  className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none"
+                >
+                  <Paperclip size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormatMode((v) => !v);
+                    requestAnimationFrame(() => composerRef.current?.focus());
+                  }}
+                  title={formatMode ? '서식 도구 닫기' : '서식 편집 (굵게·목록·코드…) — 입력창이 넓어지고 Enter 는 줄바꿈, Ctrl+Enter 전송'}
+                  aria-pressed={formatMode}
+                  className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full select-none ${formatMode ? 'bg-teal-soft text-teal' : 'text-ink3 hover:bg-panel-alt'}`}
+                >
+                  <Type size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submit()}
+                  disabled={sendRich.isPending}
+                  title={formatMode ? '보내기 (Ctrl+Enter)' : '보내기 (Enter)'}
+                  className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber disabled:opacity-50 text-[14px] text-white select-none hover:bg-amber-dark transition-colors"
+                >
+                  ↑
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
