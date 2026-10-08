@@ -21,7 +21,7 @@
 ---
 
 ## 3. 🚀 [Strict Rule] 원격 저장소 Push 전 동기화 절차
-원격(`origin`=GitHub, `gitlab`=사내)에 push하기 전에 반드시 아래 절차를 준수합니다 (`main` push는 Vercel 운영 배포로 이어짐).
+원격(`origin`=GitHub, `gitlab`=사내)에 push하기 전에 반드시 아래 절차를 준수합니다 (운영 배포는 `git push upstream main` — `upstream`=원본 GitHub 저장소의 `main` push가 Vercel 운영 배포로 이어지며, `origin`·`gitlab` push는 배포되지 않음).
 
 1. `git fetch origin && git fetch gitlab`
 2. `git rev-list --left-right --count HEAD...origin/main` 으로 앞뒤 상태 확인

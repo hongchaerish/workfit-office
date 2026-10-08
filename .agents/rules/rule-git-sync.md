@@ -12,4 +12,7 @@ trigger: always_on
 4. **병합 후 다시 검증**: 타입체크 → 테스트 → 빌드. 병합은 각각 통과한 두 변경을 합치면서 깨질 수 있다
 5. 그 다음에 push
 
-`main`은 GitHub(`origin`)가 기준이며 push하면 Vercel이 운영 프런트를 자동 배포한다. 즉 **`main` push는 곧 운영 배포**다 — 검증 없이 밀지 않는다.
+**운영 배포는 `upstream`(GitHub `lucaskim365/workfit-office`)의 `main` push다.** Vercel이 그 저장소에 연결되어 있어 `git push upstream main` 하면 운영 프런트를 자동 배포한다 — 검증 없이 밀지 않고, 사용자가 운영 배포를 지시했을 때만 한다.
+
+- `origin`(GitHub `hongchaerish/workfit-office`)은 `upstream`의 fork로, `origin main` push는 배포로 이어지지 않는다(2026-10-08 확인: origin 배포 기록 0건).
+- `gitlab`(사내)은 배포 설정이 없으며 배포되지 않는 것이 정상이다.
