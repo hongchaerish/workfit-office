@@ -108,6 +108,22 @@ export function validateReservationRequest(
     throw new ReservationError('CAPACITY', `수용 인원 ${resource.capacity}명을 초과했습니다.`);
   }
 
+  assertNoConflict(resource, input, existing);
+  return input;
+}
+
+/**
+ * 같은 자원의 점유 예약(PENDING·CONFIRMED)과 시간·수량이 겹치는지 검사한다.
+ *
+ * 신청 검증(`validateReservationRequest`)과 승인이 함께 쓴다. 승인은 신청 시점에 이미
+ * 통과한 슬롯·이용시간·사전예약 한도 같은 **신청 규칙을 다시 돌리지 않는다** — 그 사이
+ * 관리자가 자원 설정을 바꾸면 이미 들어온 대기 예약이 영영 확정되지 못하기 때문이다.
+ */
+export function assertNoConflict(
+  resource: Resource,
+  input: Pick<ReservationRequest, 'startAt' | 'endAt' | 'quantity'>,
+  existing: Reservation[],
+): void {
   const requestedInterval = occupiedInterval(input.startAt, input.endAt, resource);
   const occupied = existing.filter(
     (row) => row.resourceId === resource.id && OCCUPYING_STATUSES.includes(row.status),
@@ -133,8 +149,6 @@ export function validateReservationRequest(
       throw new ReservationError('CONFLICT', `선택한 시간의 최소 잔여 수량은 ${Math.max(0, resource.totalQuantity - maxReserved)}${resource.unitCode}입니다.`);
     }
   }
-
-  return input;
 }
 
 const ALLOWED_TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {

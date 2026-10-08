@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { reservationRepo } from './reservation.repo';
+import { resourceRepo } from '@/data/resource/resource.repo';
 import { ReservationError } from '@/domain/reservation/engine';
 import { RESOURCE_UTC_OFFSET, resourceDateKey } from '@/domain/reservation/time';
 import type { ReservationRequest } from '@/domain/reservation/schema';
@@ -122,4 +123,21 @@ test('관리자는 담당 자원이 아니어도 승인·반려하고 남의 예
   const second = await reservationRepo.create(requester, request('RES-0003', futureWindow(22, '11:00', '12:00'), { title: '관리자 반려' }));
   const rejected = await reservationRepo.reject(admin, second.id, '관리자 반려', true);
   assert.equal(rejected.status, 'REJECTED');
+});
+
+test('신청 후 자원 설정이 바뀌어도 대기 예약을 승인할 수 있다', async () => {
+  const pending = await reservationRepo.create(requester, request('RES-0003', futureWindow(23, '13:00', '15:00'), { title: '설정 변경 후 승인' }));
+  assert.equal(pending.status, 'PENDING');
+
+  const original = await resourceRepo.get('RES-0003');
+  assert.ok(original);
+  const { id, createdBy: _cb, createdAt: _ca, updatedBy: _ub, updatedAt: _ua, ...draft } = original;
+  // 최대 이용시간을 신청 시간(120분)보다 짧게 줄인다 — 신청 규칙 재검증이면 DURATION 으로 막혔다.
+  await resourceRepo.save(vehicleManager, { ...draft, maxDurationMinutes: 60 }, id);
+  try {
+    const approved = await reservationRepo.approve(vehicleManager, pending.id);
+    assert.equal(approved.status, 'CONFIRMED');
+  } finally {
+    await resourceRepo.save(vehicleManager, draft, id);
+  }
 });

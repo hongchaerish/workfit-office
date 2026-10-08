@@ -8,6 +8,7 @@ import {
 } from '@/domain/reservation/schema';
 import {
   assertCancellationAllowed,
+  assertNoConflict,
   assertReservationTransition,
   canApproveResource,
   deriveCompleted,
@@ -170,18 +171,10 @@ export const reservationRepo = {
       if (!canApproveResource(actor, resource, isAdmin)) throw new ReservationError('FORBIDDEN', '이 자원의 승인 권한이 없습니다.');
       if (resource.status !== 'ACTIVE') throw new ReservationError('RESOURCE_UNAVAILABLE', '사용 중인 자원만 승인할 수 있습니다.');
       if (new Date(row.startAt).getTime() <= Date.now()) throw new ReservationError('PAST_TIME', '시작 시간이 지난 예약은 승인할 수 없습니다.');
-      validateReservationRequest(resource, {
-        resourceId: row.resourceId,
-        requesterDeptId: row.requesterDeptId,
-        title: row.title,
-        purpose: row.purpose,
-        startAt: row.startAt,
-        endAt: row.endAt,
-        quantity: row.quantity,
-        attendeeCount: row.attendeeCount,
-        attendeeUserIds: row.attendeeUserIds,
-      }, rows.filter((item) => item.id !== row.id));
+      // 신청 규칙(슬롯·이용시간·운영시간·인원)은 신청 때 이미 통과했다. 그 뒤 자원 설정이
+      // 바뀌어도 대기 예약을 확정할 수 있도록 승인에서는 점유 충돌만 다시 본다.
       assertReservationTransition(row.status, 'CONFIRMED');
+      assertNoConflict(resource, row, rows.filter((item) => item.id !== row.id));
       const now = new Date().toISOString();
       return applyUpdate(row, (current) => ({
         ...current, status: 'CONFIRMED', approverUserId: actor.id, approvedAt: now,
