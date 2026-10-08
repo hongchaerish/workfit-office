@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ShellTab } from './tabModel';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { X, Plus, ChevronDown, LayoutGrid } from 'lucide-react';
@@ -13,15 +14,46 @@ interface TabBarProps {
 }
 
 export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenuOpen }: TabBarProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 탭이 막대보다 많으면 막대 안에서 가로로 넘긴다 — 휠을 가로 스크롤로 바꾼다
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const onWheel = (e: WheelEvent) => {
+      if (list.scrollWidth <= list.clientWidth || e.deltaY === 0) return;
+      e.preventDefault();
+      list.scrollLeft += e.deltaY;
+    };
+    list.addEventListener('wheel', onWheel, { passive: false });
+    return () => list.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // 선택한 탭이 가려져 있으면 보이도록 막대만 넘긴다 (페이지는 움직이지 않게 scrollIntoView 대신 직접 계산)
+  useEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[data-active-tab="true"]');
+    if (!list || !active) return;
+    const left = active.offsetLeft - list.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < list.scrollLeft) list.scrollLeft = left;
+    else if (right > list.scrollLeft + list.clientWidth) list.scrollLeft = right - list.clientWidth;
+  }, [activeTabId, tabs.length]);
+
   return (
     <div className="relative flex h-9 shrink-0 items-end border-b border-border-hi bg-bg-deep pl-2.5 w-full min-w-full">
-      <div className="flex min-w-0 flex-1 items-end gap-[3px] overflow-hidden">
+      {/* w-0 + flex-1: 탭 너비 합계가 셸 전체 너비(min-w-fit)를 밀어내지 않게 하고, 남는 폭만 차지한다 */}
+      <div
+        ref={listRef}
+        className="flex w-0 min-w-0 flex-1 items-end gap-[3px] overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {tabs.map((t) => {
           const a = t.id === activeTabId;
           const gw = isGwUrl(t.url);
           return (
             <button
               key={t.id}
+              data-active-tab={a}
               onClick={() => onSelect(t)}
               title={gw ? `그룹웨어 · ${t.name}` : t.name}
               className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-t-[7px] pl-3 pr-2 ${
