@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { X, Download, Printer, Building2, BarChart3, PhoneCall, Briefcase, Mail, Phone, Check, Copy } from 'lucide-react';
+import { X, Download, Printer, Building2, BarChart3, PhoneCall, Briefcase, Mail, Phone, Check, Copy, Armchair } from 'lucide-react';
+import { SeatLayoutView } from './SeatLayoutView';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { User } from '@/domain/user/schema';
@@ -22,6 +23,7 @@ const isExcludedDept = (deptName: string) =>
  * - [📊 비주얼 차트]: 워크핏 공식 엑셀 조직도 스타일(피치/그린/블루 3열 격자 다이어그램)
  * - [📋 리스트로 보기]: 전사 임직원 직급·직책·부서·상급자·연락처 일괄 조회 및 검색 리스트
  * - [📞 비상연락망]: 공식 비상연락망 사번·소속·직급·연락처·이메일 표
+ * - [🪑 좌석배치도]: 배치도 이미지 위 자리별 이름·직급·부서·근태 (운영자·임원만 배치 수정)
  */
 export default function OrgChartScreen() {
   const org = useOrgTree();
@@ -30,7 +32,7 @@ export default function OrgChartScreen() {
     return new Map(employeeProfiles.map((p) => [p.userId || p.id, p]));
   }, [employeeProfiles]);
 
-  const [viewMode, setViewMode] = useState<'visual' | 'emergency'>('visual');
+  const [viewMode, setViewMode] = useState<'visual' | 'emergency' | 'seat'>('visual');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selectedUser = org.users.find((u) => u.id === selectedUserId);
   const selectedProfile = selectedUserId ? profileMap.get(selectedUserId) : null;
@@ -43,7 +45,7 @@ export default function OrgChartScreen() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl pb-12">
+    <div className={`mx-auto pb-12 ${viewMode === 'seat' ? 'max-w-[1500px] px-4 sm:px-6' : 'max-w-6xl'}`}>
       {/* 브레드크럼 + 타이틀 & 뷰 모드 탭 */}
       <div className="mb-1 text-xs font-medium text-ink3">
         그룹웨어 <span className="px-1">/</span> 조직도
@@ -59,7 +61,7 @@ export default function OrgChartScreen() {
           </span>
         </div>
 
-        {/* 2단 뷰 모드 전환 버튼 (비주얼 차트 / 비상연락망) */}
+        {/* 뷰 모드 전환 버튼 (비주얼 차트 / 비상연락망 / 좌석배치도) */}
         <div className="flex items-center gap-1 rounded-xl border border-border bg-panel-alt/60 p-1 shadow-xs">
           <button
             type="button"
@@ -85,6 +87,18 @@ export default function OrgChartScreen() {
             <PhoneCall size={14} />
             <span>비상연락망</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('seat')}
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[11.5px] font-bold transition-all ${
+              viewMode === 'seat'
+                ? 'bg-panel text-teal shadow-xs'
+                : 'text-ink3 hover:text-ink'
+            }`}
+          >
+            <Armchair size={14} />
+            <span>좌석배치도</span>
+          </button>
         </div>
       </div>
 
@@ -107,6 +121,13 @@ export default function OrgChartScreen() {
         </div>
       )}
 
+
+      {/* ── 3. 좌석배치도 뷰 ── */}
+      {viewMode === 'seat' && (
+        <div className="mt-5">
+          <SeatLayoutView users={validUsers} onSelectUserId={setSelectedUserId} />
+        </div>
+      )}
 
       {selectedUserId && selectedUser && (
         <>

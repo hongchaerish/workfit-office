@@ -279,6 +279,21 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    // 조직도 > 좌석배치도. 배치도 한 장 = 문서 하나, 좌석 배열은 JSON 문자열(seats).
+    id: 'seatLayouts',
+    name: '좌석 배치도',
+    attributes: [
+      S('name', 100, true),
+      S('imagePath', 500),
+      S('imageUrl', 4000),
+      S('seats', 200000),
+      INT('sortOrder'),
+      S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
     id: 'companySites',
     name: '사업장',
     attributes: [S('name', 128, true), S('kind', 32, true), S('addr', 256), S('tel', 32), S('mgr', 64), BOOL('active', true)],
