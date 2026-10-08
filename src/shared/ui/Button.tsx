@@ -67,7 +67,8 @@ export function Button({
       {...rest}
       type={type}
       className={[
-        'font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        // 아이콘(svg는 기본 block)과 글자를 한 줄에 나란히 두고, 화면 배율을 키워 폭이 좁아져도 갈라지지 않게 한다
+        'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         VARIANT[variant],
         SIZE[size],
         block ? 'w-full' : '',

@@ -796,7 +796,7 @@ export default function EmployeeScreen() {
             {/* 임직원 목록 테이블 */}
             <div className="flex-1 overflow-auto rounded-lg border border-border bg-panel">
               <table className="w-full text-left border-collapse text-[11.5px]">
-                <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2">
+                <thead className="sticky top-0 z-10 border-b border-border bg-panel-alt/60 text-[11px] font-bold text-ink2 whitespace-nowrap">
                   <tr>
                     <th className="py-2.5 px-3 text-center w-12">사진</th>
                     <th className="py-2.5 px-3 w-28">사번</th>
@@ -851,8 +851,8 @@ export default function EmployeeScreen() {
                               </div>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-[11.5px] text-ink2">{e.position}</td>
-                          <td className="py-2 px-3 text-[11.5px] text-ink3">{e.duty}</td>
+                          <td className="py-2 px-3 text-[11.5px] text-ink2 whitespace-nowrap">{e.position}</td>
+                          <td className="py-2 px-3 text-[11.5px] text-ink3 whitespace-nowrap">{e.duty}</td>
                           <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">
                             {e.email && e.personalEmail && e.email !== e.personalEmail ? (
                               <div className="flex flex-col gap-0.5">
