@@ -406,18 +406,31 @@ export function ApprovalDraftDocumentSheet({
             </span>
           )}
         </h1>
-        {/* 실시간 연동 결재 직인 테이블 (디자인 모드 시 클릭하여 결재선 규칙 모달 호출) */}
+        {/*
+          실시간 연동 결재 직인 테이블 — 클릭하면
+          · 디자인 모드(서식 관리): 결재선(전결) 규칙 모달
+          · 기안 작성: 결재선·수신처 편집 모달
+        */}
         <div
-          onClick={isDesignMode ? onStampTableClick : undefined}
-          className={`relative group ${isDesignMode
-            ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 transition-all rounded p-1'
+          role={onStampTableClick ? 'button' : undefined}
+          tabIndex={onStampTableClick ? 0 : undefined}
+          onClick={onStampTableClick}
+          onKeyDown={onStampTableClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStampTableClick(); } } : undefined}
+          className={`relative group ${onStampTableClick
+            ? 'cursor-pointer ring-2 ring-transparent hover:ring-teal hover:bg-teal-soft/20 focus:outline-none focus-visible:ring-teal transition-all rounded p-1'
             : ''
             }`}
-          title={isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : undefined}
+          title={onStampTableClick ? (isDesignMode ? '클릭하여 결재선(전결) 규칙 설정' : '클릭하여 결재선 편집') : undefined}
         >
-          {isDesignMode && (
+          {onStampTableClick && (
             <div className="absolute -top-3 right-0 -translate-y-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-panel text-teal font-bold text-[10.5px] px-2 py-0.5 rounded shadow-md border border-teal/40 pointer-events-none z-20 flex items-center gap-1">
-              <span>⚙️ 클릭하여 결재선 규칙 설정</span>
+              <span>{isDesignMode ? '⚙️ 클릭하여 결재선 규칙 설정' : '✏️ 클릭하여 결재선 편집'}</span>
+            </div>
+          )}
+          {/* 기안 작성 중 결재선이 비어 있으면 결재란 자리에 지정 안내를 그린다 */}
+          {onStampTableClick && !isDesignMode && stampSteps.length === 0 && (
+            <div className="grid h-[76px] w-[160px] place-items-center border border-dashed border-[#999] text-[11px] font-semibold text-[#888]">
+              + 결재선 지정
             </div>
           )}
           <ApprovalStampTable

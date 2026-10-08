@@ -24,6 +24,8 @@ import { DraftConfirmDialog } from './components/DraftConfirmDialog';
 import { DraftFormSelectModal } from './components/DraftFormSelectModal';
 import { FormChangeConfirmDialog } from './components/FormChangeConfirmDialog';
 import { DraftRecipientSection } from './components/DraftRecipientSection';
+import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
+import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
 import { usePermission } from '@/features/auth/usePermission';
@@ -76,23 +78,6 @@ function AutosaveIndicator({ at }: { at: number | null }) {
       마지막 보관 {stamp}
     </span>
   );
-}
-
-/** 결재선 패널 폭(px, 배율 적용 전). 기본값은 문서(A4) 영역이 넉넉하도록 예전 410~430px보다 좁게 잡았다. */
-const LINE_PANEL_DEFAULT = 340;
-const LINE_PANEL_MIN = 300;
-const LINE_PANEL_MAX = 640;
-const LINE_PANEL_WIDTH_KEY = 'approval_draft_line_panel_width';
-/** A4 문서(800px) + 좌우 여백 — 이만큼은 항상 문서에 남긴다. 남지 않으면 결재선은 서랍(Drawer)으로 연다. */
-const DOC_SHEET_SPACE = 800 + 64;
-
-/** 현재 화면 배율(body zoom) */
-function getFontScale(): number {
-  try {
-    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
-  } catch {
-    return 1;
-  }
 }
 
 export default function ApprovalDraftScreen() {
@@ -289,7 +274,6 @@ function ApprovalDraftInner({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [recipients, setRecipients] = useState<ApprovalRecipient[]>(editDoc?.recipients ?? []);
-  const [isWideScreen, setIsWideScreen] = useState(true);
   const [isAgreementEnabled, setIsAgreementEnabled] = useState(false);
 
   // 양식 선택 모달 및 양식 변경 확인 다이얼로그 상태
@@ -319,65 +303,6 @@ function ApprovalDraftInner({
   useEffect(() => {
     approvalProcessRepo.isOptionEnabled('dept_agreement').then(setIsAgreementEnabled);
   }, []);
-
-  // 결재선 패널 폭 — 왼쪽 가장자리를 끌어 조절하고, 이 브라우저에 기억한다 (더블클릭 시 기본값)
-  const [linePanelWidth, setLinePanelWidth] = useState(() => {
-    try {
-      const saved = Number(localStorage.getItem(LINE_PANEL_WIDTH_KEY));
-      return saved >= LINE_PANEL_MIN && saved <= LINE_PANEL_MAX ? saved : LINE_PANEL_DEFAULT;
-    } catch {
-      return LINE_PANEL_DEFAULT;
-    }
-  });
-  /** 화면 배율을 뺀 실제 CSS 폭 — 패널 최대 폭 계산에 쓴다 */
-  const [viewportCssWidth, setViewportCssWidth] = useState(() => window.innerWidth / getFontScale());
-
-  useEffect(() => {
-    const handleResize = () => {
-      // innerWidth 는 화면 배율(body zoom)이 빠진 값이라 배율로 나눠 실제 배치 폭으로 판단한다
-      const cssWidth = window.innerWidth / getFontScale();
-      setViewportCssWidth(cssWidth);
-      const wide = cssWidth >= DOC_SHEET_SPACE + LINE_PANEL_MIN;
-      setIsWideScreen(wide);
-      if (wide) setDrawerOpen(false);
-    };
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  /** 문서(A4) 자리를 남기는 범위 안에서만 패널을 넓힌다 */
-  const linePanelMaxNow = Math.max(LINE_PANEL_MIN, Math.min(LINE_PANEL_MAX, viewportCssWidth - DOC_SHEET_SPACE));
-  const linePanelWidthNow = Math.min(linePanelWidth, linePanelMaxNow);
-
-  const startLinePanelResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = linePanelWidthNow;
-    const scale = getFontScale();
-    let latest = startWidth;
-    const onMove = (ev: PointerEvent) => {
-      // 마우스 좌표는 화면 px, 폭은 배율 적용 전 CSS px 라서 배율로 나눈다. 왼쪽으로 끌면 넓어진다.
-      latest = Math.round(Math.min(linePanelMaxNow, Math.max(LINE_PANEL_MIN, startWidth + (startX - ev.clientX) / scale)));
-      setLinePanelWidth(latest);
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      document.body.style.removeProperty('cursor');
-      document.body.style.removeProperty('user-select');
-      try { localStorage.setItem(LINE_PANEL_WIDTH_KEY, String(latest)); } catch { /* 저장 못 해도 이번 화면에서는 유지 */ }
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  };
-
-  const resetLinePanelWidth = () => {
-    setLinePanelWidth(LINE_PANEL_DEFAULT);
-    try { localStorage.removeItem(LINE_PANEL_WIDTH_KEY); } catch { /* noop */ }
-  };
 
   const handleFilesUpload = async (files: File[]) => {
     if (files.length === 0) return;
@@ -950,7 +875,10 @@ function ApprovalDraftInner({
     return getAvailableBackups();
   }, [showBackupHistoryModal, backupHistoryVersion]);
 
-  const [drawerOpen, setDrawerOpen] = useState(false); // 해상도 작을 때 결재선 Drawer
+  /** 결재선 편집 모달 — 문서의 결재란 또는 상단 [결재선] 버튼으로 연다 */
+  const [lineModalOpen, setLineModalOpen] = useState(false);
+  /** 상신 전 확인창 */
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   useEffect(() => {
     approvalProcessRepo.isOptionEnabled('post_approval').then((enabled) => {
@@ -1640,22 +1568,32 @@ function ApprovalDraftInner({
     }
   };
 
-  const onSubmit = async () => {
+  /** [상신 발송] — 검증을 통과하면 바로 보내지 않고 확인창을 띄운다 */
+  const onSubmit = () => {
     const err = validate(true);
     if (err) {
       alert(err);
       return setError(err);
     }
     setError('');
+    setShowSubmitConfirm(true);
+  };
+
+  const confirmSubmit = async () => {
     try {
       const id = await persistDraft();
       await submitM.mutateAsync({ id, userId: me.id });
       clearAutosave();
+      setShowSubmitConfirm(false);
       navigate('/gw/approval?box=상신');
     } catch (e) {
+      setShowSubmitConfirm(false);
       setError(String(e));
     }
   };
+
+  const nameOfUser = (id: string) => org.userById(id)?.name ?? id;
+  const posOfUser = (id: string) => org.userById(id)?.position ?? '';
 
 
 
@@ -1703,21 +1641,24 @@ function ApprovalDraftInner({
         </div>
 
         <div className="flex items-center gap-2">
-          {!isWideScreen && (
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <GitFork size={13} />
-                <span>결재선</span>
-              </span>
-              <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
-                {steps.length}명
-              </span>
-            </button>
-          )}
+          {/* 결재선 편집 — 문서의 결재란을 눌러도 같은 모달이 열린다 */}
+          <button
+            type="button"
+            onClick={() => setLineModalOpen(true)}
+            title="결재선·참조·수신처 편집 (문서의 결재란을 눌러도 열립니다)"
+            className="flex items-center gap-1.5 rounded-lg border border-teal/40 bg-teal-soft/50 px-3 py-1.5 text-[12px] font-bold text-teal hover:bg-teal-soft transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <GitFork size={13} />
+              <span>결재선</span>
+            </span>
+            <span className="rounded-full bg-teal px-1.5 py-0.2 text-[10px] font-extrabold text-white">
+              {steps.filter((s) => s.kind !== '참조').length}명
+            </span>
+            <span className="text-[10.5px] font-semibold text-teal/80">
+              참조 {steps.filter((s) => s.kind === '참조').length} · 수신 {recipients.length}
+            </span>
+          </button>
 
           <div className="flex items-center gap-1.5">
             <AutosaveIndicator at={autosavedAt} />
@@ -1866,96 +1807,56 @@ function ApprovalDraftInner({
             holidays={holidayList}
             editDocNo={editDoc?.docNo}
             lastSavedAt={autosavedAt}
+            onStampTableClick={() => setLineModalOpen(true)}
           />
         </div>
 
-        {/* [3단] 우측 결재선 전용 고정 사이드바 — 공문서 공간과 세로 경계선으로 완벽 분리, 상단부터 바닥까지 100% 꽉 채움 */}
-        {isWideScreen && (
-          // 높이: body zoom 이 vh 에 한 번 더 곱해지므로 배율로 나눠 실제 화면 높이에 맞춘다
-          <aside
-            style={{ width: linePanelWidthNow }}
-            className="relative shrink-0 border-l border-slate-400/40 dark:border-slate-700 bg-panel sticky top-[53px] h-[calc(100vh/var(--font-scale,1)-53px)] flex flex-col z-20 shadow-md"
-          >
-            {/* 폭 조절 손잡이 — 왼쪽 경계를 끌어 넓히거나 좁힌다 */}
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="결재선 패널 폭 조절"
-              title="끌어서 폭 조절 · 더블클릭하면 기본 폭"
-              onPointerDown={startLinePanelResize}
-              onDoubleClick={resetLinePanelWidth}
-              className="group absolute inset-y-0 -left-1.5 z-30 w-3 cursor-col-resize"
-            >
-              <div className="mx-auto h-full w-0.5 bg-transparent transition-colors group-hover:bg-teal/60" />
-            </div>
-            {/* 패널 내부 헤더 — 패널 상단 고정 */}
-            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-panel-alt/95 backdrop-blur-sm px-4 py-3">
-              <span className="text-[13px] font-extrabold text-ink flex items-center gap-1.5">
-                <GitFork className="h-4 w-4 text-teal shrink-0" />
-                <span>결재선 설정</span>
-              </span>
-              <span className="text-[11px] text-ink3 font-semibold">
-                {steps.length}명 지정됨
-              </span>
-            </div>
-
-            {/* 결재선 빌더 + 수신/시행 (bottomSlot) — 내부 독립 스크롤 */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4">
-              <ApprovalLineBuilder
-                steps={steps}
-                onChange={setSteps}
-                drafterId={me.id}
-                docType={code}
-                amount={amountNum}
-                docData={values}
-                isAgreementEnabled={isAgreementEnabled}
-                bottomSlot={
-                  <DraftRecipientSection
-                    recipients={recipients}
-                    setRecipients={setRecipients}
-                    org={org}
-                  />
-                }
-              />
-            </div>
-          </aside>
-        )}
-
       </div>
 
-      {/* 해상도 작을 때 우측 결재선 Drawer (header z-[200]보다 높은 z-[300] 지정) */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-[300] flex justify-end bg-black/40" onClick={() => setDrawerOpen(false)}>
-          <div className="h-full w-full max-w-lg bg-panel p-4 shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-              <span className="text-[15px] font-bold text-ink flex items-center gap-1.5">
-                <GitFork className="h-4 w-4 text-teal shrink-0" />
-                <span>결재선 설정</span>
-              </span>
-              <button type="button" onClick={() => setDrawerOpen(false)} className="text-ink3 hover:text-ink">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <ApprovalLineBuilder
-              steps={steps}
-              onChange={setSteps}
-              drafterId={me.id}
-              docType={code}
-              amount={amountNum}
-              docData={values}
-              isAgreementEnabled={isAgreementEnabled}
-              bottomSlot={
-                <DraftRecipientSection
-                  recipients={recipients}
-                  setRecipients={setRecipients}
-                  org={org}
-                />
-              }
-            />
-          </div>
-        </div>
+      {/* 결재선·수신처 편집 모달 */}
+      {lineModalOpen && (
+        <DraftApprovalLineModal stepCount={steps.length} onClose={() => setLineModalOpen(false)}>
+          <ApprovalLineBuilder
+            steps={steps}
+            onChange={setSteps}
+            drafterId={me.id}
+            docType={code}
+            amount={amountNum}
+            docData={values}
+            isAgreementEnabled={isAgreementEnabled}
+            bottomSlot={
+              <DraftRecipientSection
+                recipients={recipients}
+                setRecipients={setRecipients}
+                org={org}
+              />
+            }
+          />
+        </DraftApprovalLineModal>
       )}
 
+      {/* 상신 전 확인창 */}
+      {showSubmitConfirm && (
+        <DraftSubmitConfirmDialog
+          docTitle={title}
+          formName={form?.name || code}
+          steps={steps}
+          drafterId={me.id}
+          recipients={recipients}
+          attachmentCount={attachments.length}
+          relatedDocCount={relatedDocs.length}
+          visibility={visibility}
+          securityLevel={securityLevel}
+          isPostApproval={isPostApprovalSystemEnabled && isPostApproval}
+          isResubmit={isResubmit}
+          busy={busy}
+          nameOf={nameOfUser}
+          posOf={posOfUser}
+          onEditLine={() => { setShowSubmitConfirm(false); setLineModalOpen(true); }}
+          onCancel={() => setShowSubmitConfirm(false)}
+          onConfirm={() => void confirmSubmit()}
+        />
+      )}
 
       {/* 다이얼로그 모달 모음 */}
       {showConfirmClose && (
@@ -2129,8 +2030,12 @@ function ApprovalDraftInner({
         } as unknown as ApprovalDoc : null;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-5 animate-in fade-in duration-150">
-            <div className="w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-border flex flex-col h-[90vh] max-h-[900px] overflow-hidden">
+          // 바깥(어두운 배경)을 누르면 닫는다 — 안에서 끌다 밖에서 놓은 경우는 빼려고 mousedown 대상으로 판단
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-5 animate-in fade-in duration-150"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setShowBackupHistoryModal(false); }}
+          >
+            <div className="w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-border flex flex-col h-[calc(90vh/var(--font-scale,1))] max-h-[900px] overflow-hidden">
               {/* Modal Header */}
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-panel shrink-0">
                 <div className="flex items-center gap-2.5">

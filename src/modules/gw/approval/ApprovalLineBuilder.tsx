@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -148,6 +148,21 @@ export function ApprovalLineBuilder({
     | { mode: 'add-to-group'; groupIndex: number; targetGroupId?: string }
     | null
   >(null);
+
+  /*
+    결재자 선택 창은 ESC로 닫는다. 이 빌더를 감싼 모달(기안 작성의 결재선 모달 등)도 ESC로 닫히므로,
+    캡처 단계에서 먼저 받아 전파를 끊어 선택 창만 닫히게 한다.
+  */
+  useEffect(() => {
+    if (!picker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setPicker(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [picker]);
 
   const edits = useMemo(() => toEdit(steps), [steps]);
   const approverEdits = useMemo(() => edits.filter((e) => e.kind !== '참조'), [edits]);
@@ -861,7 +876,7 @@ export function ApprovalLineBuilder({
       {/* 결재자 피커 팝오버 (Portal 적용하여 부모 쌓임 맥락 탈출) */}
       {picker && createPortal(
         <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/30 p-4" onClick={() => setPicker(null)}>
-          <div className="max-h-[75vh] w-full max-w-md overflow-hidden rounded-2xl bg-panel shadow-2xl flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+          <div className="max-h-[calc(75vh/var(--font-scale,1))] w-full max-w-md overflow-hidden rounded-2xl bg-panel shadow-2xl flex flex-col" onClick={(ev) => ev.stopPropagation()}>
             <div className="border-b border-border px-4 py-3 text-[13px] font-bold text-ink flex items-center justify-between shrink-0">
               <span>
                 {picker.mode === 'add'
@@ -937,7 +952,7 @@ function UserPickList({
   };
 
   return (
-    <div className="flex max-h-[66vh] flex-col min-h-0 flex-1">
+    <div className="flex max-h-[calc(66vh/var(--font-scale,1))] flex-col min-h-0 flex-1">
       {/* 탭 & 검색창 */}
       <div className="border-b border-border p-3 space-y-2 shrink-0">
         <div className="flex gap-1 rounded-lg bg-panel-alt p-1">
