@@ -796,7 +796,7 @@ export function ApprovalFormEditor({
 
           {/* 2. 서식 환경설정 탭 (기본 메타, 보안, 결재규칙) */}
           {activeMainTab === 'config' && (
-            <div className="space-y-3.5 overflow-y-auto max-h-[calc(100vh-210px)] pr-1 text-[11.5px]">
+            <div className="space-y-3.5 overflow-y-auto max-h-[calc(100vh/var(--font-scale,1)-210px)] pr-1 text-[11.5px]">
               <div className="rounded-lg border border-border bg-panel-alt/40 p-3 space-y-2.5">
                 <div className="font-bold text-ink text-[12px]">서식 기본 정보</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -980,7 +980,7 @@ export function ApprovalFormEditor({
           </div>
 
           {/* A4 용지 작업대 (회색 배경 위 백색 시트) */}
-          <div className="overflow-y-auto max-h-[calc(100vh-200px)] flex justify-center py-4 px-2">
+          <div className="overflow-y-auto max-h-[calc(100vh/var(--font-scale,1)-200px)] flex justify-center py-4 px-2">
             <div className="w-full max-w-[820px] shrink-0 bg-white dark:bg-panel shadow-xl rounded-sm border border-border/80 p-8 min-h-[1100px]">
               <ApprovalDraftDocumentSheet
                 form={form}

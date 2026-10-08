@@ -34,7 +34,7 @@ export function RecallConfirmModal({
       onClick={() => !busy && onClose()}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
+        className="flex max-h-[calc(90vh/var(--font-scale,1))] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}

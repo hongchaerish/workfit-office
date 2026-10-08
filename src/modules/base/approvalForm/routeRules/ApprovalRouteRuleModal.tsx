@@ -39,7 +39,7 @@ export function ApprovalRouteRuleModal({
       onClick={onClose}
     >
       <div
-        className="relative flex flex-col w-full max-w-4xl max-h-[88vh] rounded-2xl bg-panel border border-border shadow-2xl overflow-hidden"
+        className="relative flex flex-col w-full max-w-4xl max-h-[calc(88vh/var(--font-scale,1))] rounded-2xl bg-panel border border-border shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 모달 상단 헤더 */}

@@ -834,8 +834,12 @@ export function MyCommuteLeaveTab({
 
       {/* 내 대체휴무 상세 내역 팝업 모달 */}
       {showSubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+          // 바깥(어두운 배경)을 누르면 닫는다
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setShowSubModal(false); }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[calc(85vh/var(--font-scale,1))]">
             {/* 헤더 */}
             <div className="flex items-center justify-between border-b border-border bg-panel-alt/50 px-5 py-4 shrink-0">
               <div className="flex items-center gap-2.5">

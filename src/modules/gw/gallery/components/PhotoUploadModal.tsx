@@ -109,7 +109,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-border bg-panel shadow-2xl overflow-hidden"
+        className="w-full max-w-2xl max-h-[calc(90vh/var(--font-scale,1))] flex flex-col rounded-3xl border border-border bg-panel shadow-2xl overflow-hidden"
       >
         {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-panel-alt shrink-0">

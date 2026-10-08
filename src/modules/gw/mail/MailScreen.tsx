@@ -403,10 +403,10 @@ function LocalMailScreen() {
   };
 
   if (usersQuery.isLoading || accountsQuery.isLoading) {
-    return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">메일함을 불러오는 중…</div>;
+    return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">메일함을 불러오는 중…</div>;
   }
   if (!actor) {
-    return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
+    return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
   }
 
   const detailAccount = selectedRef
@@ -690,7 +690,7 @@ function LocalMailScreen() {
 
       {imagePreview && (
         <Modal open onClose={() => setImagePreview(null)} title={imagePreview.filename} width={Math.min(880, window.innerWidth - 32)}>
-          <img src={imagePreview.url} alt={imagePreview.filename} className="mx-auto max-h-[70vh] max-w-full rounded-lg" />
+          <img src={imagePreview.url} alt={imagePreview.filename} className="mx-auto max-h-[calc(70vh/var(--font-scale,1))] max-w-full rounded-lg" />
         </Modal>
       )}
 

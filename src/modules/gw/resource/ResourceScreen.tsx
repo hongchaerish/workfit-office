@@ -131,9 +131,9 @@ function LocalResourceScreen() {
     }
   };
 
-  if (loading) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">자원예약을 불러오는 중…</div>;
-  if (queryError) return <div className="grid min-h-[60vh] place-items-center px-5 text-center text-[12px] font-semibold text-red-500">자원예약 데이터를 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
-  if (!actor) return <div className="grid min-h-[60vh] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
+  if (loading) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">자원예약을 불러오는 중…</div>;
+  if (queryError) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center px-5 text-center text-[12px] font-semibold text-red-500">자원예약 데이터를 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
+  if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">

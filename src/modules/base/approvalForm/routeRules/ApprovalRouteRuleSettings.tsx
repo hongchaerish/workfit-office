@@ -188,7 +188,7 @@ export function ApprovalRouteRuleSettings({ form, org }: ApprovalRouteRuleSettin
       {selRule && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
           <div
-            className="relative w-[640px] max-h-[85vh] overflow-y-auto rounded-xl bg-panel border border-border p-6 shadow-2xl space-y-4"
+            className="relative w-[640px] max-h-[calc(85vh/var(--font-scale,1))] overflow-y-auto rounded-xl bg-panel border border-border p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <button

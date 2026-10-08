@@ -41,7 +41,7 @@ export function RelatedDocDetailModal({ docId, onClose }: RelatedDocDetailModalP
       }}
     >
       <div
-        className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="flex max-h-[calc(82vh/var(--font-scale,1))] w-full max-w-3xl flex-col rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}

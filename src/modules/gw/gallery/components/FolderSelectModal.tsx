@@ -47,8 +47,12 @@ export function FolderSelectModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+      // 바깥(어두운 배경)을 누르면 닫는다 — 처리 중에는 닫지 않는다
+      onMouseDown={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[calc(85vh/var(--font-scale,1))]">
         {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-panel-alt shrink-0">
           <div>

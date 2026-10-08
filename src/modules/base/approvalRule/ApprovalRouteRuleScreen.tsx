@@ -581,7 +581,7 @@ export default function ApprovalRouteRuleScreen() {
           onClick={() => setSelRule(null)}
         >
           <div
-            className="relative w-full max-w-3xl max-h-[88vh] overflow-y-auto rounded-2xl bg-panel border border-border p-6 shadow-2xl space-y-4"
+            className="relative w-full max-w-3xl max-h-[calc(88vh/var(--font-scale,1))] overflow-y-auto rounded-2xl bg-panel border border-border p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border pb-3">

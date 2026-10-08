@@ -1037,7 +1037,7 @@ export default function EmployeeScreen() {
             className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity"
           />
 
-          <div className="fixed inset-0 z-50 m-auto flex h-[560px] max-h-[90vh] w-[720px] max-w-[95vw] overflow-hidden rounded-3xl border border-border bg-panel shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 m-auto flex h-[560px] max-h-[calc(90vh/var(--font-scale,1))] w-[720px] max-w-[95vw] overflow-hidden rounded-3xl border border-border bg-panel shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* 좌측 프로필 카드 영역 */}
             <div className="flex w-[240px] shrink-0 flex-col items-center justify-between border-r border-border bg-gradient-to-b from-teal-soft/10 to-panel-alt/5 p-6 select-none">
               <div className="mt-4 flex w-full flex-col items-center">
@@ -1307,7 +1307,7 @@ export default function EmployeeScreen() {
       {/* ==================== D. 관리자 전용 신규 임직원 등록 모달 (사용자 관리 계정 연동) ==================== */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="flex max-h-[90vh] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
+          <div className="flex max-h-[calc(90vh/var(--font-scale,1))] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-border pb-2">
               <span className="text-[13px] font-extrabold text-navy">👤 임직원 인사 발령 (등록)</span>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-ink3 hover:text-ink p-1">
@@ -1573,7 +1573,7 @@ export default function EmployeeScreen() {
       {/* ==================== E. 관리자 전용 임직원 정보 편집 모달 (인사/신상 탭) ==================== */}
       {isEditModalOpen && selectedEmp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="flex max-h-[90vh] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
+          <div className="flex max-h-[calc(90vh/var(--font-scale,1))] w-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-panel p-5 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-border pb-2">
               <span className="text-[13px] font-extrabold text-navy">⚙️ {selectedEmp.name} 인사 및 신상 정보 수정</span>
               <button onClick={() => setIsEditModalOpen(false)} className="text-ink3 hover:text-ink p-1">

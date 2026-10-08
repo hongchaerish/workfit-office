@@ -275,7 +275,7 @@ export default function DocumentScreen() {
     <div className="flex h-full w-full gap-5 bg-panel p-6 text-[12.5px] text-ink relative overflow-hidden">
       
       {/* ── 좌측 문서함 관리 사이드바 ── */}
-      <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm select-none overflow-y-auto max-h-[calc(100vh-140px)]">
+      <aside className="w-[240px] shrink-0 flex flex-col gap-4 rounded-xl border border-border bg-panel p-4 shadow-sm select-none overflow-y-auto max-h-[calc(100vh/var(--font-scale,1)-140px)]">
         <div className="flex items-center justify-between border-b border-border pb-2 shrink-0">
           <h2 className="text-sm font-extrabold text-navy flex items-center gap-2">
             <FolderGit2 size={16} className="text-teal" />
@@ -769,7 +769,7 @@ export default function DocumentScreen() {
       {/* ==================== F. 신규 문서 등록 모달 ==================== */}
       {isDocModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-panel border border-border w-[460px] rounded-xl p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-panel border border-border w-[460px] rounded-xl p-5 shadow-2xl flex flex-col gap-4 max-h-[calc(90vh/var(--font-scale,1))] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <span className="font-extrabold text-navy text-[13px] flex items-center gap-1.5">
                 <FilePlus size={15} className="text-teal" />

@@ -68,7 +68,7 @@ export function GwSideNav({ title, desc, items, activeId, onSelect, filter, scro
       </div>
       {filter}
       {items && items.length > 0 && (
-        <nav className={`flex flex-col gap-1 ${scrollItems ? 'content-scroll max-h-[52vh] min-h-0 overflow-y-auto pr-0.5' : ''}`}>
+        <nav className={`flex flex-col gap-1 ${scrollItems ? 'content-scroll max-h-[calc(52vh/var(--font-scale,1))] min-h-0 overflow-y-auto pr-0.5' : ''}`}>
           {items.map((item) => {
             const active = item.id === activeId;
             return (

@@ -246,7 +246,7 @@ export default function ApprovalFormScreen() {
                 </button>
               </div>
 
-              <div className="p-2 space-y-1 overflow-y-auto max-h-[75vh]">
+              <div className="p-2 space-y-1 overflow-y-auto max-h-[calc(75vh/var(--font-scale,1))]">
                 {/* 0. 전체 서식 뷰 버튼 */}
                 <button
                   type="button"

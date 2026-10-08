@@ -139,7 +139,7 @@ export function RelatedDocSearchModal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden"
+        className="flex max-h-[calc(85vh/var(--font-scale,1))] w-full max-w-4xl flex-col rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}

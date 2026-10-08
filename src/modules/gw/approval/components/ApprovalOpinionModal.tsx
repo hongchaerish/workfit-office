@@ -26,7 +26,7 @@ export function ApprovalOpinionModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
+        className="flex max-h-[calc(90vh/var(--font-scale,1))] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-panel shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/30 px-5 py-3.5">

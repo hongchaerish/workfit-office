@@ -99,13 +99,13 @@ export const LightboxViewer: React.FC<LightboxViewerProps> = ({
 
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative flex max-h-[92vh] max-w-5xl w-full flex-col overflow-hidden rounded-3xl bg-panel shadow-2xl animate-in zoom-in-95 duration-200"
+        className="relative flex max-h-[calc(92vh/var(--font-scale,1))] max-w-5xl w-full flex-col overflow-hidden rounded-3xl bg-panel shadow-2xl animate-in zoom-in-95 duration-200"
       >
-        <div className="relative flex max-h-[65vh] min-h-[350px] w-full items-center justify-center bg-black/95 overflow-hidden">
+        <div className="relative flex max-h-[calc(65vh/var(--font-scale,1))] min-h-[350px] w-full items-center justify-center bg-black/95 overflow-hidden">
           <img
             src={activeItem.images[activeImageIndex] || activeItem.images[0]}
             alt={activeItem.caption || activeItem.description || '갤러리 사진'}
-            className="max-h-[65vh] w-auto max-w-full object-contain select-none"
+            className="max-h-[calc(65vh/var(--font-scale,1))] w-auto max-w-full object-contain select-none"
           />
 
           {/* 전체 목록 기준 사진 순번 배지 (예: 3 / 15) */}

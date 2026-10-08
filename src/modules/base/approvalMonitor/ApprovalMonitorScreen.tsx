@@ -41,7 +41,7 @@ export default function ApprovalMonitorScreen() {
   const { canAccess } = usePermission();
   if (!canAccess('/base/approval-monitor')) {
     return (
-      <div className="flex h-[calc(100vh-130px)] items-center justify-center p-6">
+      <div className="flex h-[calc(100vh/var(--font-scale,1)-130px)] items-center justify-center p-6">
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
           <h2 className="text-base font-bold text-ink">접근 권한 제한</h2>
           <p className="text-xs leading-relaxed text-ink2">

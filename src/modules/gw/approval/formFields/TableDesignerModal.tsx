@@ -836,7 +836,7 @@ export function TableDesignerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="relative flex flex-col w-full max-w-5xl h-[88vh] rounded-2xl bg-white shadow-2xl border border-border overflow-hidden">
+      <div className="relative flex flex-col w-full max-w-5xl h-[calc(88vh/var(--font-scale,1))] rounded-2xl bg-white shadow-2xl border border-border overflow-hidden">
         {/* 1. 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-border bg-panel px-6 py-3.5 shrink-0">
           <div className="flex items-center gap-3">

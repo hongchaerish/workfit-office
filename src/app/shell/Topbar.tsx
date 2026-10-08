@@ -210,7 +210,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                     ref={panelRef}
                     onMouseEnter={() => handleMouseEnter(m.id)}
                     onMouseLeave={handleMouseLeave}
-                    className="absolute left-1/2 top-[calc(100%+6px)] z-[60] flex max-h-[calc(100vh-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 before:content-['']"
+                    className="absolute left-1/2 top-[calc(100%+6px)] z-[60] flex max-h-[calc(100vh/var(--font-scale,1)-88px)] flex-col rounded-xl border border-border bg-panel p-2 shadow-[0_16px_40px_rgba(16,24,48,0.22)] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 before:content-['']"
                     style={{ width: cols === 3 ? 624 : cols === 2 ? 432 : 248, transform: `translateX(calc(-50% + ${shift}px))` }}
                   >
                     <div className="absolute -top-1.5 -ml-1.5 h-3 w-3 rotate-45 border-l border-t border-border bg-panel" style={{ left: `calc(50% - ${shift}px)` }} />

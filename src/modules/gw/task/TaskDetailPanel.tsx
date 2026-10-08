@@ -137,7 +137,7 @@ export default function TaskDetailPanel({
   };
 
   return (
-    <aside className="detail-panel-in lg:sticky lg:top-3 flex max-h-[calc(100vh-2rem)] min-h-0 flex-col rounded-[10px] border border-border bg-panel shadow-[0_1px_2px_rgba(23,34,65,0.06)]">
+    <aside className="detail-panel-in lg:sticky lg:top-3 flex max-h-[calc(100vh/var(--font-scale,1)-2rem)] min-h-0 flex-col rounded-[10px] border border-border bg-panel shadow-[0_1px_2px_rgba(23,34,65,0.06)]">
       {/* ── 머리: 어디에 있는가 ── */}
       <header className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-start justify-between gap-2">

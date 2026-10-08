@@ -205,7 +205,7 @@ export function BatchSubstituteHolidayModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-xl rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-xl rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden flex flex-col max-h-[calc(90vh/var(--font-scale,1))]">
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/50 px-5 py-4 shrink-0">
           <div className="flex items-center gap-2.5">

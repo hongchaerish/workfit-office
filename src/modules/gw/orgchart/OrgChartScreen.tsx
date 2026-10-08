@@ -115,7 +115,7 @@ export default function OrgChartScreen() {
             className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity"
           />
 
-          <div className="fixed inset-0 z-50 m-auto flex h-[460px] w-[700px] max-h-[90vh] max-w-[95vw] overflow-hidden rounded-3xl border border-border bg-panel text-left shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 m-auto flex h-[460px] w-[700px] max-h-[calc(90vh/var(--font-scale,1))] max-w-[95vw] overflow-hidden rounded-3xl border border-border bg-panel text-left shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {/* 좌측 프로필 카드 영역 */}
             <div className="flex w-[230px] shrink-0 select-none flex-col items-center justify-between border-r border-border bg-gradient-to-b from-teal-soft/10 to-panel-alt/5 p-6">
               <div className="mt-4 flex w-full flex-col items-center">
