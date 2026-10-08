@@ -179,7 +179,7 @@ export default function App() {
   }, [user?.id, isMobilePwa]);
 
   // 로컬 스토리지에 저장된 폰트 크기 설정을 감지하여 앱 전체(HTML/Body)에 바인딩.
-  // 단, 모바일 PWA(/m)는 자체 px 디자인이므로 데스크톱 확대(zoom, 기본 1.1875)를 적용하면
+  // 단, 모바일 PWA(/m)는 자체 px 디자인이므로 데스크톱 확대(zoom, 기본 1.48)를 적용하면
   // 아이폰 화면보다 크게 렌더되어 축소해야 하는 문제가 생긴다 → PWA 는 항상 1(확대 없음).
   useEffect(() => {
     if (isMobilePwa) {

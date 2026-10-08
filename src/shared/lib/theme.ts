@@ -9,8 +9,15 @@ export const DEFAULT_THEME_SETTINGS: CustomThemeSettings = {
   headerBg: '#dbeafe',
   pointColor: '#99bbff',
   btnColor: '#1243b5',
-  fontScale: '1.1875',
+  // 고령 사용자 가독성 의견으로 기존 1.1875에서 약 1.25배 키운 값을 기본으로 한다
+  fontScale: '1.48',
 };
+
+/**
+ * 배율 저장 키. 기본 배율을 1.1875 → 1.48로 올리면서 _v2로 바꿔,
+ * 예전에 저장된 배율(구 기준의 작게/보통/크게)은 무시하고 모두 새 기본으로 시작하게 한다.
+ */
+const FONT_SCALE_KEY = 'custom_font_scale_v2';
 
 export function getThemeKey(key: string, userId?: string): string {
   return userId ? `${key}_${userId}` : key;
@@ -73,13 +80,13 @@ export function loadUserTheme(userId?: string): CustomThemeSettings {
     const hKey = getThemeKey('custom_theme_header_bg', userId);
     const pKey = getThemeKey('custom_theme_point_color', userId);
     const bKey = getThemeKey('custom_theme_btn_color', userId);
-    const fKey = getThemeKey('custom_font_scale', userId);
+    const fKey = getThemeKey(FONT_SCALE_KEY, userId);
 
     return {
       headerBg: localStorage.getItem(hKey) ?? localStorage.getItem('custom_theme_header_bg') ?? DEFAULT_THEME_SETTINGS.headerBg,
       pointColor: localStorage.getItem(pKey) ?? localStorage.getItem('custom_theme_point_color') ?? DEFAULT_THEME_SETTINGS.pointColor,
       btnColor: localStorage.getItem(bKey) ?? localStorage.getItem('custom_theme_btn_color') ?? DEFAULT_THEME_SETTINGS.btnColor,
-      fontScale: localStorage.getItem(fKey) ?? localStorage.getItem('custom_font_scale') ?? DEFAULT_THEME_SETTINGS.fontScale,
+      fontScale: localStorage.getItem(fKey) ?? DEFAULT_THEME_SETTINGS.fontScale,
     };
   } catch {
     return { ...DEFAULT_THEME_SETTINGS };
@@ -101,7 +108,7 @@ export function saveUserTheme(settings: Partial<CustomThemeSettings>, userId?: s
       localStorage.setItem(getThemeKey('custom_theme_btn_color', userId), settings.btnColor);
     }
     if (settings.fontScale !== undefined) {
-      localStorage.setItem(getThemeKey('custom_font_scale', userId), settings.fontScale);
+      localStorage.setItem(getThemeKey(FONT_SCALE_KEY, userId), settings.fontScale);
     }
   } catch (e) {
     console.error('Failed to save theme to localStorage:', e);

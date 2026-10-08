@@ -354,7 +354,7 @@ export default function ApprovalFormScreen() {
                             parseFloat(
                               window
                                 .getComputedStyle(document.documentElement)
-                                .getPropertyValue('--font-scale') || '1.1875'
+                                .getPropertyValue('--font-scale') || '1.48'
                             ) || 1;
                           setFolderMenu({ x: e.clientX / zoom, y: e.clientY / zoom, folder: f });
                         }}

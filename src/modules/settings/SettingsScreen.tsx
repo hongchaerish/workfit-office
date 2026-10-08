@@ -308,10 +308,10 @@ export default function SettingsScreen() {
                   </div>
                   <div className="flex items-center gap-1 bg-panel border border-border p-1 rounded-lg">
                     {[
-                      { label: '작게', value: '1.0' },
-                      { label: '보통', value: '1.1875' },
-                      { label: '크게', value: '1.35' },
-                      { label: '매우크게', value: '1.5' },
+                      { label: '작게', value: '1.1875' },
+                      { label: '보통', value: '1.48' },
+                      { label: '크게', value: '1.6' },
+                      { label: '매우크게', value: '1.75' },
                     ].map((item) => (
                       <button
                         key={item.value}

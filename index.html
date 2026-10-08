@@ -17,7 +17,7 @@
     <script>
       // 모바일 PWA(/m) 전용 초기화(데스크톱/일반 라우트엔 영향 없음).
       if (location.pathname.indexOf('/m') === 0) {
-        // 1) 데스크톱 확대(body zoom, 기본 1.1875) 없이 1배율로 시작.
+        // 1) 데스크톱 확대(body zoom, 기본 1.48) 없이 1배율로 시작.
         //    초기 렌더에서 아이폰 화면보다 크게 그려졌다가 줄어드는 깜빡임 방지(App.tsx 와 동일 정책).
         document.documentElement.style.setProperty('--font-scale', '1');
         // 2) 두 손가락 핀치 줌 비활성화 → 네이티브 앱 느낌.
