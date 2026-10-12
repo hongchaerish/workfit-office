@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
@@ -112,102 +113,8 @@ export default function WorkPlanScreen() {
   const update = useUpdateWorkPlan();
   const remove = useRemoveWorkPlan();
 
-/**
- * 직책 서열 가중치 도출 (1순위: 위원장/대표이사 -> 2순위: 부위원장 -> 3순위: 상무/손승원/본부장/임원)
- */
-function getJobTitleRank(jobTitle?: string, position?: string, name?: string): number {
-  const title = (jobTitle || '').trim();
-  const pos = (position || '').trim();
-  const n = (name || '').trim();
-
-  // 1순위: 위원장, 대표이사, 대표 (단, 부위원장 제외)
-  if (
-    n === '위원장' ||
-    pos === '위원장' ||
-    title === '위원장' ||
-    ((n.includes('대표') || pos.includes('대표') || title.includes('대표') || title.includes('위원장')) &&
-      !n.includes('부위원') && !pos.includes('부위원') && !title.includes('부위원'))
-  ) {
-    return 1;
-  }
-
-  // 2순위: 부위원장
-  if (n.includes('부위원') || pos.includes('부위원') || title.includes('부위원')) {
-    return 2;
-  }
-
-  // 3순위: 상무, 손승원, 본부장, 임원, 상무이사, 전무, 부사장, 이사
-  if (
-    n.includes('손승원') ||
-    pos.includes('상무') ||
-    title.includes('상무') ||
-    pos.includes('전무') ||
-    title.includes('전무') ||
-    pos.includes('부사장') ||
-    title.includes('부사장') ||
-    title.includes('본부장') ||
-    title.includes('임원') ||
-    pos.includes('이사')
-  ) {
-    return 3;
-  }
-
-  // 4순위: 센터장, 소장, 실장
-  if (title.includes('센터장') || title.includes('소장') || title.includes('실장')) {
-    return 4;
-  }
-  // 5순위: 팀장, 부서장
-  if (title.includes('팀장') || title.includes('부서장')) {
-    return 5;
-  }
-  // 6순위: 부팀장, 파트장, 그룹장, 차석
-  if (title.includes('부팀장') || title.includes('파트장') || title.includes('그룹장')) {
-    return 6;
-  }
-  // 7순위: 일반 팀원 / 매니저 / 연구원
-  return 10;
-}
-
-/**
- * 업무계획 사용자 정렬 헬퍼
- * 0순위: 최고위 임원급 (1: 위원장/대표이사 -> 2: 부위원장 -> 3: 상무/손승원) — 부서 무관 항상 최상위
- * 1순위: 부서순 (DB 배치순서 order)
- * 2순위: 직책순 (센터장/소장 > 팀장 > 부팀장 > 팀원)
- * 3순위: 직급순 (상무 > 이사 > 부장 > 차장 > 과장 > 대리 > 사원)
- * 4순위: 이름 가나다순
- */
-function sortWorkPlanUsers(
-  a: User,
-  b: User,
-  deptOrderMap: Map<string, number>,
-  rankOf: (pos: string) => number,
-): number {
-  // 0순위: 위원장(1) -> 부위원장(2) -> 상무(3)는 부서 순서와 무관하게 항상 최상위
-  const execRankA = getJobTitleRank(a.jobTitle, a.position, a.name);
-  const execRankB = getJobTitleRank(b.jobTitle, b.position, b.name);
-  const isExecA = execRankA <= 3;
-  const isExecB = execRankB <= 3;
-  if (isExecA !== isExecB) return isExecA ? -1 : 1;
-  // 최고위급 내부 서열 비교 (1: 위원장 -> 2: 부위원장 -> 3: 상무)
-  if (isExecA && isExecB && execRankA !== execRankB) return execRankA - execRankB;
-
-  // 1순위: 부서순 (조직도 배치순 order)
-  const orderA = deptOrderMap.get(a.dept) ?? 9999;
-  const orderB = deptOrderMap.get(b.dept) ?? 9999;
-  if (orderA !== orderB) return orderA - orderB;
-  if (a.dept !== b.dept) return a.dept.localeCompare(b.dept, 'ko');
-
-  // 2순위: 직책순
-  if (execRankA !== execRankB) return execRankA - execRankB;
-
-  // 3순위: 직급순
-  const rankA = rankOf(a.position);
-  const rankB = rankOf(b.position);
-  if (rankA !== rankB) return rankA - rankB;
-
-  // 4순위: 이름 가나다순
-  return a.name.localeCompare(b.name, 'ko');
-}
+  /** 인원 정렬 — 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]) */
+  const { compare: compareRoster } = useRosterOrder();
 
   /** 부서별 조직도 정렬 순서 맵 */
   const deptOrderMap = useMemo(() => {
@@ -224,8 +131,8 @@ function sortWorkPlanUsers(
     return users
       .filter((user) => user.status === '사용')
       .filter((user) => canViewWorkPlan(actor, user, actorScope, org))
-      .sort((a, b) => sortWorkPlanUsers(a, b, deptOrderMap, org.rankOf));
-  }, [users, actor, actorScope, deptOrderMap, org]);
+      .sort(compareRoster);
+  }, [users, actor, actorScope, org, compareRoster]);
 
   const { data: departmentMembers = [] } = useDepartmentMembers();
 
@@ -303,22 +210,7 @@ function sortWorkPlanUsers(
           seenUserIds.add(dm.userId);
         });
 
-      // 부서 내 서열 정렬 (0순위: 위원장(1) -> 부위원장(2) -> 상무(3) 등 최고위 최상위 > 1:직책순 > 2:직급순 > 3:이름순)
-      const sorted = matchedUsers.sort((a, b) => {
-        const titleRankA = getJobTitleRank(a.jobTitle, a.position, a.name);
-        const titleRankB = getJobTitleRank(b.jobTitle, b.position, b.name);
-        // 최고위급(rank<=3: 위원장 1, 부위원장 2, 상무 3)은 비임원보다 무조건 앞
-        const isExecA = titleRankA <= 3;
-        const isExecB = titleRankB <= 3;
-        if (isExecA !== isExecB) return isExecA ? -1 : 1;
-        if (titleRankA !== titleRankB) return titleRankA - titleRankB;
-
-        const rankA = org.rankOf(a.position);
-        const rankB = org.rankOf(b.position);
-        if (rankA !== rankB) return rankA - rankB;
-
-        return a.name.localeCompare(b.name, 'ko');
-      });
+      const sorted = matchedUsers.sort(compareRoster);
 
       return sorted.filter((u) => {
         if (!kw) return true;
@@ -328,7 +220,7 @@ function sortWorkPlanUsers(
 
     // 2. 전체(all) 필터
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
-  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor]);
+  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster]);
 
   const savePlan = useCallback(
     async (
