@@ -277,6 +277,42 @@ export default function OrgChartScreen() {
   );
 }
 
+/** 팀 칸이 자기 줄에서 차지하는 자리 — 수평 분기선을 어디서부터 어디까지 그릴지 정한다 */
+type TeamBranchSlot = 'first' | 'middle' | 'last' | 'alone';
+
+function teamBranchSlot(col: number, rowLength: number): TeamBranchSlot {
+  if (rowLength === 1) return 'alone';
+  if (col === 0) return 'first';
+  if (col === rowLength - 1) return 'last';
+  return 'middle';
+}
+
+// 칸 사이 간격(gap-x-3.5 = 0.875rem)의 절반보다 살짝 길게 뻗어 이웃 칸 선과 빈틈없이 맞물린다
+const TEAM_BRANCH_SEGMENT: Record<TeamBranchSlot, string> = {
+  first: 'left-1/2 right-[-0.5rem]',
+  middle: 'left-[-0.5rem] right-[-0.5rem]',
+  last: 'left-[-0.5rem] right-1/2',
+  alone: 'hidden',
+};
+
+// 짝수여야 한다 — 꽉 찬 줄의 정중앙이 칸 사이 틈에 놓여야 중앙 줄기선이 팀 박스를 가로지르지 않는다
+const TEAMS_PER_ROW = 4;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
+}
+
+/*
+ * 연결선은 배경색 박스(w-px/h-px)가 아니라 테두리로 그린다.
+ * 화면 확대(body zoom 1.48)에서 1px 박스는 1.48 장치픽셀이 되고, 놓인 위치의 소수점에 따라
+ * 1px 또는 2px 로 반올림돼 선마다 굵기가 달라 보였다. 테두리 두께는 위치와 무관하게
+ * 같은 장치픽셀 수로 맞춰지므로 모든 선이 같은 굵기로 그려진다.
+ */
+const V_LINE = 'w-0 border-l-2 border-slate-400';
+const H_LINE = 'h-0 border-t-2 border-slate-400';
+
 /** ── 워크핏 공식 엑셀 조직도 스타일 비주얼 다이어그램 (실제 DB 데이터 동적 매핑) ── */
 function VisualDiagramOrgChart({
   org,
@@ -476,7 +512,7 @@ function VisualDiagramOrgChart({
             </div>
 
             {/* 중앙 수직선 1 */}
-            <div className="h-5 w-px bg-slate-400" />
+            <div className={`h-5 ${V_LINE}`} />
           </div>
         )}
 
@@ -524,10 +560,10 @@ function VisualDiagramOrgChart({
           {/* 중앙 연결 척추선 & 우측 분기선 영역 */}
           <div className="relative w-full h-44 flex justify-center">
             {/* 중앙 수직 척추선 */}
-            <div className="h-full w-px bg-slate-400" />
+            <div className={`h-full ${V_LINE}`} />
 
             {/* 우측 1차 분기선 ➔ 부설기술연구소 */}
-            <div className="absolute top-6 left-1/2 w-28 h-px bg-slate-400" />
+            <div className={`absolute top-6 left-1/2 w-28 ${H_LINE}`} />
             <div className="absolute top-1 left-[calc(50%+112px)]">
               <div className="overflow-hidden rounded-md border border-[#A9D18E] shadow-xs">
                 <div className="bg-[#E2EFDA] border-b border-[#A9D18E] py-0.5 px-3 text-center text-[10.5px] font-extrabold text-slate-800">
@@ -567,7 +603,7 @@ function VisualDiagramOrgChart({
             </div>
 
             {/* 우측 2차 분기선 ➔ 경영기획팀 */}
-            <div className="absolute top-28 left-1/2 w-28 h-px bg-slate-400" />
+            <div className={`absolute top-28 left-1/2 w-28 ${H_LINE}`} />
             <div className="absolute top-23 left-[calc(50%+112px)]">
               <div className="overflow-hidden rounded-md border border-[#A9D18E] shadow-xs">
                 <div className="bg-[#E2EFDA] border-b border-[#A9D18E] py-0.5 px-3 text-center text-[10.5px] font-extrabold text-slate-800">
@@ -632,25 +668,26 @@ function VisualDiagramOrgChart({
             </div>
 
             {/* 본부 아래 수직 연결선 */}
-            <div className="h-6 w-px bg-slate-400" />
+            <div className={`h-6 ${V_LINE}`} />
           </div>
         )}
 
         {/* 4. 산하 팀들 수평 분기선 & 하위 팀 박스들 (실제 DB에 등록된 팀 목록) */}
-        <div className="relative w-full max-w-[960px] pt-4">
-          {/* 수평 분기선 */}
-          {teamDepts.length > 1 && (
-            <div className="absolute top-0 left-[11%] right-[11%] h-px bg-slate-400" />
-          )}
-
-          {/* 팀 목록 그리드 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 items-start">
-            {teamDepts.map((d) => {
+        {/* 줄마다 가운데 정렬해 수평 분기선이 항상 중앙을 지나고, 중앙 줄기선이 본부에서 마지막 줄까지 이어진다 */}
+        <div className="flex w-full max-w-[960px] flex-col gap-y-6">
+          {chunk(teamDepts, TEAMS_PER_ROW).map((row, rowIndex, rows) => (
+            <div key={row[0].id} className="relative flex items-start justify-center gap-x-3.5">
+              {/* 다음 줄로 내려가는 중앙 줄기선 (줄 사이 간격 gap-y-6 만큼 더 내려가 다음 줄 분기선에 닿는다) */}
+              {rowIndex < rows.length - 1 && (
+                <div className={`absolute left-1/2 top-0 bottom-[-1.5rem] -translate-x-1/2 ${V_LINE}`} />
+              )}
+            {row.map((d, col) => {
               const teamMembers = sortDeptMembers(deptMembersMap.get(d.name) ?? [], d);
 
               return (
-                <div key={d.id} className="flex flex-col items-center">
-                  <div className="h-4 w-px bg-slate-400 -mt-4 mb-0" />
+                <div key={d.id} className="relative flex w-[calc((100%-2.625rem)/4)] flex-col items-center">
+                  <div className={`absolute top-0 ${H_LINE} ${TEAM_BRANCH_SEGMENT[teamBranchSlot(col, row.length)]}`} />
+                  <div className={`h-4 ${V_LINE}`} />
                   <div className="w-full overflow-hidden rounded-md border border-[#8EA9DB] shadow-xs">
                     <div className="bg-[#DDEBF7] border-b border-[#8EA9DB] py-1 px-1.5 text-center text-[10.5px] font-extrabold text-slate-800">
                       {d.name} ({teamMembers.length}명)
@@ -689,7 +726,8 @@ function VisualDiagramOrgChart({
                 </div>
               );
             })}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
