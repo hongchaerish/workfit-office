@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search,
   Pin,
@@ -11,19 +11,25 @@ import {
   X,
   User,
   PenSquare,
+  Download,
 } from 'lucide-react';
 import { boardRepo } from '@/data/board/board.repo';
 import type { Post } from '@/domain/board/schema';
 import { usePermission } from '@/features/auth/usePermission';
+import { downloadFile } from '@/shared/lib/download';
+import { fileStorage } from '@/shared/lib/storage';
 import MobileCommonHeader from './MobileCommonHeader';
 
-type BoardCategory = 'ALL' | 'notice' | 'event' | 'rule';
+type BoardCategory = 'ALL' | 'notice' | 'event' | 'rule' | 'archive';
+type PostAttachment = NonNullable<Post['attachedFiles']>[number];
+type SelectedFile = { id: string; file: File };
 
 const CATEGORIES: { id: BoardCategory; label: string; icon: string }[] = [
   { id: 'ALL', label: '전체', icon: '📋' },
   { id: 'notice', label: '공지사항', icon: '📢' },
   { id: 'event', label: '경조사', icon: '🎉' },
   { id: 'rule', label: '사내규정', icon: '📜' },
+  { id: 'archive', label: '자료실', icon: '📁' },
 ];
 
 export default function MobileBoardScreen() {
@@ -39,9 +45,13 @@ export default function MobileBoardScreen() {
   // 글쓰기 모달 상태
   const [isWriteOpen, setIsWriteOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'notice' | 'event' | 'rule'>('notice');
+  const [newCategory, setNewCategory] = useState<Exclude<BoardCategory, 'ALL'>>('notice');
   const [newContent, setNewContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const submittingRef = useRef(false);
+  const uploadedFilesRef = useRef(new Map<string, PostAttachment>());
+  const pendingPostIdRef = useRef<string | null>(null);
 
   const loadPosts = useCallback(async () => {
     setIsLoading(true);
@@ -59,16 +69,53 @@ export default function MobileBoardScreen() {
     loadPosts();
   }, [loadPosts]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (submittingRef.current) return;
+    const files = Array.from(e.currentTarget.files ?? []);
+    setSelectedFiles((previous) => [
+      ...previous,
+      ...files.map((file) => ({ id: crypto.randomUUID(), file })),
+    ]);
+    e.currentTarget.value = '';
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    if (!canCreate || !user) {
+      alert('게시글 작성 권한이 없습니다.');
+      return;
+    }
     if (!newTitle.trim() || !newContent.trim()) {
       alert('제목과 내용을 입력해주세요.');
       return;
     }
+    submittingRef.current = true;
     setIsSubmitting(true);
+    pendingPostIdRef.current ??= `POST_${Date.now()}`;
     try {
+      const attachedFiles: PostAttachment[] = [];
+      for (const selected of selectedFiles) {
+        let attachment = uploadedFilesRef.current.get(selected.id);
+        if (!attachment) {
+          // Unique per selected file, so uploads never reuse an existing board file path.
+          const url = await fileStorage.put(`chat/board/${selected.id}_${selected.file.name}`, selected.file, {
+            contentType: selected.file.type,
+            filename: selected.file.name,
+          });
+          if (!url.trim()) throw new Error('첨부파일 주소를 받지 못했습니다.');
+          attachment = {
+            name: selected.file.name,
+            size: (selected.file.size / (1024 * 1024)).toFixed(1) + ' MB',
+            url,
+          };
+          // Keep completed uploads if a later upload or post save fails.
+          uploadedFilesRef.current.set(selected.id, attachment);
+        }
+        attachedFiles.push(attachment);
+      }
       const newPost: Post = {
-        id: `POST_${Date.now()}`,
+        id: pendingPostIdRef.current,
         boardId: newCategory,
         title: newTitle.trim(),
         content: newContent.trim(),
@@ -76,17 +123,22 @@ export default function MobileBoardScreen() {
         date: new Date().toISOString(),
         isPinned: false,
         views: 0,
-        hasAttachment: false,
+        hasAttachment: attachedFiles.length > 0,
+        attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
       };
       await boardRepo.save(newPost);
       setNewTitle('');
       setNewContent('');
+      setSelectedFiles([]);
+      uploadedFilesRef.current.clear();
+      pendingPostIdRef.current = null;
       setIsWriteOpen(false);
       await loadPosts();
     } catch (err) {
       console.error('게시글 등록 실패:', err);
-      alert('게시글 등록에 실패했습니다.');
+      alert(`게시글 등록에 실패했습니다. ${err instanceof Error ? err.message : '다시 시도해 주세요.'}`);
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -127,6 +179,8 @@ export default function MobileBoardScreen() {
         return { label: '경조사', icon: <PartyPopper size={12} className="text-amber-500" />, badge: 'bg-amber-500/10 text-amber-600' };
       case 'rule':
         return { label: '사내규정', icon: <ScrollText size={12} className="text-blue-500" />, badge: 'bg-blue-500/10 text-blue-600' };
+      case 'archive':
+        return { label: '자료실', icon: <FileText size={12} className="text-teal" />, badge: 'bg-teal/10 text-teal' };
       default:
         return { label: '일반', icon: <FileText size={12} className="text-ink3" />, badge: 'bg-panel-alt text-ink2' };
     }
@@ -264,6 +318,7 @@ export default function MobileBoardScreen() {
             <button
               type="button"
               onClick={() => setIsWriteOpen(false)}
+              disabled={isSubmitting}
               className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white"
             >
               <X size={18} />
@@ -275,16 +330,18 @@ export default function MobileBoardScreen() {
               {/* 분류 선택 */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-ink2">게시판 분류</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'notice' as const, label: '📢 공지사항' },
                     { id: 'event' as const, label: '🎉 경조사' },
                     { id: 'rule' as const, label: '📜 사내규정' },
+                    { id: 'archive' as const, label: '📁 자료실' },
                   ].map((cat) => (
                     <button
                       key={cat.id}
                       type="button"
                       onClick={() => setNewCategory(cat.id)}
+                      disabled={isSubmitting}
                       className={`rounded-xl py-2 text-[11.5px] font-bold transition-all border ${
                         newCategory === cat.id
                           ? 'border-teal bg-teal text-white shadow-2xs'
@@ -303,6 +360,7 @@ export default function MobileBoardScreen() {
                 <input
                   type="text"
                   value={newTitle}
+                  disabled={isSubmitting}
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="제목을 입력하세요"
                   required
@@ -315,12 +373,47 @@ export default function MobileBoardScreen() {
                 <label className="text-[11px] font-bold text-ink2">내용</label>
                 <textarea
                   value={newContent}
+                  disabled={isSubmitting}
                   onChange={(e) => setNewContent(e.target.value)}
                   placeholder="내용을 상세히 입력하세요…"
                   rows={8}
                   required
                   className="w-full rounded-xl border border-border bg-white p-3 text-[12.5px] text-ink outline-none focus:border-teal resize-none"
                 />
+              </div>
+
+              {/* 첨부파일 — 웹 게시판과 같은 스토리지/저장 형식 사용 */}
+              <div className="space-y-1.5">
+                <label htmlFor="mobile-board-files" className="flex items-center gap-1 text-[11px] font-bold text-ink2">
+                  <Paperclip size={13} /> 첨부파일
+                </label>
+                <input
+                  id="mobile-board-files"
+                  type="file"
+                  multiple
+                  onChange={handleFileSelect}
+                  disabled={isSubmitting}
+                  className="block w-full text-[12px] text-ink2 file:mr-3 file:rounded-lg file:border file:border-border file:bg-white file:px-3 file:py-2 file:text-[12px] file:font-bold file:text-teal"
+                />
+                {selectedFiles.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {selectedFiles.map((selected) => (
+                      <li key={selected.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white p-2 text-[12px]">
+                        <span className="min-w-0 flex-1 break-all text-ink">{selected.file.name}</span>
+                        <span className="shrink-0 text-[10px] text-ink3">{(selected.file.size / (1024 * 1024)).toFixed(1)} MB</span>
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => setSelectedFiles((previous) => previous.filter((item) => item.id !== selected.id))}
+                          aria-label={`${selected.file.name} 첨부 해제`}
+                          className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-bold text-rose-500 disabled:opacity-50"
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 
@@ -329,6 +422,7 @@ export default function MobileBoardScreen() {
               <button
                 type="button"
                 onClick={() => setIsWriteOpen(false)}
+                disabled={isSubmitting}
                 className="flex-1 rounded-xl border border-border py-2.5 text-[12px] font-bold text-ink2 hover:bg-panel"
               >
                 취소
@@ -401,13 +495,24 @@ export default function MobileBoardScreen() {
                   </div>
                   <div className="space-y-1">
                     {selectedPost.attachedFiles.map((file, idx) => (
-                      <div
+                      <button
                         key={idx}
-                        className="flex items-center justify-between rounded-lg bg-white p-2 border border-border/60 text-[11.5px]"
+                        type="button"
+                        disabled={!file.url?.trim()}
+                        title={file.url?.trim() ? `${file.name} 다운로드` : '파일 주소가 없어 열 수 없습니다.'}
+                        onClick={() => {
+                          if (file.url?.trim()) void downloadFile(file.url, file.name);
+                        }}
+                        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg bg-white p-2 border border-border/60 text-left text-[11.5px] enabled:hover:border-teal enabled:active:bg-teal-soft/20 disabled:opacity-60"
                       >
-                        <span className="truncate font-medium text-ink max-w-[220px]">{file.name}</span>
-                        <span className="text-ink3 text-[10px]">{file.size}</span>
-                      </div>
+                        <span className="min-w-0 flex-1 truncate font-medium text-ink">{file.name}</span>
+                        <span className="shrink-0 text-ink3 text-[10px]">{file.size}</span>
+                        {file.url?.trim() ? (
+                          <Download size={14} className="shrink-0 text-teal" aria-hidden="true" />
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-ink3">파일 주소 없음</span>
+                        )}
+                      </button>
                     ))}
                   </div>
                 </div>
