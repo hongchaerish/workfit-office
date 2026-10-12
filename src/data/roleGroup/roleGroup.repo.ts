@@ -27,6 +27,8 @@ const groupBackend = createCrudBackend<RoleGroup>({
   idOf: (x: any) => x.id || x.$id || x.code,
   seed: ROLE_GROUP_SEED.map((g) => roleGroupSchema.parse(g)),
   jsonFields: ['members', 'menuPermissions'],
+  // id 는 문서 $id 로만 쓴다 — roleGroups 컬렉션에 id 속성이 없어 그대로 보내면 Appwrite 가 저장을 거부한다
+  stripFields: ['id'],
   firestoreEncode: encodeForFirestore,
   firestoreDecode: decodeFromFirestore,
 });
