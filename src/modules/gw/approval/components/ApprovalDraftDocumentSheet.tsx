@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep, ApprovalRecipient, RelatedDoc } from '@/domain/approvalDoc/schema';
-import { amountFieldOf, type ApprovalForm, type FormField, type FieldValue } from '@/domain/approvalForm/schema';
+import { amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField, type FieldValue } from '@/domain/approvalForm/schema';
 import { ApprovalStampTable } from './ApprovalStampTable';
 import { AutoResizeTextarea } from '../formFields/AutoResizeTextarea';
 import { CalendarRangePicker } from '../formFields/CalendarRangePicker';
@@ -221,6 +221,8 @@ export function ApprovalDraftDocumentSheet({
       : FALLBACK_CLOSING[docCode] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.';
 
   const amountField = form ? amountFieldOf(form) : undefined;
+  /** 기본 본문 칸의 값 키 — 'body' 키를 표 등 다른 필드가 쓰면 별도 키라 서로 덮어쓰지 않는다. */
+  const bodyKey = documentBodyKeyOf(form?.fields);
   const amountLabel = amountField?.label ?? '금 액';
 
   // 정렬된 결재 단계 (직인용)
@@ -1132,8 +1134,8 @@ export function ApprovalDraftDocumentSheet({
         <div className="mt-3">
           <div className="text-[11px] font-semibold text-[#444] mb-1">상세 내용</div>
           <AutoResizeTextarea
-            value={String(values['body'] ?? '')}
-            onChange={(val) => setVals({ body: val })}
+            value={String(values[bodyKey] ?? '')}
+            onChange={(val) => setVals({ [bodyKey]: val })}
             placeholder="상세 내용을 입력하세요"
             className="w-full min-h-[140px] border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] bg-white outline-none focus:border-teal rounded-none resize-y"
           />

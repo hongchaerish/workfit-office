@@ -125,8 +125,21 @@ export const approvalFolderSchema = z.object({
 });
 export type ApprovalFolder = z.infer<typeof approvalFolderSchema>;
 
-/** 예약 필드 키 — 문서 1급 컬럼에 바인딩. */
+/** 문서 본문(doc.body) 기본 키 — 장문 필드이거나 서식이 이 키를 쓰지 않을 때만 본문에 바인딩된다. */
 export const RESERVED_BODY_KEY = 'body';
+
+/** 'body' 키를 표 등 다른 종류 필드가 쓰고 있을 때, 기본 본문 칸(장문 필드가 없을 때 제공)이 쓰는 키. */
+export const BODY_BOX_FALLBACK_KEY = '__body';
+
+/**
+ * 문서 본문(doc.body)으로 저장·표시할 값의 키.
+ * 'body' 는 예약어가 아니다 — 표·텍스트 등 다른 종류가 'body' 키를 쓰면 일반 필드로 취급하고,
+ * 본문은 별도 키(`__body`)에 담아 서로 덮어쓰지 않게 한다.
+ */
+export function documentBodyKeyOf(fields?: Array<Pick<FormField, 'key' | 'type'>> | null): string {
+  const bodyField = fields?.find((f) => f.key === RESERVED_BODY_KEY);
+  return !bodyField || bodyField.type === '장문' ? RESERVED_BODY_KEY : BODY_BOX_FALLBACK_KEY;
+}
 
 /** 서식의 금액 필드(있으면) — 상신 시 이 값을 amount 로 승격. */
 export const amountFieldOf = (form: ApprovalForm): FormField | undefined =>

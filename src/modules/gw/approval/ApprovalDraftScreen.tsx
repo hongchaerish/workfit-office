@@ -10,7 +10,7 @@ import {
   type ApprovalRecipient,
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
-import { RESERVED_BODY_KEY, amountFieldOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
+import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
@@ -973,6 +973,7 @@ function ApprovalDraftInner({
   const busy = create.isPending || save.isPending || submitM.isPending || uploading;
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
+  const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
 
   const amountNum = useMemo(() => {
@@ -1273,7 +1274,7 @@ function ApprovalDraftInner({
       const timeWin = getDefaultTimeWindow(lType, quarterSlot);
       const startTime = String(values['startTime'] || timeWin.startTime);
       const endTime = String(values['endTime'] || timeWin.endTime);
-      const reason = values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : undefined;
+      const reason = values[bodyKey] ? String(values[bodyKey]).trim() : undefined;
       const subId = values['substituteId'] ? String(values['substituteId']) : undefined;
       const subUser = subId ? org.userById(subId) : null;
       const emergencyContact = values['emergencyContact']
@@ -1315,7 +1316,7 @@ function ApprovalDraftInner({
       drafterDeptId: myDeptId,
       steps,
       amount: amountNum,
-      body: values[RESERVED_BODY_KEY] ? String(values[RESERVED_BODY_KEY]).trim() : '',
+      body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
       fieldValues: values,
       attachments,
@@ -2006,7 +2007,7 @@ function ApprovalDraftInner({
             comment: s.comment || '',
             ...s,
           })),
-          body: selectedBackup.data.values?.[RESERVED_BODY_KEY] || '',
+          body: selectedBackup.data.values?.[documentBodyKeyOf(selectedForm?.fields)] || '',
           fieldValues: selectedBackup.data.values || {},
           form: (selectedBackup.data.code === '휴가' || selectedBackup.data.values?.leaveType) ? {
             leaveType: selectedBackup.data.values?.leaveType || '연차',
@@ -2015,7 +2016,7 @@ function ApprovalDraftInner({
             days: Number(selectedBackup.data.values?.['period__days']) || 1,
             substituteId: selectedBackup.data.values?.substituteId || '',
             emergencyContact: selectedBackup.data.values?.emergencyContact || '',
-            reason: selectedBackup.data.values?.[RESERVED_BODY_KEY] || '',
+            reason: selectedBackup.data.values?.[documentBodyKeyOf(selectedForm?.fields)] || '',
           } : undefined,
           amount: selectedBackup.data.amount ? Number(selectedBackup.data.amount) : undefined,
           attachments: selectedBackup.data.attachments || [],

@@ -11,7 +11,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
-import { RESERVED_BODY_KEY } from '@/domain/approvalForm/schema';
+import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge, type OrgLite } from '@/modules/gw/approval/formFields';
 import { fmtDocDate, statusColor } from './MobileApprovalList';
 import { ApprovalDocumentView } from '@/modules/gw/approval/ApprovalDocumentView';
@@ -643,7 +643,9 @@ function ApprovalBody({
 }) {
   const org: OrgLite = { users, depts: [] };
   const values: Record<string, FieldValue> = { ...doc.fieldValues };
-  if (doc.body) values[RESERVED_BODY_KEY] = doc.body; // 컬럼 body 를 예약키 값으로 우선
+  // 컬럼 body 를 본문 키 값으로 우선 — 'body' 키를 표 등 다른 종류가 쓰면 본문은 별도 키라 덮어쓰지 않는다
+  const bodyKey = documentBodyKeyOf(form?.fields);
+  if (doc.body) values[bodyKey] = doc.body;
 
   const rows: React.ReactNode[] = [];
 
@@ -689,7 +691,7 @@ function ApprovalBody({
       if (!rawText || rawText === '—') continue;
       pushSection();
 
-      if (f.type === '장문' || f.key === RESERVED_BODY_KEY) {
+      if (f.type === '장문' || f.key === bodyKey) {
         rows.push(
           <div key={f.key} className="py-1.5">
             <div className="mb-1 text-[11.5px] text-ink3 flex items-center gap-1">
