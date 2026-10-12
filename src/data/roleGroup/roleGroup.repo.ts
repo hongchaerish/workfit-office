@@ -179,7 +179,7 @@ export const roleGroupRepo = {
     try {
       const [allMappings, liveUsers, liveDepts, livePositions] = await Promise.all([
         mappingBackend.loadAll(),
-        userRepo.list().catch(() => []),
+        userRepo.listIncludingTestAccounts().catch(() => []),
         departmentRepo.list().catch(() => []),
         positionRepo.list().catch(() => []),
       ]);

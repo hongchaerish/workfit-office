@@ -22,8 +22,7 @@ test('사원도 다른 부서 팀원의 업무계획을 본다', () => {
   assert.equal(canViewWorkPlan(staff, leader, scope), true);
 });
 
-test('테스터 계정은 여전히 서로 격리된다', () => {
-  assert.equal(resolveWorkPlanScope(tester), 'MY_ONLY');
-  assert.equal(canViewWorkPlan(tester, staff, resolveWorkPlanScope(tester)), false);
-  assert.equal(canViewWorkPlan(staff, tester, resolveWorkPlanScope(staff)), false);
+test('테스트 계정도 전사 업무계획을 본다 — 임직원에게서 테스트 계정을 숨기는 일은 사람 목록(repo)이 맡는다', () => {
+  assert.equal(resolveWorkPlanScope(tester), 'ALL');
+  assert.equal(canViewWorkPlan(tester, staff, resolveWorkPlanScope(tester)), true);
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import {
   Settings,
   Palette,
@@ -154,9 +155,10 @@ export default function SettingsScreen() {
     [users, absenceConfig.delegateUserId]
   );
 
+  const { canDesignate } = useCanDesignate();
   const candidateUsers = useMemo(
-    () => users.filter((u) => u.id !== me?.id && u.status === '사용'),
-    [users, me?.id]
+    () => users.filter((u) => u.id !== me?.id && u.status === '사용' && canDesignate(u)),
+    [users, me?.id, canDesignate]
   );
 
   const allAvailableDocTypes = useMemo(() => {

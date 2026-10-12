@@ -6,6 +6,7 @@ import { QueryProvider } from './app/QueryProvider';
 import { AuthProvider } from './app/auth/AuthProvider';
 import { PresenceProvider } from './features/userPresence/PresenceProvider';
 import AuthGate from './app/auth/AuthGate';
+import { TestAccountVisibilitySync } from './features/auth/TestAccountVisibilitySync';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
     <AuthProvider>
       <AuthGate>
         <QueryProvider>
+          <TestAccountVisibilitySync />
           <BrowserRouter>
             <PresenceProvider>
               <App />

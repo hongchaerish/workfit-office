@@ -1,5 +1,7 @@
 import { employeeProfileSchema, type EmployeeProfile } from '@/domain/employeeProfile/schema';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
+import { isTestAccount } from '@/domain/user/testAccount';
 
 const STORAGE_KEY = 'workfit-attendance-target-overrides';
 
@@ -42,8 +44,18 @@ const backend = createCrudBackend<EmployeeProfile>({
 });
 
 export const employeeProfileRepo = {
-  /** 전체 임직원 인사 프로필 목록 조회 */
+  /** 임직원 인사 프로필 목록 — 접속자가 볼 수 없는 테스트 계정 프로필은 빠진다([[testAccountVisibility]]). */
   async list(): Promise<EmployeeProfile[]> {
+    const all = await this.listIncludingTestAccounts();
+    return hideTestAccountRows(
+      all,
+      (p) => [p.userId, p.id],
+      (p) => isTestAccount({ id: p.userId, name: p.name, dept: p.dept }),
+    );
+  },
+
+  /** 테스트 계정 프로필까지 포함한 전체 목록 — 사용자 조인·저장 경로 전용. */
+  async listIncludingTestAccounts(): Promise<EmployeeProfile[]> {
     const items = await backend.loadAll();
     const overrides = getAttendanceOverrides();
     return items.map((item) => {

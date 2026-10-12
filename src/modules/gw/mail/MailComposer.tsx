@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import type { User } from '@/domain/user/schema';
 import type { MailAccount } from '@/domain/mailAccount/schema';
 import {
@@ -102,12 +103,13 @@ export default function MailComposer({ actor, accounts, mode, source, draft, ini
   const recentRecipients = useMemo(() => recipientStore.list(actor.id), [actor.id]);
   /** 추천 후보 = 최근 주소 + 사내 주소록(재직자). 최근 사용이 앞선다. */
   const usersQuery = useUsers();
+  const { canDesignate } = useCanDesignate();
   const suggestionSource = useMemo(() => mergeRecipientSources(
     recentRecipients,
     (usersQuery.data ?? [])
-      .filter((row) => row.status === '사용')
+      .filter((row) => row.status === '사용' && canDesignate(row))
       .map((row) => ({ name: row.name, email: row.email })),
-  ), [recentRecipients, usersQuery.data]);
+  ), [recentRecipients, usersQuery.data, canDesignate]);
 
   // 발신 계정이 바뀌면 서명도 바뀌어야 하지만, 본문을 이미 쓴 뒤 갈아끼우면 사용자가 쓴
   // 내용을 건드리게 된다. 초기값은 처음 계정 기준으로 한 번만 만든다.

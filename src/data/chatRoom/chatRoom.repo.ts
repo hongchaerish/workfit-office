@@ -193,7 +193,7 @@ export const chatRoomRepo = {
       lastDeptSyncAt = now;
       try {
         const depts = await departmentRepo.list();
-        const users = await userRepo.list();
+        const users = await userRepo.listIncludingTestAccounts();
 
         for (const dept of depts) {
           const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);

@@ -1,3 +1,4 @@
+import { isTestAccount } from '@/domain/user/testAccount';
 import type { User } from '@/domain/user/schema';
 
 /**
@@ -81,31 +82,17 @@ export function isLeaderUser(
 }
 
 /**
- * 테스터 계정 여부 판별 (이름/부서/ID/이메일에 '테스트'/'test' 포함 여부)
+ * 테스터 계정 여부 판별 — 프로젝트 공통 기준([[testAccount]])의 별칭.
  */
 export function isTestUser(user?: { id?: string; name?: string; dept?: string; email?: string } | null): boolean {
-  if (!user) return false;
-  const name = (user.name || '').toLowerCase();
-  const dept = (user.dept || '').toLowerCase();
-  const id = (user.id || '').toLowerCase();
-  const email = (user.email || '').toLowerCase();
-
-  return (
-    name.includes('테스트') ||
-    name.includes('테스터') ||
-    name.includes('test') ||
-    dept.includes('테스트') ||
-    dept.includes('test') ||
-    id.includes('test') ||
-    email.includes('test')
-  );
+  return isTestAccount(user);
 }
 
 /**
  * 업무계획(및 같은 범위를 쓰는 캘린더 팀 일정)의 조회 스코프를 결정합니다.
  *
  * 2026-10-06부터 직책·직급·권한별 차등 없이 **전사 공통(ALL)** 입니다.
- * 테스터 계정만 본인 전용(MY_ONLY)으로 격리합니다.
+ * 테스트 계정도 전사를 본다. 임직원에게서 테스트 계정을 숨기는 일은 사람 목록 repo 가 맡는다.
  */
 export function resolveWorkPlanScope(
   user?: User | null,
@@ -113,7 +100,7 @@ export function resolveWorkPlanScope(
   _org?: OrgContextLike
 ): DataScope {
   if (!user) return 'TEAM';
-  return isTestUser(user) ? 'MY_ONLY' : 'ALL';
+  return 'ALL';
 }
 
 /**
@@ -174,11 +161,7 @@ export function canViewWorkPlan(
   // 1. 본인 업무계획은 항상 열람 가능
   if (target.id === actor.id) return true;
 
-  // 0. 테스터 격리: 접속자가 테스터이면 본인 외에는 어떤 임직원도 열람 불가
-  if (isTestUser(actor)) return false;
-
-  // 0. 일반 사용자는 테스터 계정 열람 불가
-  if (isTestUser(target)) return false;
+  // 테스트 계정은 볼 수 없는 접속자의 사람 목록에서 이미 빠져 있다(repo).
 
   // 본인 전용 스코프인 경우
   if (actorScope === 'MY_ONLY') return false;

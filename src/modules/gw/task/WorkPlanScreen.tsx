@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { resolveWorkPlanScope, canViewWorkPlan, isTestUser } from '@/features/auth/scopeHelper';
+import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
 import { calendarToday, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { User } from '@/domain/user/schema';
@@ -36,23 +36,6 @@ function dayTitle(date: string): string {
   const weekday = WEEKDAY_NAMES_SUN0[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
   return `${year}년 ${month}월 ${day}일 (${weekday})`;
 }
-
-/**
- * 로스터 제외 대상 — 테스터 계정 철저 격리:
- * - 테스터 로그인 시: 무슨 일이 있어도 본인 외 모든 사용자 로스터 제외
- * - 일반 사용자 로그인 시: 모든 테스터 계정 로스터 제외
- */
-const isExcludedFromRoster = (user: User, actor?: User | null) => {
-  if (actor && user.id === actor.id) return false;
-
-  // 접속자(actor)가 테스터이면 본인 외 모든 사용자를 무조건 제외
-  if (isTestUser(actor)) return true;
-
-  // 일반 사용자가 접속한 경우 테스터 계정을 무조건 제외
-  if (isTestUser(user)) return true;
-
-  return false;
-};
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -235,11 +218,11 @@ function sortWorkPlanUsers(
     return map;
   }, [org.depts]);
 
-  /** 권한 스코프(개인/팀장/전사) 적용 + 재직 + 대표/테스트 제외 인원 정렬 (1:부서순, 2:직책순, 3:직급순) */
+  /** 권한 스코프(개인/팀장/전사) 적용 + 재직 인원 정렬 (1:부서순, 2:직책순, 3:직급순) */
   const roster = useMemo(() => {
     if (!actor) return [];
     return users
-      .filter((user) => user.status === '사용' && !isExcludedFromRoster(user, actor))
+      .filter((user) => user.status === '사용')
       .filter((user) => canViewWorkPlan(actor, user, actorScope, org))
       .sort((a, b) => sortWorkPlanUsers(a, b, deptOrderMap, org.rankOf));
   }, [users, actor, actorScope, deptOrderMap, org]);
@@ -248,11 +231,6 @@ function sortWorkPlanUsers(
 
   /** 고유 부서 목록 (소속 인원이 1명 이상 있는 부서만 자동 표시 & 조직도 배치순 정렬) */
   const departments = useMemo(() => {
-    // 테스터 계정인 경우 본인 부서 외 어떤 부서도 표시하지 않음
-    if (isTestUser(actor)) {
-      return actor?.dept ? [actor.dept] : [];
-    }
-
     const memberCountByDept = new Map<string, number>();
 
     // A. 본직 인원 카운트
@@ -262,7 +240,7 @@ function sortWorkPlanUsers(
 
     // B. 겸직 인원 카운트
     departmentMembers.forEach((dm) => {
-      if (dm.deptName && !dm.deptName.includes('테스트')) {
+      if (dm.deptName) {
         const baseUser = users.find((u) => u.id === dm.userId && u.status === '사용');
         if (baseUser) {
           memberCountByDept.set(dm.deptName, (memberCountByDept.get(dm.deptName) ?? 0) + 1);
@@ -286,13 +264,6 @@ function sortWorkPlanUsers(
   const scopedMembers = useMemo(() => {
     if (!actor) return [];
 
-    // [원칙] 테스터는 무슨 일이 있어도 본인 외에는 업무계획에 표시되지 않음
-    if (isTestUser(actor)) {
-      const kw = searchKeyword.trim().toLowerCase();
-      if (!kw) return [actor];
-      return (actor.name.toLowerCase().includes(kw) || actor.dept.toLowerCase().includes(kw)) ? [actor] : [];
-    }
-
     const kw = searchKeyword.trim().toLowerCase();
 
     // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합)
@@ -304,12 +275,6 @@ function sortWorkPlanUsers(
       // (기술경영전략위원회 등 위원회 부서 선택 시에는 대표이사도 위원장으로서 To-Do 집계에 포함!)
       users
         .filter((u) => u.status === '사용')
-        .filter((u) => {
-          if (deptFilter.includes('위원회') && (u.position.includes('대표') || u.name.includes('대표'))) {
-            return true; // 위원회 뷰에서는 대표이사 포함
-          }
-          return !isExcludedFromRoster(u, actor);
-        })
         .filter((u) => u.dept === deptFilter)
         .forEach((u) => {
           matchedUsers.push(u);

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
@@ -23,12 +24,13 @@ function OrgTreeNode({
   toggleExpand: (id: string) => void;
 }) {
   const { rankOf } = useOrgTree();
+  const { canDesignate } = useCanDesignate();
   const presenceMap = useAllUserPresences();
   const show = isExpanded(node.dept.id);
   const deptUsers = useMemo(() => {
-    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id));
+    const filtered = node.members.filter((u) => u.status === '사용' && !exclude.includes(u.id) && canDesignate(u));
     return filtered.sort((a, b) => rankOf(a.position) - rankOf(b.position));
-  }, [node.members, exclude, rankOf]);
+  }, [node.members, exclude, rankOf, canDesignate]);
 
   const hasContent = deptUsers.length > 0 || node.children.length > 0;
   if (!hasContent) return null;

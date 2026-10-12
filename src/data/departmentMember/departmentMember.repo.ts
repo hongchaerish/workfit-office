@@ -1,6 +1,7 @@
 import { departmentMemberSchema, type DepartmentMember, type DepartmentMemberInput } from '@/domain/departmentMember/schema';
 import { DEPARTMENT_MEMBER_SEED } from '@/data/seeds/departmentMember.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
 
 /**
  * 부서 소속/겸직 Repository — DB 접근 캡슐화.
@@ -21,9 +22,9 @@ const backend = createCrudBackend<DepartmentMember>({
 });
 
 export const departmentMemberRepo = {
-  /** 전체 조회 */
+  /** 전체 조회 — 접속자가 볼 수 없는 테스트 계정의 소속은 빠진다([[testAccountVisibility]]). */
   async list(): Promise<DepartmentMember[]> {
-    return backend.loadAll();
+    return hideTestAccountRows(await backend.loadAll(), (m) => [m.userId]);
   },
 
   /** 특정 사용자의 소속 목록 (본직 1개 + 겸직 N개) */
@@ -34,7 +35,7 @@ export const departmentMemberRepo = {
 
   /** 특정 부서의 소속 구성원 목록 (본직자 + 겸직자 포함) */
   async listByDeptId(deptId: string): Promise<DepartmentMember[]> {
-    const all = await backend.loadAll();
+    const all = await this.list();
     return all.filter((m) => m.deptId === deptId);
   },
 

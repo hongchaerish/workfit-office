@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 2. 기존 로컬 세션 복원 (일반 접속 시)
         const uid = localStorage.getItem(SESSION_KEY);
         if (uid) {
-          const users = await userRepo.list();
+          const users = await userRepo.listIncludingTestAccounts();
           // 언마운트된 경우 아무 것도 건드리지 않는다. StrictMode는 effect를 두 번 실행하는데,
           // 첫 번째 cleanup 이후 비동기가 끝났다고 세션을 지우면 정상 로그인 상태가 날아간다.
           if (!alive) return;

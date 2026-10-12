@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
+import { isTestAccount } from '@/domain/user/testAccount';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -286,8 +287,6 @@ export default function CommuteScreen() {
     const existingNormNames = new Set(list.map((e) => normName(e.name)));
     const existingEmpIds = new Set(list.map((e) => e.empId));
 
-    const isViewerTester = (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test');
-
     for (const u of allUsers) {
       // 퇴사자(미사용, resignedAt 기록자) 100% 원천 배제
       if (u.status === '미사용' || Boolean(u.resignedAt)) continue;
@@ -295,9 +294,6 @@ export default function CommuteScreen() {
       const name = (u.name || '').trim();
       const nName = normName(name);
       if (!name || !nName || existingNormNames.has(nName) || isExcludedAttendance(u, name)) continue;
-
-      const isUserTester = (u.dept ?? '').includes('테스트') || name.toLowerCase().includes('test');
-      if (isUserTester && !isViewerTester) continue;
 
       let empId = Number(u.empNo);
       if (Number.isNaN(empId) || empId <= 0 || existingEmpIds.has(empId)) {
@@ -399,7 +395,7 @@ export default function CommuteScreen() {
 
   // 테스트 계정일 때: 테스트 부서/계정 제외 토글 상태
   const isViewerTester = useMemo(
-    () => (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test'),
+    () => isTestAccount(user),
     [user?.dept, user?.name],
   );
   const [excludeTestDept, setExcludeTestDept] = useState(false);
@@ -554,10 +550,7 @@ export default function CommuteScreen() {
 
       // 테스트 부서 제외 옵션 활성화 시 테스트 계정 및 테스트 부서 제외
       if (excludeTestDept) {
-        const isTester =
-          (matchedUser?.dept ?? '').includes('테스트') ||
-          (matchedUser?.name ?? '').toLowerCase().includes('test') ||
-          emp.name.toLowerCase().includes('test');
+        const isTester = isTestAccount(matchedUser) || isTestAccount({ name: emp.name });
         if (isTester) return false;
       }
 
