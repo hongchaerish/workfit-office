@@ -170,8 +170,9 @@ export function SelectorDialog({
     );
   };
 
+  // 결재선 설정창(z-[300]) 안에서도 열리므로 그보다 위, 상신 확인창(z-[400])보다는 아래에 둔다
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl bg-panel shadow-2xl flex flex-col overflow-hidden border border-border" onClick={(e) => e.stopPropagation()}>
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-panel-alt/20">
