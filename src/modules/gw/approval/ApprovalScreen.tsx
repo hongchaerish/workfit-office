@@ -4,6 +4,7 @@ import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { X, Send, Folder, User as UserIcon, MessageSquare, Printer, Check, Eye, Share2, PenLine, RotateCcw, Search } from 'lucide-react';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { correctSelection, resolveSelectedDoc } from './selection';
@@ -38,13 +39,15 @@ import {
   matchesBox,
   byRecent,
   getEffectiveRecipients,
-  isCompletedBoxMatch,
-  isDrafterBoxMatch,
-  isRejectedBoxMatch,
-  isTodoBoxMatch,
-  isReceivedBoxMatch,
 } from '@/domain/approvalDoc/engine';
 import { type ApprovalBox, type ApprovalDoc } from '@/domain/approvalDoc/schema';
+import {
+  APPROVAL_SEARCH_SCOPES,
+  resolveDocBox,
+  searchApprovalDocs,
+  type ApprovalSearchScope,
+  type DocBoxTarget,
+} from '@/domain/approvalDoc/search';
 import type { User } from '@/domain/user/schema';
 import { fmtDateTime, KIND_TONE, won } from './utils/approvalUtils';
 import { DocStatusBadge } from './components/ApprovalBadges';
@@ -64,6 +67,9 @@ import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo
  * 상세는 결재선 진행 타임라인 + 내 차례면 승인/반려/보류 액션, 기안자면 회수/재상신/편집.
  * 모든 전이는 features 훅(엔진 위임) → 성공 시 캐시 무효화로 함·배지 자동 갱신.
  */
+/** 검색 드롭다운에 한 번에 그리는 최대 건수 — 넘치면 건수만 알리고 검색어를 더 좁히게 한다 */
+const SEARCH_RESULT_LIMIT = 50;
+
 const BOX_LABEL: Record<ApprovalBox, string> = {
   대기: '결재 대기함',
   상신: '상신함',
@@ -145,96 +151,72 @@ export default function ApprovalScreen() {
     window.history.replaceState(null, '', nextUrl.toString());
   };
 
-  // ── 상단 문서 검색 상태 및 드롭다운 연동 ──
+  // 부서 문서함 — 같은 부서의 결재 완료·공개 문서(목록과 검색이 같이 쓴다)
+  const deptArchiveDocs = useDeptArchiveDocs(me);
+
+  /** isReceivedBoxMatch 용 내 부서 표기('부서명||부서id') */
+  const myDeptKey = useMemo(() => {
+    const deptId = org.depts.find((d) => d.name === userObj?.dept)?.id;
+    return userObj ? (deptId ? `${userObj.dept}||${deptId}` : userObj.dept) : undefined;
+  }, [org, userObj]);
+
+  /** 문서가 보이는 결재함으로 옮기고 그 함의 상태 필터도 맞춘다(딥링크·검색 공용) */
+  const applyBoxTarget = (t: DocBoxTarget | { box: ApprovalBox | '문서함' }) => {
+    if ('doneFilter' in t) setDoneFilter(t.doneFilter);
+    if ('draftFilter' in t) setDraftFilter(t.draftFilter);
+    if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
+    if ('todoFilter' in t) setTodoFilter(t.todoFilter);
+    setBox(t.box);
+  };
+
+  // ── 상단 문서 검색 — 규칙은 domain/approvalDoc/search(PWA 와 공용) ──
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchBoxFilter, setSearchBoxFilter] = useState<'all' | ApprovalBox>('all');
+  const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // 접근 가능한 전체 고유 문서 풀 (현재 사용자가 조회 가능한 모든 함의 문서)
-  const searchableDocs = useMemo(() => {
-    const docMap = new Map<string, ApprovalDoc>();
-    Object.values(byBox).forEach((list) => {
-      list.forEach((d) => docMap.set(d.id, d));
-    });
-    // allDocs 중에서도 본인이 기안자/결재자/참조자인 문서 포함
-    allDocs.forEach((d) => {
-      if (
-        d.drafterId === me ||
-        d.steps.some((s) => s.approverId === me) ||
-        d.recipients?.some((r) => r.id === me)
-      ) {
-        docMap.set(d.id, d);
-      }
-    });
-    return Array.from(docMap.values()).sort(
-      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    );
-  }, [byBox, allDocs, me]);
+  const searchResults = useMemo(
+    () => searchApprovalDocs(searchQuery, searchBoxFilter, byBox, deptArchiveDocs),
+    [searchQuery, searchBoxFilter, byBox, deptArchiveDocs],
+  );
+  /** 드롭다운에 그리는 결과 — 검색어가 없으면 최근 6건 */
+  const visibleSearchResults = searchResults.slice(0, searchQuery.trim() ? SEARCH_RESULT_LIMIT : 6);
 
-  // 선택된 문서함 풀
-  const targetDocsPool = useMemo(() => {
-    if (searchBoxFilter === 'all') {
-      return searchableDocs;
-    }
-    return byBox[searchBoxFilter] ?? [];
-  }, [searchBoxFilter, searchableDocs, byBox]);
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSearchBoxFilter('all');
+  };
 
-  // 검색어에 따른 필터링 결과
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const baseList = targetDocsPool;
-    if (!q) {
-      return baseList.slice(0, 6);
-    }
-    return baseList
-      .filter((d) => {
-        const title = (d.title || '').toLowerCase();
-        const docNo = (d.docNo || '').toLowerCase();
-        const drafter = (d.drafterName || '').toLowerCase();
-        const docType = (d.docType || '').toLowerCase();
-        const dept = (d.drafterDept || '').toLowerCase();
-        return (
-          title.includes(q) ||
-          docNo.includes(q) ||
-          drafter.includes(q) ||
-          docType.includes(q) ||
-          dept.includes(q)
-        );
-      })
-      .slice(0, 10);
-  }, [searchQuery, targetDocsPool]);
-
-  // 검색 드롭다운 외부 클릭 시 닫기
+  // 검색 드롭다운 외부 클릭·ESC 시 닫기
   useEffect(() => {
+    if (!isSearchOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsSearchOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsSearchOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSearchOpen]);
 
-  // 검색 결과 문서 클릭 시 이동 핸들러
+  // 검색 결과 클릭 — 필터로 고른 함이 있으면 그 함, '전체'면 문서가 실제로 보이는 함으로 이동
   const handleSelectSearchedDoc = (d: ApprovalDoc) => {
-    let targetBox: ApprovalBox = searchBoxFilter !== 'all' ? searchBoxFilter : '상신';
-    if (searchBoxFilter === 'all') {
-      if (d.status === '임시저장') targetBox = '임시';
-      else if (d.status === '반려') targetBox = '반려';
-      else if (d.status === '회수') targetBox = '상신';
-      else if (d.status === '진행중') {
-        const myStep = activeSteps(d).find((s) => s.approverId === me);
-        targetBox = myStep ? '대기' : '상신';
-      } else if (d.status === '완료') {
-        targetBox = '완료';
-      }
-    }
-
-    setBox(targetBox);
-    handleSelectDoc(d);
-    setIsSearchOpen(false);
-    setSearchQuery('');
+    const target = searchBoxFilter === 'all' ? resolveDocBox(d, me, myDeptKey) : { box: searchBoxFilter };
+    applyBoxTarget(target);
+    setSelId(d.id);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('box', target.box);
+    nextUrl.searchParams.set('doc', d.docNo || d.id);
+    window.history.replaceState(null, '', nextUrl.toString());
+    closeSearch();
   };
 
   // 문서를 열면(선택해 상세가 보이면) 읽음으로 기록 — 한 번 읽으면 끝
@@ -287,29 +269,7 @@ export default function ApprovalScreen() {
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
-    if (box === '문서함') {
-      const myDeptName = userObj?.dept ?? '';
-      const myDeptObj = org.depts.find((d) => d.name === myDeptName);
-      const myDeptId = myDeptObj?.id ?? '';
-      return allDocs.filter((d) => {
-        if (d.status !== '완료') return false; // 결재 완료된 문서만 노출
-        const vis = d.visibility ?? '부서';
-        if (vis === '비공개') return false; // 비공개는 제외
-
-        // drafterDeptId 가 비어있는 과거 레거시 기결재 문서는 기안자의 현재 부서 ID를 도출해 필터 대조
-        const drafterUser = org.userById(d.drafterId);
-        const drafterCurrentDeptName = drafterUser?.dept ?? '';
-        const drafterCurrentDeptObj = org.depts.find((dept) => dept.name === drafterCurrentDeptName);
-        const drafterCurrentDeptId = drafterCurrentDeptObj?.id ?? '';
-        const docDeptId = d.drafterDeptId || drafterCurrentDeptId;
-
-        return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
-      }).sort((a, b) => {
-        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tB - tA;
-      });
-    }
+    if (box === '문서함') return deptArchiveDocs;
 
     if (box === '완료') {
       if (doneFilter === 'draft') {
@@ -365,7 +325,7 @@ export default function ApprovalScreen() {
       return list;
     }
     return list;
-  }, [box, list, allDocs, doneFilter, todoFilter, rejectFilter, me, userObj?.dept, org, draftFilter]);
+  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter]);
 
   // 선택된 selId를 기반으로 현재 열람할 문서를 결정 (단일 진실 원천)
   // 선택이 없으면 null — 목록만 보이고, 문서를 눌러야 상세가 열린다(맨 앞 문서 자동 열람 없음)
@@ -405,45 +365,9 @@ export default function ApprovalScreen() {
     const targetDoc = deepTargetDoc;
     setSelId(targetDoc.id);
 
-    // 2. 최적 결재함 자동 판정 (urlBox가 없거나 해당 함에 targetDoc이 없을 때)
-    let determinedBox: ApprovalBox | '문서함' = urlBox || '문서함';
-    if (!urlBox) {
-      if (targetDoc.status === '완료' || targetDoc.status === '시행대기') {
-        if (isCompletedBoxMatch(targetDoc, me)) {
-          determinedBox = '완료';
-          setDoneFilter('all');
-        } else if (isDrafterBoxMatch(targetDoc, me)) {
-          determinedBox = '상신';
-          setDraftFilter('completed');
-        } else {
-          determinedBox = '문서함';
-        }
-      } else if (targetDoc.status === '반려' || targetDoc.status === '긴급 조치 사후 검토 반려' || targetDoc.status === '시행반송') {
-        if (isRejectedBoxMatch(targetDoc, me)) {
-          determinedBox = '반려';
-          setRejectFilter('all');
-        } else if (isDrafterBoxMatch(targetDoc, me)) {
-          determinedBox = '상신';
-          setDraftFilter('rejected');
-        } else {
-          determinedBox = '문서함';
-        }
-      } else if (targetDoc.status === '임시저장') {
-        determinedBox = '임시';
-      } else if (isTodoBoxMatch(targetDoc, me)) {
-        determinedBox = '대기';
-        setTodoFilter('all');
-      } else if (isDrafterBoxMatch(targetDoc, me)) {
-        determinedBox = '상신';
-        setDraftFilter(targetDoc.status === '진행중' ? 'progress' : 'all');
-      } else if (isReceivedBoxMatch(targetDoc, me, userObj?.dept)) {
-        determinedBox = '수신';
-      } else {
-        determinedBox = '문서함';
-      }
-    }
-
-    setBox(determinedBox);
+    // 2. 함이 지정되지 않았으면 문서가 실제로 보이는 함을 자동 판정
+    if (urlBox) setBox(urlBox);
+    else applyBoxTarget(resolveDocBox(targetDoc, me, myDeptKey));
   });
 
   // 목록 변화 시 선택 보정 — 선택한 문서가 아예 사라졌을 때만 선택을 비운다(다음 문서를 대신 열지 않음)
@@ -818,10 +742,7 @@ export default function ApprovalScreen() {
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setIsSearchOpen(false);
-                  }}
+                  onClick={closeSearch}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink3 hover:text-ink p-0.5 rounded cursor-pointer"
                 >
                   <X size={12} />
@@ -836,28 +757,18 @@ export default function ApprovalScreen() {
                 <div className="flex items-center justify-between gap-1 overflow-x-auto px-2 py-1.5 border-b border-border/60 bg-panel-alt/30 rounded-t-lg">
                   <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
                     <span className="text-[10.5px] font-bold text-ink3 shrink-0 mr-1">문서함 필터:</span>
-                    {[
-                      { k: 'all', l: '전체' },
-                      { k: '대기', l: '결재대기' },
-                      { k: '상신', l: '기안/상신' },
-                      { k: '완료', l: '결재완료' },
-                      { k: '반려', l: '반려' },
-                      { k: '참조', l: '참조' },
-                      { k: '수신', l: '수신' },
-                      { k: '부서', l: '부서' },
-                      { k: '임시', l: '임시저장' },
-                    ].map((tab) => (
+                    {APPROVAL_SEARCH_SCOPES.map((tab) => (
                       <button
-                        key={tab.k}
+                        key={tab.key}
                         type="button"
-                        onClick={() => setSearchBoxFilter(tab.k as any)}
+                        onClick={() => setSearchBoxFilter(tab.key)}
                         className={`rounded-md px-2 py-0.5 text-[10px] font-bold transition-all shrink-0 cursor-pointer ${
-                          searchBoxFilter === tab.k
+                          searchBoxFilter === tab.key
                             ? 'bg-teal text-white shadow-2xs'
                             : 'bg-panel border border-border text-ink3 hover:text-ink hover:border-teal/40'
                         }`}
                       >
-                        {tab.l}
+                        {tab.label}
                       </button>
                     ))}
                   </div>
@@ -866,13 +777,16 @@ export default function ApprovalScreen() {
 
                 <div className="px-2 py-0.5 text-[10px] font-bold text-ink3 flex items-center justify-between">
                   <span>
-                    {searchBoxFilter !== 'all' ? `[${searchBoxFilter}함] ` : ''}
+                    {searchBoxFilter !== 'all' ? `[${APPROVAL_SEARCH_SCOPES.find((t) => t.key === searchBoxFilter)?.label}] ` : ''}
                     {searchQuery.trim() ? `검색 결과 (${searchResults.length}건)` : '최근 문서'}
+                    {visibleSearchResults.length < searchResults.length && searchQuery.trim() && (
+                      <span className="ml-1 font-semibold">— 최근 {visibleSearchResults.length}건만 표시, 검색어를 더 입력하세요</span>
+                    )}
                   </span>
                   <span className="text-[9.5px] text-ink3">결과를 클릭하면 해당 문서로 이동합니다</span>
                 </div>
 
-                {searchResults.map((d) => (
+                {visibleSearchResults.map((d) => (
                   <button
                     key={d.id}
                     type="button"

@@ -9,7 +9,8 @@ import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import MobileNotificationBell from './MobileNotificationBell';
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
-import { useOrgTree } from '@/features/gw/useOrgTree';
+import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
+import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } from '@/domain/approvalDoc/search';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 
 /**
@@ -82,8 +83,8 @@ export default function MobileApprovalList() {
   // 안읽음(대기·참조·수신·반려·후열) — 웹과 같은 DB 기록·같은 규칙
   const unreadState = useApprovalUnread(me, byBox, isLoading);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchBoxFilter, setSearchBoxFilter] = useState<'all' | ApprovalBox | '문서함'>('all');
-  const org = useOrgTree();
+  const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
+  const deptArchiveDocs = useDeptArchiveDocs(me);
 
   const preds = useMemo(() => getPredecessorsOf(me), [me]);
 
@@ -163,20 +164,7 @@ export default function MobileApprovalList() {
   };
 
   const docs = useMemo(() => {
-    if (box === '문서함') {
-      const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
-      const myDeptId = myDeptObj?.id ?? '';
-      const myDeptName = user?.dept ?? '';
-
-      const allDocs = Object.values(byBox).flat();
-      return allDocs.filter((d) => {
-        if (d.status !== '완료') return false;
-        if (d.visibility === '비공개') return false;
-        const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
-        const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
-        return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
-      });
-    }
+    if (box === '문서함') return deptArchiveDocs;
 
     const rawDocs = byBox[box as ApprovalBox] ?? [];
 
@@ -236,54 +224,13 @@ export default function MobileApprovalList() {
     }
 
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, rejectFilter, me, org, user?.dept]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, rejectFilter, me, deptArchiveDocs]);
 
-  // 전체 문서함 통합 고유 문서 풀 (검색용)
-  const allUniqueDocs = useMemo(() => {
-    const map = new Map<string, ApprovalDoc>();
-    Object.values(byBox).forEach((list) => {
-      (list as ApprovalDoc[]).forEach((doc) => {
-        if (!map.has(doc.id)) map.set(doc.id, doc);
-      });
-    });
-    return Array.from(map.values());
-  }, [byBox]);
-
-  // 검색어 및 문서함 필터가 적용된 검색 결과
-  const searchResults = useMemo(() => {
-    const kw = searchQuery.trim().toLowerCase();
-    if (!kw && searchBoxFilter === 'all') return [];
-
-    let pool = allUniqueDocs;
-    if (searchBoxFilter !== 'all') {
-      if (searchBoxFilter === '문서함') {
-        const myDeptObj = org.depts.find((d: any) => d.name === user?.dept);
-        const myDeptId = myDeptObj?.id ?? '';
-        const myDeptName = user?.dept ?? '';
-        pool = pool.filter((d) => {
-          if (d.status !== '완료' || d.visibility === '비공개') return false;
-          const drafterUser = org.users.find((u: any) => u.id === d.drafterId);
-          const docDeptId = d.drafterDeptId || org.depts.find((dept: any) => dept.name === drafterUser?.dept)?.id || '';
-          return docDeptId === myDeptId || (!docDeptId && d.drafterDept === myDeptName);
-        });
-      } else {
-        const boxDocs = byBox[searchBoxFilter as ApprovalBox] ?? [];
-        const boxDocIds = new Set(boxDocs.map((d) => d.id));
-        pool = pool.filter((d) => boxDocIds.has(d.id));
-      }
-    }
-
-    if (!kw) return pool;
-
-    return pool.filter((d) => {
-      const titleMatch = d.title?.toLowerCase().includes(kw);
-      const noMatch = d.docNo?.toLowerCase().includes(kw);
-      const drafterMatch = d.drafterName?.toLowerCase().includes(kw);
-      const typeMatch = d.docType?.toLowerCase().includes(kw);
-      const deptMatch = d.drafterDept?.toLowerCase().includes(kw);
-      return Boolean(titleMatch || noMatch || drafterMatch || typeMatch || deptMatch);
-    });
-  }, [allUniqueDocs, byBox, searchQuery, searchBoxFilter, org, user?.dept]);
+  // 검색 — 규칙은 domain/approvalDoc/search(PC 와 공용). 검색어가 있을 때만 결과 목록을 보인다.
+  const searchResults = useMemo(
+    () => searchApprovalDocs(searchQuery, searchBoxFilter, byBox, deptArchiveDocs),
+    [searchQuery, searchBoxFilter, byBox, deptArchiveDocs],
+  );
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -330,27 +277,18 @@ export default function MobileApprovalList() {
         {isSearching && (
           <div className="flex items-center gap-1 overflow-x-auto pt-2 pb-0.5 no-scrollbar">
             <span className="text-[10px] font-bold text-ink3 shrink-0 mr-1">문서함:</span>
-            {[
-              { k: 'all', l: '전체' },
-              { k: '대기', l: '대기' },
-              { k: '상신', l: '상신' },
-              { k: '완료', l: '완료' },
-              { k: '반려', l: '반려' },
-              { k: '참조', l: '참조' },
-              { k: '수신', l: '수신' },
-              { k: '문서함', l: '부서문서' },
-            ].map((chip) => (
+            {APPROVAL_SEARCH_SCOPES.map((chip) => (
               <button
-                key={chip.k}
+                key={chip.key}
                 type="button"
-                onClick={() => setSearchBoxFilter(chip.k as any)}
+                onClick={() => setSearchBoxFilter(chip.key)}
                 className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold shrink-0 transition-all ${
-                  searchBoxFilter === chip.k
+                  searchBoxFilter === chip.key
                     ? 'bg-[#3b82f6] text-white shadow-2xs'
                     : 'bg-slate-100 text-ink3 hover:bg-slate-200'
                 }`}
               >
-                {chip.l}
+                {chip.label}
               </button>
             ))}
           </div>
@@ -541,7 +479,7 @@ export default function MobileApprovalList() {
           <div>
             <div className="flex items-center justify-between bg-slate-100/90 px-4 py-2 text-[11px] font-bold text-ink2 border-b border-slate-200">
               <span>
-                {searchBoxFilter !== 'all' ? `[${searchBoxFilter}] ` : ''}
+                {searchBoxFilter !== 'all' ? `[${APPROVAL_SEARCH_SCOPES.find((t) => t.key === searchBoxFilter)?.label}] ` : ''}
                 검색 결과 ({searchResults.length}건)
               </span>
               <span className="text-[10px] text-ink3">문서를 탭하여 상세 조회</span>
