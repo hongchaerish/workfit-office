@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ApprovalRecipient } from '@/domain/approvalDoc/schema';
 import { X, Folder, User, Send } from 'lucide-react';
-import { isTestAccount, isTestDept } from '../ApprovalLineBuilder';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 
 /* ────────────── ⓘ 툴팁 컴포넌트 ────────────── */
 function InfoTooltip({ text }: { text: string }) {
@@ -42,11 +42,12 @@ export function SelectorDialog({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const { canDesignate, canDesignateDept } = useCanDesignate();
   const [selected, setSelected] = useState<{ id: string; name: string; type: 'user' | 'dept' }[]>([]);
 
 
   const handleToggleDept = (dept: any) => {
-    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !isTestAccount(u) && !excludeIds?.has(u.id));
+    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && canDesignate(u) && !excludeIds?.has(u.id));
     const isDeptSelected = selected.some((s) => s.id === dept.id);
 
     if (isDeptSelected) {
@@ -64,7 +65,7 @@ export function SelectorDialog({
   };
 
   const handleToggleUser = (user: any, dept: any) => {
-    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && !isTestAccount(u) && !excludeIds?.has(u.id));
+    const deptUsers = org.users.filter((u: any) => u.dept === dept.name && canDesignate(u) && !excludeIds?.has(u.id));
     const isDeptSelected = selected.some((s) => s.id === dept.id);
     const isUserSelected = selected.some((s) => s.id === user.id);
 
@@ -99,9 +100,9 @@ export function SelectorDialog({
   };
 
   // 검색 필터링
-  const filteredDepts = org.depts.filter((d: any) => d.name.includes(search) && !isTestDept(d.name) && !excludeIds?.has(d.id));
+  const filteredDepts = org.depts.filter((d: any) => d.name.includes(search) && canDesignateDept(d.name) && !excludeIds?.has(d.id));
   const filteredUsers = org.users.filter(
-    (u: any) => (u.name.includes(search) || u.dept.includes(search) || u.position.includes(search)) && !isTestAccount(u) && !excludeIds?.has(u.id)
+    (u: any) => (u.name.includes(search) || u.dept.includes(search) || u.position.includes(search)) && canDesignate(u) && !excludeIds?.has(u.id)
   );
 
   const isSearching = search.trim().length > 0;
@@ -109,10 +110,10 @@ export function SelectorDialog({
   // 재귀 렌더링 함수
   const renderOrgNode = (node: any, depth: number = 0) => {
     const d = node.dept;
-    if (isTestDept(d.name)) return null;
-    const deptUsers = node.members.filter((u: any) => !isTestAccount(u) && !excludeIds?.has(u.id));
+    if (!canDesignateDept(d.name)) return null;
+    const deptUsers = node.members.filter((u: any) => canDesignate(u) && !excludeIds?.has(u.id));
     const hasUsers = deptUsers.length > 0;
-    const children = (node.children || []).filter((child: any) => !isTestDept(child.dept?.name));
+    const children = (node.children || []).filter((child: any) => canDesignateDept(child.dept?.name));
     const hasChildren = children.length > 0;
 
     return (
@@ -169,8 +170,9 @@ export function SelectorDialog({
     );
   };
 
+  // 결재선 설정창(z-[300]) 안에서도 열리므로 그보다 위, 상신 확인창(z-[400])보다는 아래에 둔다
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl bg-panel shadow-2xl flex flex-col overflow-hidden border border-border" onClick={(e) => e.stopPropagation()}>
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-panel-alt/20">

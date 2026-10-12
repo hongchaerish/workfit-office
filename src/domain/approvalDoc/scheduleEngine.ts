@@ -112,7 +112,9 @@ export function extractScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | nu
 
   // 4. 목적(purpose) 및 사유(body)
   const purpose = fVals['purpose'] ? String(fVals['purpose']) : undefined;
-  const body = doc.body || (fVals['body'] ? String(fVals['body']) : undefined);
+  // fieldValues.body 는 표 등 다른 필드일 수 있으니(표는 JSON 문자열) 글 본문일 때만 쓴다
+  const rawBody = fVals['body'] ? String(fVals['body']) : '';
+  const body = doc.body || (rawBody && !rawBody.trim().startsWith('{') ? rawBody : undefined);
 
   // 5. 교통수단(transportation)
   const transportation = fVals['transportation'] ? String(fVals['transportation']) : undefined;

@@ -193,7 +193,7 @@ export default function MobileTaskScreen() {
   const deptList = useMemo(() => {
     const s = new Set<string>();
     teamMembers.forEach((m) => {
-      if (m.dept && !m.dept.includes('테스트')) s.add(m.dept);
+      if (m.dept) s.add(m.dept);
     });
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [teamMembers]);

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRouteEngine } from '@/features/gw/useRouteEngine';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { X, AlertTriangle, Zap, Network, Users, Building2, Star, ChevronDown, BookmarkPlus } from 'lucide-react';
 
 import { STEP_KINDS, type ApprovalStep, type StepKind } from '@/domain/approvalDoc/schema';
@@ -11,42 +12,21 @@ import { KIND_TONE } from '@/modules/gw/_gw';
 import { useMyApprovalRoutes } from '@/features/gw/useMyApprovalRoutes';
 import { fromMyRouteSteps, type MyApprovalRoute } from '@/domain/myApprovalRoute/schema';
 
-/** 결재선 지정 시 테스트 부서 및 테스트 계정 예외처리 */
-export const isTestAccount = (user: { id?: string; name?: string; dept?: string; loginId?: string }) => {
-  const name = (user.name || '').toLowerCase();
-  const dept = (user.dept || '').toLowerCase();
-  const id = (user.id || '').toLowerCase();
-  const loginId = (user.loginId || '').toLowerCase();
-  return (
-    name.includes('테스트') ||
-    name.includes('테스터') ||
-    name.includes('test') ||
-    dept.includes('테스트') ||
-    dept.includes('test') ||
-    id.includes('test') ||
-    loginId.includes('test') ||
-    name.includes('허진욱2') ||
-    name === 'ㅎ테스터' ||
-    name === 'ㅍ테스터'
-  );
-};
+type OrgNode = import('@/features/gw/useOrgTree').OrgNode;
 
-export const isTestDept = (deptName?: string) => {
-  if (!deptName) return false;
-  const d = deptName.toLowerCase();
-  return d.includes('테스트') || d.includes('test');
-};
-
-function filterOrgNode(node: import('@/features/gw/useOrgTree').OrgNode): import('@/features/gw/useOrgTree').OrgNode | null {
-  if (isTestDept(node.dept.name)) return null;
-  const filteredMembers = node.members.filter((u) => !isTestAccount(u) && u.status === '사용');
-  const filteredChildren = node.children
-    .map(filterOrgNode)
-    .filter((c): c is import('@/features/gw/useOrgTree').OrgNode => c !== null);
+/** 선택 후보 트리 — 재직자 중 지정 가능한 사람만, 테스트 부서는 테스트 계정에게만 남긴다([[useCanDesignate]]). */
+function filterOrgNode(
+  node: OrgNode,
+  canDesignate: (u: User) => boolean,
+  canDesignateDept: (deptName?: string | null) => boolean,
+): OrgNode | null {
+  if (!canDesignateDept(node.dept.name)) return null;
   return {
     ...node,
-    members: filteredMembers,
-    children: filteredChildren,
+    members: node.members.filter((u) => canDesignate(u) && u.status === '사용'),
+    children: node.children
+      .map((c) => filterOrgNode(c, canDesignate, canDesignateDept))
+      .filter((c): c is OrgNode => c !== null),
   };
 }
 
@@ -120,6 +100,7 @@ export function ApprovalLineBuilder({
   const { data: users = [] } = useUsers();
   const org = useOrgTree();
   const route = useRouteEngine();
+  const { canDesignate } = useCanDesignate();
 
   // 사용자별 개인 '내 결재선' 훅 연동 (사용자별 완전 격리)
   const {
@@ -894,7 +875,7 @@ export function ApprovalLineBuilder({
               </button>
             </div>
             <UserPickList
-              users={users.filter((u) => u.status === '사용' && !isTestAccount(u))}
+              users={users.filter((u) => u.status === '사용' && canDesignate(u))}
               org={org}
               onPick={pick}
               isMultiSelect={picker.mode === 'add-ref' || (picker.mode === 'add-to-group' && picker.groupIndex === -1)}
@@ -929,11 +910,12 @@ function UserPickList({
   const kw = q.trim().toLowerCase();
   const list = users.filter((u) => !kw || u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw));
 
+  const { canDesignate, canDesignateDept } = useCanDesignate();
   const filteredRoots = useMemo(() => {
     return org.roots
-      .map(filterOrgNode)
-      .filter((r): r is import('@/features/gw/useOrgTree').OrgNode => r !== null);
-  }, [org.roots]);
+      .map((r) => filterOrgNode(r, canDesignate, canDesignateDept))
+      .filter((r): r is OrgNode => r !== null);
+  }, [org.roots, canDesignate, canDesignateDept]);
 
   const toggleSelect = (id: string) => {
     if (!isMultiSelect) {

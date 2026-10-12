@@ -436,7 +436,7 @@ export const approvalDocRepo = {
    */
   async listByBox(userId: string, box: ApprovalBox): Promise<ApprovalDoc[]> {
     const rows = await loadAll();
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const user = users.find((u) => u.id === userId);
     
     const depts = await departmentRepo.list();
@@ -484,7 +484,7 @@ export const approvalDocRepo = {
     const dateKey = yymmdd(new Date());
     const seq = await counterRepo.next(`AP-${dateKey}`);
     const docNo = formatDocNo('AP', dateKey, seq);
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === input.drafterId);
     
     const created = approvalDocSchema.parse({
@@ -548,7 +548,7 @@ export const approvalDocRepo = {
   async submit(id: string, userId: string): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
     if (cur.drafterId !== userId) throw new Error('기안자만 상신할 수 있습니다');
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const drafterUser = users.find((u) => u.id === userId);
     
     const next = submitDoc(cur, now());
@@ -618,7 +618,7 @@ export const approvalDocRepo = {
     const cur = await getOrThrow(id);
     const auth = await verifyApproverOrDelegate(cur, seq, userId);
 
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const actingUser = users.find((u) => u.id === userId);
 
     let docToProcess = cur;
@@ -654,7 +654,7 @@ export const approvalDocRepo = {
     // 알림 생성 연동
     try {
       const { notificationRepo } = await import('@/data/notification/notification.repo');
-      const users = await userRepo.list();
+      const users = await userRepo.listIncludingTestAccounts();
       const approverUser = users.find((u) => u.id === userId);
 
 
@@ -748,7 +748,7 @@ export const approvalDocRepo = {
     // 알림 생성 연동
     try {
       const { notificationRepo } = await import('@/data/notification/notification.repo');
-      const users = await userRepo.list();
+      const users = await userRepo.listIncludingTestAccounts();
       const approverUser = users.find((u) => u.id === userId);
 
       await notificationRepo.create({
@@ -818,7 +818,7 @@ export const approvalDocRepo = {
       await notificationRepo.removePendingRequests(next.id);
 
       if (approvedApproverIds.length > 0) {
-        const users = await userRepo.list();
+        const users = await userRepo.listIncludingTestAccounts();
         const drafter = users.find((u) => u.id === userId);
         const drafterName = drafter?.name || cur.drafterName || '기안자';
         const reasonText = reason ? ` (사유: ${reason})` : '';
@@ -850,7 +850,7 @@ export const approvalDocRepo = {
     const target = cur.steps.find((s) => s.seq === seq);
     if (!target) throw new Error('결재선 노드를 찾을 수 없습니다');
     if (!isActiveApprover(cur, target.approverId)) throw new Error('현재 활성 단계가 아닙니다');
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const delegateUser = users.find((u) => u.id === delegateUserId);
 
     // 원 결재자를 대결자로 교체하고(실제 결정자) 원 결재자를 위임 기록으로 남긴다.

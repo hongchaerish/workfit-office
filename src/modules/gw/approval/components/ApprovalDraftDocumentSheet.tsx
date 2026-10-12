@@ -231,7 +231,7 @@ export function ApprovalDraftDocumentSheet({
   }, [steps]);
 
   // 서식 레이아웃 블록 계산 (ApprovalDocumentView와 100% 동일 로직)
-  const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
+  const { blocks, isAmountInDetails, effectiveFieldProps } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
       if (f.type === '안내문' || f.key.endsWith('__days')) return false;
       if (f.visibleIf) {
@@ -247,7 +247,6 @@ export function ApprovalDraftDocumentSheet({
     });
 
     const isAmtIn = amountField ? act.some((f) => f.key === amountField.key) : false;
-    const longTexts = act.filter((f) => f.type === '장문');
 
     const tabSelectorField = form?.fields.find((f) => f.type === '선택' && f.isTabSelector);
     const currentTabValue = tabSelectorField ? String(values[tabSelectorField.key] ?? '') : '';
@@ -318,7 +317,6 @@ export function ApprovalDraftDocumentSheet({
       blocks: blks,
       isAmountInDetails: isAmtIn,
       effectiveFieldProps: getEffectiveProps,
-      longTextFields: longTexts,
     };
   }, [form, values, amountField]);
 
@@ -1124,19 +1122,6 @@ export function ApprovalDraftDocumentSheet({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* 8. 본문 (장문 필드가 전혀 없는 서식의 경우 기본 본문 박스 제공) */}
-      {longTextFields.length === 0 && (
-        <div className="mt-3">
-          <div className="text-[11px] font-semibold text-[#444] mb-1">상세 내용</div>
-          <AutoResizeTextarea
-            value={String(values['body'] ?? '')}
-            onChange={(val) => setVals({ body: val })}
-            placeholder="상세 내용을 입력하세요"
-            className="w-full min-h-[140px] border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] bg-white outline-none focus:border-teal rounded-none resize-y"
-          />
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useRosterOrder } from '@/features/user/useRosterOrder';
 import type { CommutePersonRow } from '../types';
 import { getKoreanHoliday } from '@/domain/commute/engine';
 import { getLeaveBadgeLabel } from '@/domain/leave/policy';
@@ -107,6 +108,8 @@ function CellStatusBadge({ status, leaveName, holidayName }: { status: string; l
 }
 
 /** 조직도 트리(roots)를 전위 순회하여 부서명 순서 리스트 도출 */
+const EXEC_GROUP_LABEL = '임원';
+
 function extractDeptOrderFromOrg(roots: OrgNode[]): string[] {
   const result: string[] = [];
   const traverse = (nodes: OrgNode[]) => {
@@ -148,11 +151,12 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
     return days;
   }, [year, mm, month, holidayMap]);
 
-  // 부서별 그룹화 및 조직도 순서 정렬
+  // 부서별 그룹화 및 조직도 순서 정렬 — 임원(권한그룹)은 부서와 무관하게 맨 위 '임원' 묶음([[rosterOrder]])
+  const { isExecutive } = useRosterOrder();
   const deptGroups = useMemo(() => {
     const map = new Map<string, CommutePersonRow[]>();
     for (const row of rows) {
-      const d = row.dept || '소속 미지정';
+      const d = isExecutive(row) ? EXEC_GROUP_LABEL : row.dept || '소속 미지정';
       if (!map.has(d)) map.set(d, []);
       map.get(d)!.push(row);
     }
@@ -183,6 +187,7 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
 
     // 조직도 상의 순서(orgDeptOrder) 우선 정렬
     return list.sort((a, b) => {
+      if ((a.dept === EXEC_GROUP_LABEL) !== (b.dept === EXEC_GROUP_LABEL)) return a.dept === EXEC_GROUP_LABEL ? -1 : 1;
       const idxA = orgDeptOrder.indexOf(a.dept);
       const idxB = orgDeptOrder.indexOf(b.dept);
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
@@ -190,7 +195,7 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
       if (idxB !== -1) return 1;
       return a.dept.localeCompare(b.dept, 'ko');
     });
-  }, [rows, orgDeptOrder]);
+  }, [rows, orgDeptOrder, isExecutive]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs w-full max-w-full min-w-0">

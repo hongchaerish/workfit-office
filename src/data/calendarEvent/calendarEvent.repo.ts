@@ -239,7 +239,7 @@ async function notifyRecipients(actor: CalendarEventActor, event: CalendarEvent,
   const uniqueRecipients = [...new Set(recipientIds)].filter((id) => id !== event.ownerUserId);
   if (uniqueRecipients.length === 0) return;
 
-  const owner = (await userRepo.list()).find((row) => row.id === event.ownerUserId);
+  const owner = (await userRepo.listIncludingTestAccounts()).find((row) => row.id === event.ownerUserId);
   const { notificationRepo } = await import('@/data/notification/notification.repo');
   const when = event.allDay ? `${event.date} 종일` : `${event.date} ${event.startTime}`;
 
@@ -260,11 +260,11 @@ async function sharedAudienceOf(actor: CalendarEventActor, event: CalendarEvent)
   const { userRepo } = await import('@/data/user/user.repo');
   const recipientIds: string[] = [];
   if (event.visibility === 'COMPANY' || event.eventType === 'COMPANY_EVENT') {
-    recipientIds.push(...(await userRepo.list({ status: '사용' })).map((row) => row.id));
+    recipientIds.push(...(await userRepo.listIncludingTestAccounts({ status: '사용' })).map((row) => row.id));
   } else if (event.visibility === 'TEAM' && event.deptId) {
     const { departmentRepo } = await import('@/data/department/department.repo');
     const dept = (await departmentRepo.list()).find((row) => row.id === event.deptId);
-    if (dept) recipientIds.push(...(await userRepo.list({ dept: dept.name, status: '사용' })).map((row) => row.id));
+    if (dept) recipientIds.push(...(await userRepo.listIncludingTestAccounts({ dept: dept.name, status: '사용' })).map((row) => row.id));
   } else if (event.visibility === 'PROJECT' && event.projectId) {
     const { workProjectRepo } = await import('@/data/workProject/workProject.repo');
     const project = await workProjectRepo.get(
@@ -436,7 +436,7 @@ export const calendarEventRepo = {
       try {
         const { userRepo } = await import('@/data/user/user.repo');
         const { notificationRepo } = await import('@/data/notification/notification.repo');
-        const me = (await userRepo.list()).find((row) => row.id === actor.userId);
+        const me = (await userRepo.listIncludingTestAccounts()).find((row) => row.id === actor.userId);
         await notificationRepo.create({
           userId: current.ownerUserId,
           type: '일정',

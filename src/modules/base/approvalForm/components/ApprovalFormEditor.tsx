@@ -339,7 +339,9 @@ export function ApprovalFormEditor({
 
   // 컴포넌트 팔레트에서 클릭하여 새 필드 추가
   const handleAddPaletteField = (item: (typeof COMPONENT_PALETTE)[0]) => {
-    const newKey = item.key || `field_${Date.now().toString(36).slice(-4)}`;
+    // 팔레트 기본 키(장문=body)가 이미 쓰이고 있으면 새 키를 매겨 같은 키가 둘 생기지 않게 한다
+    const preferredKey = item.key && !form.fields.some((f) => f.key === item.key) ? item.key : '';
+    const newKey = preferredKey || `field_${Date.now().toString(36).slice(-4)}`;
     const newField: FormField = {
       ...blankField(),
       key: newKey,
@@ -704,16 +706,19 @@ export function ApprovalFormEditor({
                       </F>
                     </div>
 
-                    <F label="안내 문구 (Placeholder)">
-                      <input
-                        value={selectedField.placeholder || ''}
-                        onChange={(e) =>
-                          setField(selectedFieldIdx, { placeholder: e.target.value })
-                        }
-                        placeholder="입력 힌트 문구"
-                        className={inp}
-                      />
-                    </F>
+                    {/* 표는 placeholder 에 표 구조(JSON)를 저장하므로 안내 문구로 편집하지 않는다 */}
+                    {selectedField.type !== '표' && (
+                      <F label="안내 문구 (Placeholder)">
+                        <input
+                          value={selectedField.placeholder || ''}
+                          onChange={(e) =>
+                            setField(selectedFieldIdx, { placeholder: e.target.value })
+                          }
+                          placeholder="입력 힌트 문구"
+                          className={inp}
+                        />
+                      </F>
+                    )}
 
                     {/* 체크박스 옵션 행 */}
                     <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-border/60">

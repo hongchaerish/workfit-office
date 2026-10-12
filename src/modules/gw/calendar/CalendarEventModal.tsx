@@ -1,4 +1,5 @@
 import { useState, useMemo, type FormEvent } from 'react';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { CalendarEventError, type CalendarEventActor } from '@/data/calendarEvent/calendarEvent.repo';
 import {
   CALENDAR_VISIBILITIES,
@@ -85,6 +86,7 @@ export default function CalendarEventModal({
 
   const usersQuery = useUsers();
   const allUsers = usersQuery.data ?? [];
+  const { canDesignate } = useCanDesignate();
 
   /** 전자결재 승인 건 연동 여부 (CAL-APPR- 로 시작하는 가상 합성 일정) */
   const isApprovalEvent = Boolean(event?.id?.startsWith('CAL-APPR-'));
@@ -180,10 +182,10 @@ export default function CalendarEventModal({
     if (!attendeeSearch.trim()) return [];
     const kw = attendeeSearch.trim().toLowerCase();
     return allUsers
-      .filter((u) => u.status === '사용' && !u.resignedAt && u.id !== actor.userId && !attendeeUserIds.includes(u.id))
+      .filter((u) => u.status === '사용' && !u.resignedAt && u.id !== actor.userId && !attendeeUserIds.includes(u.id) && canDesignate(u))
       .filter((u) => u.name.toLowerCase().includes(kw) || u.dept.toLowerCase().includes(kw) || (u.position ?? '').toLowerCase().includes(kw))
       .slice(0, 8);
-  }, [allUsers, attendeeSearch, attendeeUserIds, actor.userId]);
+  }, [allUsers, attendeeSearch, attendeeUserIds, actor.userId, canDesignate]);
 
   /** 선택된 참여자 객체 목록 */
   const selectedAttendees = useMemo(() => {

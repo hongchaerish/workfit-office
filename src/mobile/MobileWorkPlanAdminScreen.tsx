@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useRosterOrder } from '@/features/user/useRosterOrder';
 import {
   Search,
   CheckCircle2,
@@ -44,14 +45,16 @@ export default function MobileWorkPlanAdminScreen() {
   }, [usersQuery.data]);
 
   // 2. 열람 대상 — 업무계획은 전사 공통 열람(workPlanPolicy.canViewUser)
+  // 인원 정렬 — 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]])
+  const { compare: compareRoster } = useRosterOrder();
   const targetUsers = useMemo(() => {
     return allUsers.filter((u) => workPlanPolicy.canViewUser(securityContext, {
       id: u.id,
       dept: u.dept,
       position: u.position,
       isLeader: (u as any).isLeader || u.position?.includes('팀장') || u.position?.includes('부서장'),
-    }));
-  }, [allUsers, securityContext]);
+    })).sort(compareRoster);
+  }, [allUsers, securityContext, compareRoster]);
 
   // 3. 전사 업무계획 쿼리
   const workPlansQuery = useAllWorkPlans(undefined, true);

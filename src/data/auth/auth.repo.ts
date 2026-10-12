@@ -36,7 +36,7 @@ export const authRepo = {
   async authenticate(loginId: string, password: string): Promise<User> {
     const id = loginId.trim();
     const key = id.toLowerCase();
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const user = users.find((u) => {
       const empNoMatch = u.empNo ? u.empNo.toLowerCase() === key : false;
       const idMatch = u.id ? u.id.toLowerCase() === key : false;
@@ -70,7 +70,7 @@ export const authRepo = {
    * 새 비밀번호 형식 검증(길이 등)은 화면에서 수행.
    */
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<User> {
-    const users = await userRepo.list();
+    const users = await userRepo.listIncludingTestAccounts();
     const user = users.find((u) => u.id === userId);
     if (!user) throw new AuthError('NOT_FOUND');
     
@@ -86,7 +86,7 @@ export const authRepo = {
   /** 로그인 성공 시 최근 접속시각 갱신(best-effort, 실패해도 로그인은 유지). */
   async touchLastLogin(userId: string): Promise<void> {
     try {
-      const users = await userRepo.list();
+      const users = await userRepo.listIncludingTestAccounts();
       const user = users.find((u) => u.id === userId);
       if (user) await userRepo.save({ ...user, lastLogin: nowStamp() });
     } catch {

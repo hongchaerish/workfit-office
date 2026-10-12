@@ -18,15 +18,7 @@ import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfi
 import type { User } from '@/domain/user/schema';
 import MobileCommonHeader from './MobileCommonHeader';
 
-/** 테스트 부서 및 테스트 계정 예외처리 */
-const isExcludedUser = (user: User) =>
-  user.dept.includes('테스트') ||
-  user.name.includes('테스터') ||
-  user.name.includes('테스트') ||
-  user.name.includes('허진욱2') ||
-  user.name === 'ㅎ테스터';
-
-const isExcludedDept = (deptName: string) => deptName.includes('테스트');
+// 테스트 계정 숨김은 사람 목록 repo 가 접속자 기준으로 처리한다([[testAccountVisibility]]).
 
 export default function MobileOrgChartScreen() {
   const org = useOrgTree();
@@ -39,9 +31,9 @@ export default function MobileOrgChartScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // 유효 부서 및 유효 사용자 목록
-  const validDepts = useMemo(() => org.depts.filter((d) => !isExcludedDept(d.name)), [org.depts]);
+  const validDepts = org.depts;
   const validUsers = useMemo(
-    () => org.users.filter((u) => u.status === '사용' && !isExcludedUser(u) && !isExcludedDept(u.dept)),
+    () => org.users.filter((u) => u.status === '사용'),
     [org.users],
   );
 
@@ -251,8 +243,7 @@ function VerticalVisualOrgChart({
       !d.name.includes('위원회') &&
       !d.name.includes('연구소') &&
       !d.name.includes('경영기획') &&
-      !d.name.includes('본부') &&
-      !isExcludedDept(d.name),
+      !d.name.includes('본부'),
   );
 
   return (

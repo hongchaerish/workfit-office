@@ -5,7 +5,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getPredecessorsOf, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
-import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
+import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
 import { ApprovalDocMetaTable, MetaRow } from './components/ApprovalDocMetaTable';
@@ -329,6 +329,9 @@ export function ApprovalDocumentView({
     ? form.closing
     : (FALLBACK_CLOSING[doc.docType] || '위와 같이 상신하오니 재가하여 주시기 바랍니다.');
   const amountField = form ? amountFieldOf(form) : undefined;
+  // 'body' 키를 표 등 다른 종류가 쓰는 서식은 본문이 별도 키에 있다(그 전에 상신된 문서의 doc.body 에 섞여 들어간 표 데이터는 본문으로 보이지 않게 한다)
+  const bodyKey = documentBodyKeyOf(form?.fields);
+  const bodyText = bodyKey === RESERVED_BODY_KEY ? doc.body : String(doc.fieldValues?.[bodyKey] ?? '');
   const amountLabel = amountField?.label ?? '금 액';
   const steps = useMemo(() =>
     [...(doc.steps || [])]
@@ -943,9 +946,9 @@ export function ApprovalDocumentView({
         )}
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
-        {longTextFields.length === 0 && doc.body && doc.body.trim() !== '' && doc.body !== '(본문 미리보기)' && (
+        {longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
           <div className="mt-3 min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
-            {doc.body}
+            {bodyText}
           </div>
         )}
 

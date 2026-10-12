@@ -77,7 +77,7 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
   const sigParam = urlParams.get('sig');
 
   let targetUser: User | null = null;
-  const users = await userRepo.list();
+  const users = await userRepo.listIncludingTestAccounts();
 
   // 관리자 계정 탐색 (DB의 admin 또는 대표이사 U001 또는 기본 관리자)
   const findAdminUser = (): User => {

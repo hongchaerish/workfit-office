@@ -437,7 +437,7 @@ export default function AuthScreen() {
                   <div className="rounded-lg bg-teal-soft/50 border border-teal/20 p-3 text-[12px] text-teal-dark font-medium flex items-center justify-between">
                     <div>
                       <span className="font-bold mr-1.5">[시스템 고정]</span>
-                      최고 관리자 권한은 <strong>데이터플랫폼 개발팀(D240)</strong> 부서에 시스템 기본으로 고정 배정되어 있습니다.
+                      <strong>데이터플랫폼 개발팀(D240)</strong> 부서는 최고 관리자로 고정 배정되며, 아래 지정 사원·직급도 최고 관리자 권한을 받습니다.
                     </div>
                   </div>
                 )}
@@ -522,15 +522,14 @@ export default function AuthScreen() {
                         지정 사원 ({selectedGroup.userIds?.length ?? 0}명)
                       </div>
                       <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 rounded-lg border border-dashed border-border bg-panel-alt/30">
-                        {selectedGroup.code === 'ADMIN' ? (
-                          <span className="text-[11px] text-ink3 my-auto">지정 부서(데이터플랫폼 개발팀) 소속 임직원 전체에게 자동 상속됩니다.</span>
-                        ) : selectedGroup.code === 'USER' ? (
+                        {selectedGroup.code === 'USER' ? (
                           <span className="text-[11px] text-ink3 my-auto">전사 모든 임직원이 기본 포함됩니다.</span>
                         ) : (selectedGroup.userIds ?? []).length === 0 ? (
                           <span className="text-[11px] text-ink3 my-auto">지정된 개별 사원이 없습니다.</span>
                         ) : (
                           selectedGroup.userIds?.map((uid) => {
-                            const u = org.userById(uid);
+                            // 대상자는 사원 ID 또는 사번으로 저장된다(권한 판정도 둘 다 본다)
+                            const u = org.userById(uid) ?? org.users.find((x) => x.empNo === uid);
                             return (
                               <span
                                 key={uid}
@@ -606,20 +605,18 @@ export default function AuthScreen() {
                           .slice()
                           .sort((a: any, b: any) => a.rank - b.rank)
                           .map((p: any) => {
-                            const checked = selectedGroup.code === 'ADMIN'
-                              ? false
-                              : (selectedGroup.positionRanks?.includes(p.rank) ?? false);
+                            const checked = selectedGroup.positionRanks?.includes(p.rank) ?? false;
                             return (
                               <label
                                 key={p.id}
                                 className={`flex items-center gap-1.5 text-[11.5px] font-medium text-ink2 mr-2 ${
-                                  selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'
+                                  selectedGroup.code === 'USER'
                                     ? 'opacity-50 cursor-not-allowed'
                                     : 'cursor-pointer'
                                 }`}
                               >
                                 <Checkbox
-                                  disabled={selectedGroup.code === 'ADMIN' || selectedGroup.code === 'USER'}
+                                  disabled={selectedGroup.code === 'USER'}
                                   checked={checked}
                                   onChange={(c) => {
                                     const current = selectedGroup.positionRanks ?? [];

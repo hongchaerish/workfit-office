@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useRosterOrder } from '@/features/user/useRosterOrder';
+import { isTestAccount } from '@/domain/user/testAccount';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -191,76 +193,28 @@ export default function CommuteScreen() {
     [profileByEmpMap, normName],
   );
 
-  // 직책/직급 서열 가중치 (1순위: 위원장/대표이사 -> 2순위: 부위원장 -> 3순위: 상무/손승원/본부장/이사/임원)
-  const getJobTitleRank = useCallback((position?: string | null, name?: string | null, jobTitle?: string | null) => {
-    const pos = (position || '').trim();
-    const n = (name || '').trim();
-    const title = (jobTitle || '').trim();
-
-    if (
-      n === '위원장' ||
-      pos === '위원장' ||
-      title === '위원장' ||
-      ((n.includes('대표') || pos.includes('대표') || title.includes('대표') || title.includes('위원장')) &&
-        !n.includes('부위원') && !pos.includes('부위원') && !title.includes('부위원'))
-    ) {
-      return 1;
-    }
-    if (n.includes('부위원') || pos.includes('부위원') || title.includes('부위원')) {
-      return 2;
-    }
-    if (
-      n.includes('손승원') ||
-      pos.includes('상무') ||
-      title.includes('상무') ||
-      pos.includes('전무') ||
-      title.includes('전무') ||
-      pos.includes('부사장') ||
-      title.includes('부사장') ||
-      title.includes('본부장') ||
-      title.includes('임원') ||
-      pos.includes('이사')
-    ) {
-      return 3;
-    }
-    if (title.includes('센터장') || title.includes('소장') || title.includes('실장')) {
-      return 4;
-    }
-    if (title.includes('팀장') || title.includes('부서장')) {
-      return 5;
-    }
-    if (title.includes('부팀장') || title.includes('파트장') || title.includes('그룹장')) {
-      return 6;
-    }
-    return 10;
-  }, []);
-
+  /** 인원 정렬 — 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]). 행에 빠진 값은 사용자 정보로 채운다. */
+  const { compare: compareRoster } = useRosterOrder();
   const compareEmployees = useCallback(
     (
-      a: { name?: string | null; position?: string | null; jobTitle?: string | null },
-      b: { name?: string | null; position?: string | null; jobTitle?: string | null },
+      a: { name?: string | null; dept?: string | null; position?: string | null; jobTitle?: string | null },
+      b: { name?: string | null; dept?: string | null; position?: string | null; jobTitle?: string | null },
     ) => {
-      const nameA = (a.name || '').trim();
-      const nameB = (b.name || '').trim();
-      const posA = a.position || userByEmpMap.get(nameA)?.position || '';
-      const posB = b.position || userByEmpMap.get(nameB)?.position || '';
-      const titleA = a.jobTitle || userByEmpMap.get(nameA)?.jobTitle || '';
-      const titleB = b.jobTitle || userByEmpMap.get(nameB)?.jobTitle || '';
-
-      // 1순위: 최고위 임원급 서열 (1: 위원장/대표이사 -> 2: 부위원장 -> 3: 상무/손승원)
-      const rankA = getJobTitleRank(posA, nameA, titleA);
-      const rankB = getJobTitleRank(posB, nameB, titleB);
-      if (rankA !== rankB) return rankA - rankB;
-
-      // 2순위: 직급 순위 (org.rankOf)
-      const posRankA = org.rankOf(posA);
-      const posRankB = org.rankOf(posB);
-      if (posRankA !== posRankB) return posRankA - posRankB;
-
-      // 3순위: 이름 가나다순
-      return nameA.localeCompare(nameB, 'ko');
+      const fill = (row: typeof a) => {
+        const name = (row.name || '').trim();
+        const u = userByEmpMap.get(name) ?? userByEmpMap.get(normName(name));
+        return {
+          // 인사 프로필 행이면 id 가 아니라 userId 가 사용자 ID 다
+          id: (u && 'userId' in u ? u.userId : u?.id) || undefined,
+          name,
+          dept: row.dept || u?.dept || '',
+          position: row.position || u?.position || '',
+          jobTitle: row.jobTitle || u?.jobTitle || '',
+        };
+      };
+      return compareRoster(fill(a), fill(b));
     },
-    [getJobTitleRank, userByEmpMap, org],
+    [compareRoster, userByEmpMap, normName],
   );
 
   // CAPS DB 임직원과 시스템 전체 사용자(allUsers)를 통합 (임직원 DB 미등록자 및 근태관리 OFF 대상자 100% 원천 배제)
@@ -286,8 +240,6 @@ export default function CommuteScreen() {
     const existingNormNames = new Set(list.map((e) => normName(e.name)));
     const existingEmpIds = new Set(list.map((e) => e.empId));
 
-    const isViewerTester = (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test');
-
     for (const u of allUsers) {
       // 퇴사자(미사용, resignedAt 기록자) 100% 원천 배제
       if (u.status === '미사용' || Boolean(u.resignedAt)) continue;
@@ -295,9 +247,6 @@ export default function CommuteScreen() {
       const name = (u.name || '').trim();
       const nName = normName(name);
       if (!name || !nName || existingNormNames.has(nName) || isExcludedAttendance(u, name)) continue;
-
-      const isUserTester = (u.dept ?? '').includes('테스트') || name.toLowerCase().includes('test');
-      if (isUserTester && !isViewerTester) continue;
 
       let empId = Number(u.empNo);
       if (Number.isNaN(empId) || empId <= 0 || existingEmpIds.has(empId)) {
@@ -399,7 +348,7 @@ export default function CommuteScreen() {
 
   // 테스트 계정일 때: 테스트 부서/계정 제외 토글 상태
   const isViewerTester = useMemo(
-    () => (user?.dept ?? '').includes('테스트') || (user?.name ?? '').toLowerCase().includes('test'),
+    () => isTestAccount(user),
     [user?.dept, user?.name],
   );
   const [excludeTestDept, setExcludeTestDept] = useState(false);
@@ -554,10 +503,7 @@ export default function CommuteScreen() {
 
       // 테스트 부서 제외 옵션 활성화 시 테스트 계정 및 테스트 부서 제외
       if (excludeTestDept) {
-        const isTester =
-          (matchedUser?.dept ?? '').includes('테스트') ||
-          (matchedUser?.name ?? '').toLowerCase().includes('test') ||
-          emp.name.toLowerCase().includes('test');
+        const isTester = isTestAccount(matchedUser) || isTestAccount({ name: emp.name });
         if (isTester) return false;
       }
 

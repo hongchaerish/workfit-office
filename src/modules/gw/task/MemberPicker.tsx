@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import type { User } from '@/domain/user/schema';
 
 interface MemberPickerProps {
@@ -18,7 +19,9 @@ interface MemberPickerProps {
  * 부서 체크박스는 3상태다 — 전원 선택(checked) / 일부(indeterminate) / 없음. 부분 선택을
  * 빈 체크박스로 그리면 "이 부서는 아무도 없다"로 읽혀서 다시 전체를 누르게 된다.
  */
-export function MemberPicker({ users, selected, lockedUserId, onChange }: MemberPickerProps) {
+export function MemberPicker({ users: allUsers, selected, lockedUserId, onChange }: MemberPickerProps) {
+  const { canDesignate } = useCanDesignate();
+  const users = useMemo(() => allUsers.filter(canDesignate), [allUsers, canDesignate]);
   const [keyword, setKeyword] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
