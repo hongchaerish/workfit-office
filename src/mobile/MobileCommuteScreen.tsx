@@ -45,7 +45,7 @@ function getCommuteStatusBadge(
   isHolidayOrWeekend: boolean
 ) {
   // 오늘은 아직 출근 전일 수 있어 결근으로 표시하지 않는다
-  const chips = describeCommuteRecord(record).filter((c) => c.kind !== 'holiday' && !(c.kind === 'absent' && dateStr >= todayStr));
+  const chips = describeCommuteRecord(record).filter((c) => !(c.kind === 'absent' && dateStr >= todayStr));
   if (chips.length > 0) {
     const last = chips[chips.length - 1];
     return {

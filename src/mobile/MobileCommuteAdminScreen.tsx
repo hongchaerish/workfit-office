@@ -125,8 +125,8 @@ export default function MobileCommuteAdminScreen() {
         statusText = '휴일근무';
         statusTone = 'normal';
       } else if (evaluated.status === 'off') {
-        // 주말·공휴일(휴일근무 승인 없음) — 미출근·이상으로 보지 않는다
-        statusText = evaluated.holidayName && evaluated.holidayName !== '주말 휴무' ? evaluated.holidayName : '휴무';
+        // 주말·공휴일(휴일근무 승인 없음) — 상태 배지 없이 출퇴근 시각만, 미출근·이상으로 보지 않는다
+        statusText = '';
         statusTone = 'off';
       } else if (evaluated.status === 'outside' || evaluated.status === 'trip') {
         statusText = evaluated.outsideName ?? evaluated.tripName ?? (evaluated.status === 'trip' ? '출장' : '외근');
@@ -359,11 +359,13 @@ export default function MobileCommuteAdminScreen() {
                 </div>
 
                 <div className="text-right">
-                  <span
-                    className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${STATUS_TONES[item.chipKind].badge}`}
-                  >
-                    {item.statusText}
-                  </span>
+                  {item.statusText && (
+                    <span
+                      className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${STATUS_TONES[item.chipKind].badge}`}
+                    >
+                      {item.statusText}
+                    </span>
+                  )}
                   {item.totalMin > 0 && (
                     <span className="block text-[10px] text-ink3 mt-0.5 font-mono">
                       {Math.floor(item.totalMin / 60)}h {item.totalMin % 60}m

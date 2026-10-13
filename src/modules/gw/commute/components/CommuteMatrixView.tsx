@@ -33,14 +33,15 @@ const timeOfHM = (iso?: string | null): string => {
   return '';
 };
 
-/** 근태표 칸의 상태 — [[statusDisplay]] 표준 짧은 표기·색. 표시할 상태가 없으면 '—'. */
+/** 근태표 칸의 상태 — [[statusDisplay]] 표준 짧은 표기·색. 상태가 없으면 출퇴근 시각만 두고, 시각도 없으면 '—'. */
 function CellStatusBadge({ record }: { record?: CommuteRecord }) {
+  const hasTimes = Boolean(record?.inAt || record?.outAt);
   return (
     <StatusBadges
       compact
       chips={describeCommuteRecord(record)}
       className="flex-col"
-      empty={<span className="text-[9px] text-ink3/40 font-mono">—</span>}
+      empty={hasTimes ? null : <span className="text-[9px] text-ink3/40 font-mono">—</span>}
     />
   );
 }
@@ -57,7 +58,6 @@ const LEGEND: StatusChip[] = [
   chipOf('late', '지각'),
   chipOf('absent', '결근'),
   chipOf('missing', '미체크', '출·퇴근 미기록'),
-  chipOf('holiday', '휴', '공휴일'),
 ];
 
 export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: CommuteMatrixViewProps) {

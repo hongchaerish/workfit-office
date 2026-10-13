@@ -588,7 +588,7 @@ export function MyCommuteLeaveTab({
                           <StatusBadges
                             chips={describeCommuteRecord(row)}
                             className="justify-start"
-                            empty={<span className="text-ink3 text-[10px]">—</span>}
+                            empty={row.inAt || row.outAt ? null : <span className="text-ink3 text-[10px]">—</span>}
                           />
                         )}
                       </td>

@@ -19,7 +19,6 @@ export type StatusKind =
   | 'outside'
   | 'trip'
   | 'holiday_work'
-  | 'holiday'
   | 'off';
 
 export interface StatusTone {
@@ -83,7 +82,6 @@ export const STATUS_TONES: Record<StatusKind, StatusTone> = {
     text: 'text-violet-700 dark:text-violet-400',
     dot: 'bg-violet-500',
   },
-  holiday: { badge: 'bg-rose-500/[0.06] border-rose-500/20 text-rose-500', text: 'text-rose-500', dot: 'bg-rose-400' },
   off: { badge: 'bg-panel-alt border-border text-ink3', text: 'text-ink3', dot: 'bg-ink3/40' },
 };
 
@@ -146,7 +144,8 @@ export function describeCommuteRecord(rec: Pick<
     case 'holiday_work':
       return [chipOf('holiday_work', '휴근', '휴일근무')];
     case 'off':
-      return rec.holidayName && rec.holidayName !== '주말 휴무' ? [chipOf('holiday', '휴', rec.holidayName)] : [];
+      // 주말·공휴일은 배지를 달지 않는다 — 승인 없는 출근도 출퇴근 시각만 보인다(공휴일은 날짜 머리에서 표시)
+      return [];
     default:
       return [];
   }

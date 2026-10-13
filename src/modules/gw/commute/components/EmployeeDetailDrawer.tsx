@@ -203,7 +203,7 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
                       <StatusBadges
                         chips={describeCommuteRecord(rec)}
                         className="justify-end"
-                        empty={<span className="text-[11px] text-ink3/70 font-medium">—</span>}
+                        empty={rec.inAt || rec.outAt ? null : <span className="text-[11px] text-ink3/70 font-medium">—</span>}
                       />
                     </div>
                   </div>

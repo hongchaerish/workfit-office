@@ -37,10 +37,10 @@ test('외근·출장은 표시가 빠지지 않는다', () => {
   assert.deepEqual(shorts(rec({ status: 'outside', leaveName: '오후반차' })), ['반차', '외근']);
 });
 
-test('휴일근무·공휴일·주말', () => {
+test('휴일근무는 휴근, 주말·공휴일(승인 없는 출근 포함)은 배지 없음', () => {
   assert.deepEqual(shorts(rec({ status: 'holiday_work' })), ['휴근']);
-  assert.deepEqual(shorts(rec({ status: 'off', holidayName: '개천절' })), ['휴']);
-  assert.deepEqual(shorts(rec({ status: 'off', holidayName: '주말 휴무' })), []);
+  assert.deepEqual(shorts(rec({ status: 'off', holidayName: '개천절' })), []);
+  assert.deepEqual(shorts(rec({ status: 'off', holidayName: '주말 휴무', inAt: '2026-09-19T09:00:00' })), []);
 });
 
 test('휴가인데 출근한 날은 휴가 배지, 미기록은 미체크', () => {
