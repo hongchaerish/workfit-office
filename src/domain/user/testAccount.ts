@@ -43,3 +43,21 @@ export function isTestDeptName(deptName?: string | null): boolean {
 export function canDesignateUser(viewer: TestAccountLike | null | undefined, target: TestAccountLike): boolean {
   return isTestAccount(viewer) === isTestAccount(target);
 }
+
+export interface TestAccountViewer {
+  /** 접속자가 테스트 계정인지 */
+  isTestViewer: boolean;
+  isSuperAdmin: boolean;
+  /** 최고관리자 상단 토글 값 */
+  superAdminShowsTestAccounts: boolean;
+}
+
+/**
+ * 접속자가 테스트 계정을 볼 수 있는지.
+ * 테스트 계정 본인은 항상, 최고관리자는 상단 토글을 따르고, 그 외 임직원은 볼 수 없다.
+ * 열람만 정한다 — 지정 가능 여부는 [[canDesignateUser]] 가 따로 막는다.
+ */
+export function canViewerSeeTestAccounts(v: TestAccountViewer): boolean {
+  if (v.isTestViewer) return true;
+  return v.isSuperAdmin && v.superAdminShowsTestAccounts;
+}

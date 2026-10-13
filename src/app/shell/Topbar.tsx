@@ -15,6 +15,8 @@ import { enablePushForUser, isPushConfigured, notificationPermission } from '@/s
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
 import { requestOpenChatRoom } from './QuickDock';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
+import { setShowTestAccounts, useShowTestAccounts } from '@/features/auth/testAccountToggle';
+import { isTestAccount } from '@/domain/user/testAccount';
 import defaultLogo from '@/assets/logo.png';
 
 interface TopbarProps {
@@ -68,7 +70,10 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
-  const { canAccess } = usePermission();
+  const { canAccess, isSuperAdmin } = usePermission();
+  // 최고관리자 전용 — 사람 목록에 테스트 계정을 보일지 전환(테스트 계정 본인은 항상 보이므로 숨김)
+  const showTestToggle = isSuperAdmin && !isTestAccount(user);
+  const showTestAccounts = useShowTestAccounts();
   const { data: companyInfo } = useCompanyInfo();
   const logoUrl = companyInfo?.logoUrl;
   const navigate = useNavigate();
@@ -263,6 +268,26 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
       {/* 날짜 + 계정 */}
       <div className="flex shrink-0 items-center gap-3.5">
+        {showTestToggle && (
+          <button
+            onClick={() => setShowTestAccounts(!showTestAccounts)}
+            className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-semibold transition-all hover:bg-white/[0.08] ${
+              showTestAccounts ? 'bg-white/[0.15]' : 'opacity-60'
+            }`}
+            title={showTestAccounts ? '테스트 계정 표시 중 — 눌러서 숨기기' : '테스트 계정 숨김 중 — 눌러서 표시하기'}
+          >
+            <span className="text-[14px] leading-none">🧪</span>
+            <span>테스트 계정</span>
+            <span
+              className={`relative h-4 w-7 rounded-full transition-colors ${showTestAccounts ? 'bg-teal' : 'bg-white/30'}`}
+            >
+              <span
+                className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${showTestAccounts ? 'left-3.5' : 'left-0.5'}`}
+              />
+            </span>
+          </button>
+        )}
+
         {/* GNB 통합 알림 센터 */}
         <div className="relative" ref={notiRef}>
           <button

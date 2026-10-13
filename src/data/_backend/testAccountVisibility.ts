@@ -3,8 +3,8 @@ import { isTestAccount, type TestAccountLike } from '@/domain/user/testAccount';
 /**
  * 테스트 계정 공개 범위 — 사람 마스터 repo 가 `list()` 에서 공통으로 쓰는 필터.
  *
- * 접속자가 테스트 계정이거나 최고관리자일 때만 테스트 계정이 보이고, 그 외에는 숨긴다.
- * 접속자 정보는 로그인·역할 확정 시 `useTestAccountVisibilitySync` 가 넣어 준다.
+ * 볼 수 있는 접속자(테스트 계정·토글을 켠 최고관리자)에게만 테스트 계정이 보이고, 그 외에는 숨긴다.
+ * 접속자 정보는 로그인·역할 확정 시 `TestAccountVisibilitySync` 가 넣어 준다.
  * 접속자를 아직 모르면 숨김 쪽으로 동작한다(새는 것보다 늦게 보이는 편이 낫다).
  *
  * repo 의 쓰기·채번 경로는 반드시 숨기지 않은 전체 목록(`listIncludingTestAccounts`)을 써야 한다.

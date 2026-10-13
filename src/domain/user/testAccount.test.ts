@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canDesignateUser, isTestAccount } from './testAccount';
+import { canDesignateUser, canViewerSeeTestAccounts, isTestAccount } from './testAccount';
 
 test('테스트 부서 소속이면 테스트 계정이다', () => {
   assert.equal(isTestAccount({ id: 'U025', name: 'testA', dept: '테스트' }), true);
@@ -28,4 +28,18 @@ test('지정은 같은 쪽끼리만 — 테스트 계정은 임직원을, 임직
   assert.equal(canDesignateUser(tester, otherTester), true);
   assert.equal(canDesignateUser(tester, staff), false);
   assert.equal(canDesignateUser(staff, tester), false);
+});
+
+test('열람 — 테스트 계정 본인은 항상 테스트 계정을 본다', () => {
+  assert.equal(canViewerSeeTestAccounts({ isTestViewer: true, isSuperAdmin: false, superAdminShowsTestAccounts: false }), true);
+});
+
+test('열람 — 최고관리자는 상단 토글을 따른다', () => {
+  assert.equal(canViewerSeeTestAccounts({ isTestViewer: false, isSuperAdmin: true, superAdminShowsTestAccounts: true }), true);
+  assert.equal(canViewerSeeTestAccounts({ isTestViewer: false, isSuperAdmin: true, superAdminShowsTestAccounts: false }), false);
+});
+
+test('열람 — 그 외 임직원은 볼 수 없다', () => {
+  assert.equal(canViewerSeeTestAccounts({ isTestViewer: false, isSuperAdmin: false, superAdminShowsTestAccounts: false }), false);
+  assert.equal(canViewerSeeTestAccounts({ isTestViewer: false, isSuperAdmin: false, superAdminShowsTestAccounts: true }), false);
 });
