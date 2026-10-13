@@ -37,7 +37,7 @@ export function LeaveAdjustmentModal({
   const delta = (isDeduction ? -1 : 1) * Math.abs(days);
   const expectedRemaining = Number((entry.remainingDays + delta).toFixed(2));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (days <= 0) {
       window.alert('가감 일수를 0.25일 이상 입력해 주세요.');
@@ -50,7 +50,7 @@ export function LeaveAdjustmentModal({
 
     setIsSubmitting(true);
     try {
-      saveAdjustment({
+      await saveAdjustment({
         empId: entry.empId,
         empName: entry.name,
         empNo: entry.empNo,

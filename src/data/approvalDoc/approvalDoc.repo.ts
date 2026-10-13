@@ -446,7 +446,7 @@ export const approvalDocRepo = {
     // 대기함 조회 시: 본인을 대결자로 지정해둔 활성 부재자 ID 목록 도출 (Dual-Routing - 서식 범위 검증 포함)
     const isProxyEnabled = await approvalProcessRepo.isOptionEnabled('proxy_approval');
     if (box === '대기' && isProxyEnabled) {
-      const allAbsences = await Promise.all(users.map((u) => absenceRepo.get(u.id)));
+      const allAbsences = await absenceRepo.list();
       const now = new Date();
 
       return rows

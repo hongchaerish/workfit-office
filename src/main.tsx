@@ -7,6 +7,7 @@ import { AuthProvider } from './app/auth/AuthProvider';
 import { PresenceProvider } from './features/userPresence/PresenceProvider';
 import AuthGate from './app/auth/AuthGate';
 import { TestAccountVisibilitySync } from './features/auth/TestAccountVisibilitySync';
+import { SharedSettingsGate } from './features/sharedSettings/SharedSettingsGate';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -15,11 +16,13 @@ createRoot(document.getElementById('root')!).render(
       <AuthGate>
         <QueryProvider>
           <TestAccountVisibilitySync />
-          <BrowserRouter>
-            <PresenceProvider>
-              <App />
-            </PresenceProvider>
-          </BrowserRouter>
+          <SharedSettingsGate>
+            <BrowserRouter>
+              <PresenceProvider>
+                <App />
+              </PresenceProvider>
+            </BrowserRouter>
+          </SharedSettingsGate>
         </QueryProvider>
       </AuthGate>
     </AuthProvider>

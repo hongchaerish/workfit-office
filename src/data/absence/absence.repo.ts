@@ -1,31 +1,45 @@
 import { userAbsenceSchema, type UserAbsenceConfig } from '@/domain/absence/schema';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
 
-const STORAGE_KEY_PREFIX = 'workfit_absence_config_';
+/** 예전 브라우저 저장 키 접두사(+userId) — DB 이전([[migrateLegacySharedSettings]]) 때만 읽는다. */
+export const LEGACY_ABSENCE_STORAGE_PREFIX = 'workfit_absence_config_';
+
+export function parseAbsence(raw: unknown): UserAbsenceConfig | null {
+  const p = userAbsenceSchema.safeParse(raw);
+  return p.success ? p.data : null;
+}
+
+/** 사용자당 문서 하나($id = userId). 대결자가 대신 결재하려면 모두가 읽을 수 있어야 해서 DB(userAbsences)에 둔다. */
+export const absenceBackend = createCrudBackend<UserAbsenceConfig>({
+  coll: 'userAbsences',
+  parse: parseAbsence,
+  idOf: (x) => x.userId,
+  seed: [],
+});
+
+const emptyConfig = (userId: string): UserAbsenceConfig => ({
+  userId,
+  isAbsent: false,
+  startDate: null,
+  endDate: null,
+  delegateUserId: null,
+  reason: '',
+  scope: 'ALL',
+  allowedDocTypes: [],
+  maxDelegateAmount: null,
+  updatedAt: null,
+});
 
 export const absenceRepo = {
-  /** 특정 사용자의 부재 및 대결 설정 조회. */
+  /** 전체 사용자의 부재 설정(설정한 사람만). */
+  async list(): Promise<UserAbsenceConfig[]> {
+    return absenceBackend.loadAll();
+  },
+
+  /** 특정 사용자의 부재 및 대결 설정 조회(없으면 기본값). */
   async get(userId: string): Promise<UserAbsenceConfig> {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${userId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return userAbsenceSchema.parse(parsed);
-      }
-    } catch (e) {
-      console.warn('Failed to parse absence config from localStorage:', e);
-    }
-    return {
-      userId,
-      isAbsent: false,
-      startDate: null,
-      endDate: null,
-      delegateUserId: null,
-      reason: '',
-      scope: 'ALL',
-      allowedDocTypes: [],
-      maxDelegateAmount: null,
-      updatedAt: null,
-    };
+    const all = await this.list();
+    return all.find((c) => c.userId === userId) ?? emptyConfig(userId);
   },
 
   /** 사용자 부재 설정 저장. */
@@ -34,7 +48,7 @@ export const absenceRepo = {
       ...config,
       updatedAt: new Date().toISOString(),
     };
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${config.userId}`, JSON.stringify(next));
+    await absenceBackend.save(next);
     return next;
   },
 

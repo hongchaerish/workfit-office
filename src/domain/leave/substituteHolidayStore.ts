@@ -3,11 +3,14 @@
  *
  * [엄격 규칙: rule-readonly.md]
  * 기존 실제 DB(appwrite, garage s3)의 결재 문서 및 마스터 데이터를 일체 수정하지 않고,
- * 관리자가 전사 또는 특정 대상자에게 부여한 대체휴무 발생 내역을 독립적으로 안전하게 격리 보관합니다.
+ * 관리자가 전사 또는 특정 대상자에게 부여한 대체휴무 발생 내역을 독립 컬렉션(substituteHolidayGrants)에 격리 보관합니다.
  *
  * [옵션 B: 시스템 프리셋 미지원]
  * 시스템 기본 하드코딩 프리셋을 두지 않으며, 관리자가 화면을 통해 직접 부여한 내역만 관리합니다.
  */
+import { z } from 'zod';
+import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { createSharedListStore } from '@/data/_backend/sharedListStore';
 
 export interface SubstituteHolidayGrant {
   id: string;
@@ -30,104 +33,73 @@ export interface SubstituteHolidayItemInput {
   days: number;
 }
 
-const STORAGE_KEY = 'workfit_substitute_holidays_v1';
+/** 예전 브라우저 저장 키 — DB 이전([[migrateLegacySharedSettings]]) 때만 읽는다. */
+export const LEGACY_SUBSTITUTE_HOLIDAY_STORAGE_KEY = 'workfit_substitute_holidays_v1';
 export const SUBSTITUTE_HOLIDAY_UPDATED_EVENT = 'workfit-substitute-holiday-updated';
 
-let memoryStorage: SubstituteHolidayGrant[] = [];
+const grantSchema = z.object({
+  id: z.string().min(1),
+  targetScope: z.union([z.literal('ALL'), z.array(z.string())]),
+  targetScopeLabel: z.string().nullish().transform((v) => v ?? ''),
+  occurrenceDate: z.string().min(1),
+  expirationDate: z.string().nullish().transform((v) => v ?? ''),
+  days: z.number(),
+  reason: z.string().nullish().transform((v) => v ?? ''),
+  grantedBy: z.string().nullish().transform((v) => v ?? ''),
+  grantedAt: z.string().nullish().transform((v) => v ?? ''),
+  createdAt: z.string().nullish().transform((v) => v ?? ''),
+});
 
-function getStorage(): Storage | null {
-  if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
-  if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) {
-    return (globalThis as any).localStorage;
-  }
-  return null;
+export function parseSubstituteHolidayGrant(raw: unknown): SubstituteHolidayGrant | null {
+  const p = grantSchema.safeParse(raw);
+  return p.success ? p.data : null;
 }
 
-/**
- * 브라우저 로컬 스토리지에서 대체휴무 부여 목록 안전 조회
- * (초기값: 빈 배열 [], 프리셋 없음)
- */
+export const substituteHolidayBackend = createCrudBackend<SubstituteHolidayGrant>({
+  coll: 'substituteHolidayGrants',
+  parse: parseSubstituteHolidayGrant,
+  idOf: (x) => x.id,
+  seed: [],
+  jsonFields: ['targetScope'],
+  stripFields: ['id'], // id 는 문서 $id 로 저장되고 읽을 때 복원된다
+});
+
+/** 전 임직원 공용 — DB(substituteHolidayGrants)가 원천이고 화면 조회용으로 메모리에 캐시한다. */
+export const substituteHolidayStore = createSharedListStore<SubstituteHolidayGrant>({
+  backend: substituteHolidayBackend,
+  idOf: (x) => x.id,
+  event: SUBSTITUTE_HOLIDAY_UPDATED_EVENT,
+});
+
+/** 대체휴무 부여 목록(최근 등록순, 프리셋 없음). */
 export function getStoredSubstituteHolidays(): SubstituteHolidayGrant[] {
-  const storage = getStorage();
-  if (!storage) return memoryStorage;
-
-  try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as SubstituteHolidayGrant[];
-  } catch (err) {
-    console.error('Failed to read substitute holidays:', err);
-    return [];
-  }
+  return [...substituteHolidayStore.getAll()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/**
- * 신규 대체휴무 부여 저장
- */
-export function saveSubstituteHolidayGrant(
+/** 신규 대체휴무 부여 — DB 저장이 끝나야 반환된다(실패 시 오류). */
+export async function saveSubstituteHolidayGrant(
   grant: Omit<SubstituteHolidayGrant, 'id' | 'createdAt'>,
-): SubstituteHolidayGrant {
-  const current = getStoredSubstituteHolidays();
+): Promise<SubstituteHolidayGrant> {
   const newGrant: SubstituteHolidayGrant = {
     ...grant,
     id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     createdAt: new Date().toISOString(),
   };
-
-  const updated = [newGrant, ...current];
-  const storage = getStorage();
-
-  if (storage) {
-    try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.error('Failed to save substitute holiday grant:', err);
-    }
-  } else {
-    memoryStorage = updated;
-  }
-
-  // 커스텀 이벤트 발송으로 전사 리액티브 동기화
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent(SUBSTITUTE_HOLIDAY_UPDATED_EVENT));
-  }
-
+  await substituteHolidayStore.save(newGrant);
   return newGrant;
 }
 
-/**
- * 대체휴무 부여 건 삭제/회수
- */
-export function deleteSubstituteHolidayGrant(id: string): boolean {
-  const current = getStoredSubstituteHolidays();
-  const filtered = current.filter((g) => g.id !== id);
-  if (filtered.length === current.length) return false;
-
-  const storage = getStorage();
-  if (storage) {
-    try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    } catch (err) {
-      console.error('Failed to delete substitute holiday grant:', err);
-      return false;
-    }
-  } else {
-    memoryStorage = filtered;
-  }
-
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent(SUBSTITUTE_HOLIDAY_UPDATED_EVENT));
-  }
+/** 대체휴무 부여 건 삭제/회수. 없는 건이면 false. */
+export async function deleteSubstituteHolidayGrant(id: string): Promise<boolean> {
+  if (!substituteHolidayStore.getAll().some((g) => g.id === id)) return false;
+  await substituteHolidayStore.remove(id);
   return true;
 }
 
-/** 테스트 환경용 메모리 스토리지 초기화 헬퍼 */
-export function _resetSubstituteHolidayStoreForTest(): void {
-  memoryStorage = [];
-  const storage = getStorage();
-  if (storage) {
-    storage.removeItem(STORAGE_KEY);
-  }
+/** 테스트 전용 — 저장소(메모리 백엔드)와 캐시를 비운다. */
+export async function _resetSubstituteHolidayStoreForTest(): Promise<void> {
+  for (const g of await substituteHolidayBackend.loadAll()) await substituteHolidayBackend.remove(g.id);
+  substituteHolidayStore.setForTest([]);
 }
 
 /**

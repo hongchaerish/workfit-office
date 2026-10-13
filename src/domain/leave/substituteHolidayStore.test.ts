@@ -7,11 +7,11 @@ import {
   _resetSubstituteHolidayStoreForTest,
 } from './substituteHolidayStore';
 
-export function runSubstituteHolidayTests() {
+export async function runSubstituteHolidayTests() {
   console.log('=== 대체휴무 저장소 (옵션 B: 시스템 프리셋 미지원) 단위 테스트 시작 ===\n');
 
   // Test 1
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
     const list = getStoredSubstituteHolidays();
     assert.deepEqual(list, [], '1. 초기 상태에서는 시스템 기본 프리셋이 전혀 없어야 함');
@@ -22,9 +22,9 @@ export function runSubstituteHolidayTests() {
   }
 
   // Test 2
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체 임직원',
       occurrenceDate: '2026-08-17',
@@ -35,7 +35,7 @@ export function runSubstituteHolidayTests() {
       grantedAt: '2026-09-14',
     });
 
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체 임직원',
       occurrenceDate: '2026-08-29',
@@ -65,9 +65,9 @@ export function runSubstituteHolidayTests() {
   }
 
   // Test 3
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: ['허진욱'],
       targetScopeLabel: '허진욱',
       occurrenceDate: '2026-09-01',
@@ -88,9 +88,9 @@ export function runSubstituteHolidayTests() {
   }
 
   // Test 4
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
-    const grant = saveSubstituteHolidayGrant({
+    const grant = await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체',
       occurrenceDate: '2026-08-17',
@@ -102,7 +102,7 @@ export function runSubstituteHolidayTests() {
     });
 
     assert.equal(getStoredSubstituteHolidays().length, 1);
-    const ok = deleteSubstituteHolidayGrant(grant.id);
+    const ok = await deleteSubstituteHolidayGrant(grant.id);
     assert.equal(ok, true);
     assert.equal(getStoredSubstituteHolidays().length, 0);
     assert.equal(getSubstituteHolidaysForUser('u1', '아무개').length, 0);
@@ -110,9 +110,9 @@ export function runSubstituteHolidayTests() {
   }
 
   // Test 5
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체',
       occurrenceDate: '2026-08-29',
@@ -123,7 +123,7 @@ export function runSubstituteHolidayTests() {
       grantedAt: '2026-09-14',
     });
 
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체',
       occurrenceDate: '2026-08-17',
@@ -141,10 +141,10 @@ export function runSubstituteHolidayTests() {
   }
 
   // Test 6: 입사일 기준 자동 제외 로직 검증 (입사일이 발생일보다 나중인 사람 제외)
-  _resetSubstituteHolidayStoreForTest();
+  await _resetSubstituteHolidayStoreForTest();
   {
     // 8/17 특근 1일 등록 (전사)
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체 임직원',
       occurrenceDate: '2026-08-17',
@@ -156,7 +156,7 @@ export function runSubstituteHolidayTests() {
     });
 
     // 8/29 특근 1일 등록 (전사)
-    saveSubstituteHolidayGrant({
+    await saveSubstituteHolidayGrant({
       targetScope: 'ALL',
       targetScopeLabel: '전체 임직원',
       occurrenceDate: '2026-08-29',
@@ -192,4 +192,4 @@ export function runSubstituteHolidayTests() {
   console.log('\n🎉 대체휴무 저장소 모든 단위 테스트 성공 (6/6 Passed)!');
 }
 
-runSubstituteHolidayTests();
+void runSubstituteHolidayTests();

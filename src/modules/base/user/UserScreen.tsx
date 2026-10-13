@@ -14,7 +14,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveUserRoleNames } from '@/domain/roleGroup/roleResolver';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
 import ResignModal from './ResignModal';
-import { successionRepo } from '@/data/succession/succession.repo';
+import { successionRepo, SUCCESSION_UPDATED_EVENT } from '@/data/succession/succession.repo';
 import type { ApprovalSuccession } from '@/data/seeds/succession.seed';
 import { useEffect } from 'react';
 
@@ -49,10 +49,13 @@ export default function UserScreen() {
   const [succSelectId, setSuccSelectId] = useState<string>('');
 
   useEffect(() => {
-    setSuccessions(successionRepo.getAll());
+    const refresh = () => setSuccessions(successionRepo.getAll());
+    refresh();
+    window.addEventListener(SUCCESSION_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(SUCCESSION_UPDATED_EVENT, refresh);
   }, []);
 
-  const handleAddSuccession = () => {
+  const handleAddSuccession = async () => {
     if (!predSelectId || !succSelectId) {
       alert('전임자와 후임자를 모두 선택해 주세요.');
       return;
@@ -61,17 +64,25 @@ export default function UserScreen() {
       alert('전임자와 후임자는 동일인물일 수 없습니다.');
       return;
     }
-    successionRepo.add(predSelectId, succSelectId);
-    setSuccessions(successionRepo.getAll());
+    try {
+      await successionRepo.add(predSelectId, succSelectId);
+    } catch (e) {
+      alert(`권한 승계 저장에 실패했습니다: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     setPredSelectId('');
     setSuccSelectId('');
     setNotice('권한 승계 관계가 성공적으로 등록되었습니다.');
   };
 
-  const handleDeleteSuccession = (id: string) => {
+  const handleDeleteSuccession = async (id: string) => {
     if (confirm('선택한 권한 승계 관계를 삭제하시겠습니까?')) {
-      successionRepo.delete(id);
-      setSuccessions(successionRepo.getAll());
+      try {
+        await successionRepo.delete(id);
+      } catch (e) {
+        alert(`권한 승계 삭제에 실패했습니다: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
       setNotice('권한 승계 관계가 삭제되었습니다.');
     }
   };

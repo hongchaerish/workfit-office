@@ -108,7 +108,7 @@ const UQ = (name: string, attributes: string[]): IndexDef => ({
  * [타입]  z.number().int()·금액(원)→Integer · z.boolean→Boolean ·
  *   z.array(string)→String[] · 중첩객체/배열-of-객체/record/tuple→JSON 문자열(J).
  *
- * 제외: localStorage 전용(approvalProcess·absence·succession), 폐기 대상(영업 8종).
+ * 제외: 폐기 대상(영업 8종).
  */
 const COLLECTIONS: CollectionDef[] = [
   // ── 메신저 (PoC) ──
@@ -296,6 +296,73 @@ const COLLECTIONS: CollectionDef[] = [
       S('grid', 200000),
       INT('sortOrder'),
       S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [],
+  },
+  // ── 전사 설정(예전 브라우저 localStorage 전용 → DB 이전, 2026-10-13) ──
+  {
+    // 인명관리 > 근태 대상 여부. targetKey = 프로필 id·userId·사번 중 하나(앞쪽이 우선).
+    id: 'attendanceTargets',
+    name: '근태 대상 여부',
+    attributes: [S('targetKey', 128, true), BOOL('isTarget'), S('updatedBy', 64), S('updatedAt', 40)],
+    indexes: [],
+  },
+  {
+    // 사용자관리 > 결재 권한 승계(전임자 → 후임자, 전임자당 1건)
+    id: 'approvalSuccessions',
+    name: '결재 권한 승계',
+    attributes: [S('predecessorId', 64, true), S('successorId', 64, true), S('effectiveDate', 40)],
+    indexes: [],
+  },
+  {
+    // 휴가관리 > 연차 수동 가감(포상·공제·이월 등)
+    id: 'leaveAdjustments',
+    name: '연차 수동 조정',
+    attributes: [
+      INT('empId'),
+      S('empName', 128, true),
+      S('empNo', 64),
+      S('type', 32, true),
+      { kind: 'float', key: 'deltaDays', required: true },
+      S('reason', 1000),
+      S('grantedAt', 40),
+      S('grantedBy', 128),
+      S('createdAt', 40),
+    ],
+    indexes: [],
+  },
+  {
+    // 휴가관리 > 대체휴무 일괄 부여. targetScope = 'ALL' 또는 대상 ID·이름 배열의 JSON 문자열.
+    id: 'substituteHolidayGrants',
+    name: '대체휴무 부여',
+    attributes: [
+      J('targetScope', 65535),
+      S('targetScopeLabel', 256),
+      S('occurrenceDate', 10, true),
+      S('expirationDate', 10),
+      { kind: 'float', key: 'days', required: true },
+      S('reason', 1000),
+      S('grantedBy', 128),
+      S('grantedAt', 40),
+      S('createdAt', 40),
+    ],
+    indexes: [],
+  },
+  {
+    // 설정 > 부재·대결자. 사용자당 문서 하나($id = userId).
+    id: 'userAbsences',
+    name: '부재·대결 설정',
+    attributes: [
+      S('userId', 64, true),
+      BOOL('isAbsent'),
+      S('startDate', 40),
+      S('endDate', 40),
+      S('delegateUserId', 64),
+      S('reason', 500),
+      S('scope', 32),
+      SA('allowedDocTypes', 128),
+      INT('maxDelegateAmount'),
       S('updatedAt', 40),
     ],
     indexes: [],

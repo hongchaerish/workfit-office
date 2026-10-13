@@ -120,7 +120,7 @@ export function BatchSubstituteHolidayModal({
     setSelectedEmpIds([]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!occurrenceDate) {
@@ -171,7 +171,7 @@ export function BatchSubstituteHolidayModal({
 
     setIsSubmitting(true);
     try {
-      saveSubstituteHolidayGrant({
+      await saveSubstituteHolidayGrant({
         targetScope,
         targetScopeLabel,
         occurrenceDate,
@@ -194,11 +194,17 @@ export function BatchSubstituteHolidayModal({
     }
   };
 
-  const handleDelete = (id: string, label: string, r: string) => {
+  const handleDelete = async (id: string, label: string, r: string) => {
     if (!window.confirm(`[${label}]의 대체휴무(${r}) 부여 내역을 회수/삭제하시겠습니까?`)) {
       return;
     }
-    deleteSubstituteHolidayGrant(id);
+    try {
+      await deleteSubstituteHolidayGrant(id);
+    } catch (err) {
+      console.error(err);
+      window.alert('대체휴무 회수 중 오류가 발생했습니다.');
+      return;
+    }
     refreshHistory();
     onSuccess?.();
   };
