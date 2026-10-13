@@ -391,24 +391,11 @@ export default function BoardScreen() {
         {viewMode === 'list' && (
           <>
             <div className="flex flex-col gap-2 border-b border-border pb-4">
-              <div className="flex items-center justify-between">
-                <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
-                  <span>{getBoardIcon(activeBoardMeta.id, 18, 'text-teal')}</span>
-                  <span>{activeBoardMeta.name}</span>
-                </h1>
-                {canCreate && (
-                  <button
-                    onClick={() => {
-                      setNewPost({ ...newPost, boardId: activeBoard });
-                      setViewMode('write');
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
-                  >
-                    <PenLine size={13} />
-                    <span>새 글 쓰기</span>
-                  </button>
-                )}
-              </div>
+              {/* 새 글 쓰기 버튼은 상단 제목 줄(GwHead) 오른쪽에 하나만 둔다 */}
+              <h1 className="text-base font-extrabold text-ink flex items-center gap-2">
+                <span>{getBoardIcon(activeBoardMeta.id, 18, 'text-teal')}</span>
+                <span>{activeBoardMeta.name}</span>
+              </h1>
               <p className="text-[11.5px] text-ink3">{activeBoardMeta.desc}</p>
             </div>
 
