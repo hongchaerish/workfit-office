@@ -41,7 +41,8 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, menuOpen, setMenu
   }, [activeTabId, tabs.length]);
 
   return (
-    <div className="relative flex h-9 shrink-0 items-end border-b border-border-hi bg-bg-deep pl-2.5 w-full min-w-full">
+    // 상단 메뉴(58px) 바로 아래에 고정 — 높이(h-9=36px)를 바꾸면 AppShell 의 --shell-top 도 맞춘다
+    <div className="sticky top-[58px] z-[45] flex h-9 shrink-0 items-end border-b border-border-hi bg-bg-deep pl-2.5 w-full min-w-full">
       {/* w-0 + flex-1: 탭 너비 합계가 셸 전체 너비(min-w-fit)를 밀어내지 않게 하고, 남는 폭만 차지한다 */}
       <div
         ref={listRef}

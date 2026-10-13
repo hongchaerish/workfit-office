@@ -113,10 +113,10 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
   const [railOpen, setRailOpen] = useState<Record<string, boolean>>(() => loadJSON('mes_rail_open', {}));
   const [dockOpen, setDockOpen] = useState<string | null>(null);
 
-  // 최상단 바(Topbar)는 스크롤해도 고정된다 — 그 높이를 알려 sticky 요소들이 바로 아래에 붙게 한다
+  // 최상단 바(Topbar 58px)와 열린 화면 탭 줄(TabBar 36px)은 스크롤해도 고정된다 — 둘을 합한 높이를 알려 sticky 요소들이 그 바로 아래에 붙게 한다
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--shell-top', '58px');
+    root.style.setProperty('--shell-top', '94px');
     return () => {
       root.style.removeProperty('--shell-top');
     };
@@ -230,7 +230,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
       />
 
       {/* 모듈 드롭다운 딤 */}
-      {openModule && <div onClick={() => setOpenModule(null)} className="absolute inset-x-0 bottom-0 top-[58px] z-40 bg-navy-deep/30" />}
+      {openModule && <div onClick={() => setOpenModule(null)} className="absolute inset-x-0 bottom-0 top-[58px] z-[46] bg-navy-deep/30" />}
 
       <div className={activeUrl.startsWith('/gw') ? 'flex flex-1 w-full min-w-fit' : 'flex min-h-0 flex-1 w-full'}>
         {/* /gw 하위 라우트(:조직도, 전자결재 등)에서는 좌측 사이드바 숨김 */}
