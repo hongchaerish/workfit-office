@@ -54,3 +54,16 @@ test('결재 일정 칩', () => {
   assert.equal(scheduleChip({ category: 'OUTSIDE', subType: '종일 외근' }).kind, 'outside');
   assert.equal(scheduleChip({ category: 'TRIP', subType: '해외출장' }).label, '해외출장');
 });
+
+test('월 요약: 출근 태그 없는 반차·반반차도 0.5·0.25일로 센다', async () => {
+  const { summarizeCommuteMonth } = await import('./schema');
+  const s = summarizeCommuteMonth([
+    rec({ status: 'leave', leaveName: '오전반차' }),
+    rec({ status: 'leave', leaveName: '반반차' }),
+    rec({ status: 'leave', leaveName: '연차' }),
+    rec({ status: 'outside' }),
+    rec({ status: 'trip' }),
+  ]);
+  assert.equal(s.leaveDays, 1.75);
+  assert.equal(s.outsideDays, 2);
+});

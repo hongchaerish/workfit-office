@@ -96,14 +96,17 @@ export interface CommuteMonthSummary {
 export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummary {
   let leaveDays = 0;
   for (const row of rows) {
-    if (row.status === 'leave') {
-      leaveDays += 1;
-    } else if (row.leaveName) {
+    // 반차·반반차는 출근 태그가 없어(status 'leave') 판정돼도 0.5·0.25일로 센다
+    if (row.leaveName) {
       if (isQuarterDayLeave(row.leaveName)) {
         leaveDays += 0.25;
       } else if (isHalfDayLeave(row.leaveName)) {
         leaveDays += 0.5;
+      } else if (row.status === 'leave') {
+        leaveDays += 1;
       }
+    } else if (row.status === 'leave') {
+      leaveDays += 1;
     }
   }
 

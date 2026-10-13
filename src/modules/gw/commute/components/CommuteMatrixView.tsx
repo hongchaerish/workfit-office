@@ -82,7 +82,8 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
   }, [year, mm, month, holidayMap]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs w-full max-w-full min-w-0">
+    // contain:inline-size — 날짜 31칸짜리 표 너비가 화면 전체(그룹웨어 셸은 min-w-fit)를 넓히지 않게 하고, 표는 이 상자 안에서 가로로 넘긴다
+    <div className="overflow-hidden rounded-xl border border-border bg-panel shadow-2xs w-full max-w-full min-w-0 [contain:inline-size]">
       {/* 상태 기호 범례 헤더 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-panel-alt/50 px-3.5 py-2 text-[11px] text-ink3">
         <div className="flex items-center gap-1.5 font-bold text-ink2 shrink-0">
