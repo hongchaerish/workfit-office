@@ -23,6 +23,7 @@ import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { WorkPlanOfficeRibbonToolbar } from './components/WorkPlanOfficeRibbonToolbar';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
+import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { resolveDeptId } from '@/domain/department/engine';
@@ -40,7 +41,10 @@ function dayTitle(date: string): string {
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
-  const { userRoles } = usePermission();
+  const { userRoles, isSuperAdmin, canAction } = usePermission();
+  // 전 직원 정렬 순서 편집 — 최고관리자·'팀·전사 업무 종합 현황' 수정 권한자 전용(전사 공통 설정)
+  const canEditRosterOrder = isSuperAdmin || canAction('S_GW_WORK_PLAN_ADMIN', 'update');
+  const [isOrderOpen, setIsOrderOpen] = useState(false);
   const org = useOrgTree();
   const usersQuery = useUsers();
   // 실제 회사 운영 원칙: 퇴사자(status === '미사용' 또는 resignedAt)는 업무계획 로스터/부서원/일정에서 100% 원천 배제
@@ -113,7 +117,7 @@ export default function WorkPlanScreen() {
   const update = useUpdateWorkPlan();
   const remove = useRemoveWorkPlan();
 
-  /** 인원 정렬 — 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]) */
+  /** 인원 정렬 — 관리자가 정한 순서 → 임원(권한그룹) → 부서 → 직책 → 직급 → 이름([[rosterOrder]]) */
   const { compare: compareRoster } = useRosterOrder();
 
   /** 부서별 조직도 정렬 순서 맵 */
@@ -431,6 +435,16 @@ export default function WorkPlanScreen() {
                 </button>
               )}
             </div>
+            {canEditRosterOrder && (
+              <button
+                type="button"
+                onClick={() => setIsOrderOpen(true)}
+                title="인원 정렬 순서 편집 (관리자 전용, 전사 적용)"
+                className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink hover:border-teal/50"
+              >
+                ↕ 정렬 순서
+              </button>
+            )}
           </>
         )}
         // 편집 리본 — 상단 고정 바 바로 아래에 붙는다
@@ -540,6 +554,9 @@ export default function WorkPlanScreen() {
           }}
         />
       )}
+
+      {/* 전 직원 정렬 순서 편집(관리자 전용) */}
+      <RosterOrderModal open={isOrderOpen} onClose={() => setIsOrderOpen(false)} />
 
       {/* 루틴 템플릿 및 태그 관리 모달 */}
       <WorkPlanConfigModal

@@ -368,6 +368,13 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    // 근태·업무계획 인원 목록의 정렬 순서(업무계획 > 정렬 순서 편집, 관리자 전용). key 별 문서 하나 — 'all' = 전 직원 순서.
+    id: 'rosterOrders',
+    name: '인원 정렬 순서',
+    attributes: [S('key', 64, true), SA('userIds', 64), S('updatedBy', 64), S('updatedAt', 40)],
+    indexes: [],
+  },
+  {
     id: 'companySites',
     name: '사업장',
     attributes: [S('name', 128, true), S('kind', 32, true), S('addr', 256), S('tel', 32), S('mgr', 64), BOOL('active', true)],

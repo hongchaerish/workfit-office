@@ -36,3 +36,21 @@ test('직책 서열 — 부팀장은 팀장보다 아래다', () => {
   assert.ok(jobTitleRank('부팀장') < jobTitleRank('팀원'));
   assert.ok(jobTitleRank('부위원장') > jobTitleRank('위원장'));
 });
+
+test('정렬 순서 — 지정한 사람이 그 순서대로 먼저 오고, 지정 없는 사람은 기존 기준을 따른다', () => {
+  const chair = p('위원장', '기술경영전략위원회', '위원회');
+  const vice = p('부위원장', '기술경영전략위원회', '위원회');
+  const order: Record<string, number> = { 위원장: 1, 부위원장: 2, 손승원: 3, 강윤석: 4 };
+  const withOrder = (execNames: string[]): RosterOrderContext => ({ ...ctx(execNames), displayOrder: (x) => order[x.name ?? ''] ?? null });
+  const list = [moran, kang, son, vice, chair, choi];
+  const execs = ['위원장', '부위원장', '손승원', '강윤석', '모 란'];
+  const names = [...list].sort((a, b) => compareRoster(a, b, withOrder(execs))).map((x) => x.name);
+  assert.deepEqual(names, ['위원장', '부위원장', '손승원', '강윤석', '모 란', '최지혜']);
+});
+
+test('정렬 순서는 전 직원 대상 — 임원·부서 기준보다 앞선다', () => {
+  const order: Record<string, number> = { 최지혜: 0, 손승원: 1 };
+  const withOrder: RosterOrderContext = { ...ctx(['손승원']), displayOrder: (x) => order[x.name ?? ''] ?? null };
+  const names = [choi, moran, son, park].sort((a, b) => compareRoster(a, b, withOrder)).map((x) => x.name);
+  assert.deepEqual(names, ['최지혜', '손승원', '모 란', '박광래']);
+});
