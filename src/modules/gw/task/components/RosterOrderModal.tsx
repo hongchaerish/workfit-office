@@ -91,7 +91,6 @@ export function RosterOrderModal({ open, onClose }: Props) {
     >
       <p className="mb-2 text-[11px] text-ink3">
         끌어서 옮기거나 ▲▼, 순번 입력으로 순서를 바꿉니다. 저장하면 근태·업무계획 등 모든 인원 목록에 전사 공통으로 적용됩니다.
-        근태 화면처럼 부서별로 묶어 보여 주는 곳에서는 묶음 안의 순서에 적용됩니다.
       </p>
       <input
         type="text"
