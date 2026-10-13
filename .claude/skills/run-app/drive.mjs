@@ -11,8 +11,8 @@
  * 환경변수(선택):
  *   BASE       기본 http://localhost:3000
  *   SHOT_DIR   스크린샷 저장 경로(기본 ./.screenshots — gitignore 권장)
- *   LOGIN_ID   기본 seunggi.kim@workfit.co.kr (ADMIN seed 계정)
- *   LOGIN_PW   기본 mes1234 (seed 공통 초기 비밀번호)
+ *   LOGIN_ID   기본: login.local.json → seed seunggi.kim@workfit.co.kr
+ *   LOGIN_PW   기본: login.local.json → seed mes1234
  *   CHROME     Chrome 실행 파일 경로(기본 macOS Google Chrome)
  *
  * ⚠ 인증 세션이 인메모리라, 로그인 후 전체 새로고침(page.goto)을 하면 로그아웃되어
@@ -24,9 +24,8 @@ import { mkdirSync } from 'node:fs';
 
 const BASE = process.env.BASE ?? 'http://localhost:3000';
 const OUT = process.env.SHOT_DIR ?? './.screenshots';
-const LOGIN_ID = process.env.LOGIN_ID ?? 'seunggi.kim@workfit.co.kr';
-const LOGIN_PW = process.env.LOGIN_PW ?? 'mes1234';
-const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+import { LOGIN_ID, LOGIN_PW } from './login.mjs';
+const CHROME = process.env.CHROME ?? (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 mkdirSync(OUT, { recursive: true });
 const log = (...a) => console.log('[drive]', ...a);

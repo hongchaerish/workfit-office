@@ -14,8 +14,7 @@ import { mkdirSync } from 'node:fs';
 const BASE = process.env.BASE ?? 'http://localhost:3000';
 const SHOT_DIR = process.env.SHOT_DIR ?? './.screenshots';
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const LOGIN_ID = process.env.LOGIN_ID ?? 'seunggi.kim@workfit.co.kr';
-const LOGIN_PW = process.env.LOGIN_PW ?? 'mes1234';
+import { LOGIN_ID, LOGIN_PW } from './login.mjs';
 
 /**
  * 업무 모듈 → 그 화면이 **첫 진입에** 읽어야 하는 컬렉션.

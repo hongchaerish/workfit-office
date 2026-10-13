@@ -8,9 +8,8 @@ import { mkdirSync } from 'node:fs';
 
 const BASE = process.env.BASE ?? 'http://localhost:3000';
 const OUT = process.env.SHOT_DIR ?? './.screenshots';
-const LOGIN_ID = process.env.LOGIN_ID ?? 'seunggi.kim@workfit.co.kr';
-const LOGIN_PW = process.env.LOGIN_PW ?? 'mes1234';
-const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+import { LOGIN_ID, LOGIN_PW } from './login.mjs';
+const CHROME = process.env.CHROME ?? (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 
 mkdirSync(OUT, { recursive: true });
 const log = (...a) => console.log('[widdy]', ...a);

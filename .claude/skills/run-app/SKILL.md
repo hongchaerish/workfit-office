@@ -41,7 +41,9 @@ node .claude/skills/run-app/drive.mjs      # 스크린샷 → ./.screenshots/
 ## 인증
 
 로그인 화면 = 셸 진입 전 전체화면 게이트. 입력은 **단일 ID(사번 또는 이메일) + 비밀번호**.
-seed 계정 공통 초기 비밀번호 `mes1234`. ADMIN 계정 예: `seunggi.kim@workfit.co.kr`(김승기).
+관리자 계정은 `.claude/skills/run-app/login.local.json`(`{"id","pw"}`, **gitignore — 커밋 금지**)에 두고
+드라이버가 `login.mjs`로 읽는다. 파일이 없으면 seed 계정(`seunggi.kim@workfit.co.kr` / `mes1234`)으로 시도하지만,
+Appwrite 전환 후 seed 계정은 로그인되지 않는다. 계정이 바뀌면 이 파일만 고친다.
 (사번 로그인도 가능: 예 `600001`.)
 
 ## 라우트
