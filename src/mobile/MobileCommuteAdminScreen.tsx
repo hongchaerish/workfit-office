@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
+import { describeCommuteRecord, STATUS_TONES, type StatusKind } from '@/domain/commute/statusDisplay';
 import {
   Search,
   AlertTriangle,
@@ -118,9 +119,16 @@ export default function MobileCommuteAdminScreen() {
       }
 
       let statusText = '미출근';
-      let statusTone: 'normal' | 'late' | 'leave' | 'outside' | 'absent' = 'absent';
+      let statusTone: 'normal' | 'late' | 'leave' | 'outside' | 'absent' | 'off' = 'absent';
 
-      if (evaluated.status === 'outside' || evaluated.status === 'trip') {
+      if (evaluated.status === 'holiday_work') {
+        statusText = '휴일근무';
+        statusTone = 'normal';
+      } else if (evaluated.status === 'off') {
+        // 주말·공휴일(휴일근무 승인 없음) — 미출근·이상으로 보지 않는다
+        statusText = evaluated.holidayName && evaluated.holidayName !== '주말 휴무' ? evaluated.holidayName : '휴무';
+        statusTone = 'off';
+      } else if (evaluated.status === 'outside' || evaluated.status === 'trip') {
         statusText = evaluated.outsideName ?? evaluated.tripName ?? (evaluated.status === 'trip' ? '출장' : '외근');
         statusTone = 'outside';
       } else if (evaluated.status === 'leave') {
@@ -150,6 +158,12 @@ export default function MobileCommuteAdminScreen() {
         totalMin,
         statusText,
         statusTone,
+        // 배지 색은 웹과 같은 표준 정의([[statusDisplay]])를 따른다
+        chipKind: (statusTone === 'off'
+          ? 'off'
+          : statusTone === 'absent'
+            ? 'absent'
+            : describeCommuteRecord(evaluated).at(-1)?.kind ?? 'normal') as StatusKind,
         isAnomaly: statusTone === 'late' || (statusTone === 'absent' && !approvedLeaveType),
       };
     });
@@ -185,7 +199,7 @@ export default function MobileCommuteAdminScreen() {
       if (m.statusTone === 'leave' || m.statusTone === 'outside') leave++;
       else if (m.statusTone === 'late') late++;
       else if (m.inAt) working++;
-      else absent++;
+      else if (m.statusTone !== 'off') absent++;
     });
     return { total: roster.length, working, late, leave, absent };
   }, [roster]);
@@ -346,17 +360,7 @@ export default function MobileCommuteAdminScreen() {
 
                 <div className="text-right">
                   <span
-                    className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                      item.statusTone === 'normal'
-                        ? 'bg-emerald-500/10 text-emerald-600'
-                        : item.statusTone === 'late'
-                          ? 'bg-amber-500 text-white'
-                          : item.statusTone === 'leave'
-                            ? 'bg-teal text-white'
-                            : item.statusTone === 'outside'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-panel-alt text-ink3'
-                    }`}
+                    className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${STATUS_TONES[item.chipKind].badge}`}
                   >
                     {item.statusText}
                   </span>

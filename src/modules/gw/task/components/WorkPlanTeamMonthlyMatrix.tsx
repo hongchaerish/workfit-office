@@ -11,6 +11,7 @@ import {
 import { useAllWorkPlans } from '@/features/workPlan/useWorkPlans';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules, isDateInSchedule } from '@/domain/approvalDoc/scheduleEngine';
+import { scheduleChip, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
@@ -255,27 +256,25 @@ export function WorkPlanTeamMonthlyMatrix({
 
     // 전자결재 승인 일정 (외근, 출장, 휴가)
     const approvedSchedules = extractApprovedSchedules(approvalsQuery.data ?? []);
+    // 기안자 id가 계정 이관 등으로 지금 사용자 id와 다르면 이름으로 이어 붙인다(근태와 같은 규칙)
+    const normName = (v?: string | null) => (v ?? '').replace(/\s+/g, '');
+    const memberIdByName = new Map(members.map((m) => [normName(m.name), m.id]));
     for (const s of approvedSchedules) {
-      if (!map.has(s.drafterId)) map.set(s.drafterId, new Map());
-      const userDateMap = map.get(s.drafterId)!;
+      const ownerId = members.some((m) => m.id === s.drafterId)
+        ? s.drafterId
+        : memberIdByName.get(normName(s.drafterName)) ?? s.drafterId;
+      if (!map.has(ownerId)) map.set(ownerId, new Map());
+      const userDateMap = map.get(ownerId)!;
 
       for (const d of allDays) {
         const dStr = d.dateStr;
         if (isDateInSchedule(dStr, s)) {
           if (!userDateMap.has(dStr)) userDateMap.set(dStr, []);
-          const label =
-            s.category === 'LEAVE'
-              ? `[휴가] ${s.leaveType || '휴가'}`
-              : s.category === 'OUTSIDE'
-              ? `[외근] ${s.subType || '외근'}${s.destination ? ` (${s.destination})` : ''}`
-              : `[출장] ${s.subType || '출장'}${s.destination ? ` (${s.destination})` : ''}`;
-
-          const badgeClass =
-            s.category === 'LEAVE'
-              ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 dark:text-amber-400'
-              : s.category === 'OUTSIDE'
-              ? 'bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400'
-              : 'bg-indigo-500/15 text-indigo-700 border-indigo-500/30 dark:text-indigo-400';
+          // 표기·색은 근태와 같은 표준 정의([[statusDisplay]])
+          const chip = scheduleChip(s);
+          const tag = s.category === 'LEAVE' ? '휴가' : chip.short;
+          const label = `[${tag}] ${chip.label}${s.category !== 'LEAVE' && s.destination ? ` (${s.destination})` : ''}`;
+          const badgeClass = STATUS_TONES[chip.kind].badge;
 
           userDateMap.get(dStr)!.push({
             id: `appr-${s.docId}-${dStr}`,
@@ -328,7 +327,7 @@ export function WorkPlanTeamMonthlyMatrix({
     }
 
     return map;
-  }, [approvalsQuery.data, calendarEventsQuery.data, allDays]);
+  }, [approvalsQuery.data, calendarEventsQuery.data, allDays, members]);
 
   // 이번 주차로 부드럽게 스크롤 — 내 행이 있으면 내 입력칸, 없으면 주차 머리행
   const scrollToCurrentWeek = () => {

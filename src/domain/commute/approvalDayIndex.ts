@@ -3,7 +3,7 @@ import { extractScheduleInfo, type StandardScheduleInfo } from '@/domain/approva
 import { isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@/domain/leave/policy';
 import type { ApprovedLeaveInfo } from './engine';
 
-/** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장 목록. 같은 날 여러 건을 모두 담는다. */
+/** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 목록. 같은 날 여러 건을 모두 담는다. */
 export type ApprovalDayMap = Map<string, ApprovedLeaveInfo[]>;
 
 export interface ApprovalDayIndex {
@@ -48,7 +48,23 @@ function toInfo(doc: ApprovalDoc, s: StandardScheduleInfo): ApprovedLeaveInfo {
 }
 
 /**
- * 승인 완료된 결재(휴가·외근·출장)를 근태 판정용 인덱스로 만든다 — 웹·PWA 공용 단일 경로.
+ * 휴일근무 신청 서식 — 별도 서식이 생기면 그 code 를 여기에 더한다. 지금은 연장근로 신청서로 신청한다.
+ * 근태 판정은 이 승인이 있는 **주말·공휴일**만 휴일근무로 인정한다(평일 연장근로는 근태 상태를 바꾸지 않는다).
+ */
+export const HOLIDAY_WORK_DOC_TYPES: readonly string[] = ['휴일근무', '휴일근무신청', '연장근로'];
+
+/** 휴일근무 신청 문서의 근무 일자 범위. 일자가 없거나 취소 기안이면 null. */
+function holidayWorkRange(doc: ApprovalDoc): { start: string; end: string } | null {
+  if (doc.cancelTargetDocId || !HOLIDAY_WORK_DOC_TYPES.includes(doc.docType)) return null;
+  const f = doc.fieldValues ?? {};
+  const start = String(f['workDate'] || f['period'] || f['startDate'] || f['date'] || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return null;
+  const rawEnd = String(f['workDate__end'] || f['period__end'] || f['endDate'] || start);
+  return { start, end: /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) && rawEnd >= start ? rawEnd : start };
+}
+
+/**
+ * 승인 완료된 결재(휴가·외근·출장·휴일근무)를 근태 판정용 인덱스로 만든다 — 웹·PWA 공용 단일 경로.
  * 기안자 id와 이름(공백 무시) 양쪽으로 색인해 계정 id가 달라도 이름으로 이어 붙인다.
  */
 export function buildApprovalDayIndex(docs: ApprovalDoc[]): ApprovalDayIndex {
@@ -64,6 +80,16 @@ export function buildApprovalDayIndex(docs: ApprovalDoc[]): ApprovalDayIndex {
 
   for (const doc of docs) {
     if (doc.status !== '완료') continue;
+    const holidayWork = holidayWorkRange(doc);
+    if (holidayWork) {
+      const info: ApprovedLeaveInfo = { leaveType: '휴일근무', category: 'HOLIDAY_WORK', docTitle: doc.title, docId: doc.id };
+      const name = normName(doc.drafterName);
+      eachDate(holidayWork.start, holidayWork.end, (date) => {
+        add(`id:${doc.drafterId}`, date, info);
+        if (name) add(`name:${name}`, date, info);
+      });
+      continue;
+    }
     const s = extractScheduleInfo(doc);
     if (!s) continue;
     const info = toInfo(doc, s);

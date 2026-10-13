@@ -88,3 +88,18 @@ test('반반차는 결재의 슬롯을 보존한다 (fieldValues.quarterSlot 우
   assert.equal(days.get('2026-09-18')?.[0].quarterSlot, 'AM1');
   assert.equal(days.get('2026-09-19')?.[0].quarterSlot, 'PM1');
 });
+
+test('완료된 연장근로(휴일근무) 신청은 근무 일자에 HOLIDAY_WORK 로 연결된다', () => {
+  const index = buildApprovalDayIndex([
+    doc({ id: 'AP-1', docType: '연장근로', fieldValues: { workDate: '2026-09-19', workHours: 4 } }),
+  ]);
+  const entries = index.lookup({ id: 'U010' }).get('2026-09-19') ?? [];
+  assert.deepEqual(entries.map((e) => e.category), ['HOLIDAY_WORK']);
+});
+
+test('반려된 휴일근무 신청은 연결하지 않는다', () => {
+  const index = buildApprovalDayIndex([
+    doc({ id: 'AP-1', docType: '연장근로', status: '반려', fieldValues: { workDate: '2026-09-19' } }),
+  ]);
+  assert.equal(index.lookup({ id: 'U010' }).size, 0);
+});

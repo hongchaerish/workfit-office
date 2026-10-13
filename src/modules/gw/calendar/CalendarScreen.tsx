@@ -16,6 +16,7 @@ import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveWorkPlanScope } from '@/features/auth/scopeHelper';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { scheduleChip } from '@/domain/commute/statusDisplay';
 import type { CalendarSupervisorScope } from '@/domain/calendarEvent/engine';
 import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
 import {
@@ -267,8 +268,9 @@ function LocalCalendarScreen() {
       const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
 
       // 사용자 요청: 외근, 출장, 휴가 등 모든 일정에서 이름 뒤에 직급이 바로 붙도록 반영
+      // 휴가는 종류(연차·오전반차 등)까지 보인다 — 사유는 비공개
       const title = isLeave
-        ? `[휴가] ${drafterWithPos}`
+        ? `[휴가] ${drafterWithPos} (${scheduleChip(s).label})`
         : isTrip
         ? `[출장] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`
         : `[외근] ${drafterWithPos}${s.destination ? ` (${s.destination})` : ''}`;
@@ -519,7 +521,7 @@ function LocalCalendarScreen() {
                   if (isCompany) {
                     badge = <span className="shrink-0 rounded bg-teal-500/[0.07] px-1 text-[9.5px] font-medium text-teal">사내행사</span>;
                   } else if (isVacation) {
-                    badge = <span className="shrink-0 rounded bg-amber-500/[0.07] px-1 text-[9.5px] font-medium text-amber-600 dark:text-amber-400">휴가</span>;
+                    badge = <span className="shrink-0 rounded bg-emerald-500/[0.07] px-1 text-[9.5px] font-medium text-emerald-700 dark:text-emerald-400">휴가</span>;
                   } else if (isTrip) {
                     badge = <span className="shrink-0 rounded bg-indigo-500/[0.07] px-1 text-[9.5px] font-medium text-indigo-600 dark:text-indigo-400">출장</span>;
                   } else if (isOutside) {

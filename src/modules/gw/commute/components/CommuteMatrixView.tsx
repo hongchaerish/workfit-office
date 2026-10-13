@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import { getKoreanHoliday } from '@/domain/commute/engine';
-import { getLeaveBadgeLabel } from '@/domain/leave/policy';
+import { chipOf, describeCommuteRecord, type StatusChip } from '@/domain/commute/statusDisplay';
+import type { CommuteRecord } from '@/domain/commute/schema';
+import { StatusBadge, StatusBadges } from '@/features/commute/StatusBadge';
 import { Users } from 'lucide-react';
 
 interface CommuteMatrixViewProps {
@@ -31,79 +33,32 @@ const timeOfHM = (iso?: string | null): string => {
   return '';
 };
 
-function CellStatusBadge({ status, leaveName, holidayName }: { status: string; leaveName?: string; holidayName?: string }) {
-  if (status === 'unknown') {
-    return <span className="text-[10px] text-ink3/40 font-mono">—</span>;
-  }
-  if (status === 'leave') {
-    const badge = getLeaveBadgeLabel(leaveName);
-    return (
-      <span
-        className="inline-flex items-center justify-center rounded bg-panel-alt border border-border px-1 py-0.2 text-[9px] font-bold text-ink2"
-        title={badge.tooltip}
-      >
-        {badge.label}
-      </span>
-    );
-  }
-  if (status === 'off') {
-    if (holidayName && holidayName !== '주말 휴무') {
-      return (
-        <span className="text-[8.5px] font-semibold text-rose-500/90 truncate max-w-[28px] inline-block" title={holidayName}>
-          휴
-        </span>
-      );
-    }
-    return <span className="text-[9px] text-ink3/30">—</span>;
-  }
-  if (status === 'present' || status === 'normal') {
-    if (leaveName) {
-      const badge = getLeaveBadgeLabel(leaveName);
-      return (
-        <span
-          className="inline-flex items-center justify-center rounded bg-panel-alt border border-teal/40 px-1 py-0.2 text-[9px] font-bold text-teal"
-          title={`${badge.tooltip} (출근 완료)`}
-        >
-          {badge.label}
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center justify-center font-bold text-[10px] text-teal/80" title="정상 출근">
-        ●
-      </span>
-    );
-  }
-  if (status === 'holiday_work') {
-    return (
-      <span className="inline-flex items-center justify-center rounded bg-panel-alt border border-border px-1 py-0.2 text-[9px] font-medium text-ink2" title="휴일근무">
-        휴근
-      </span>
-    );
-  }
-  if (status === 'late') {
-    return (
-      <span className="inline-flex items-center justify-center rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.2 text-[9px] font-bold text-amber-700 dark:text-amber-400" title="지각">
-        지각
-      </span>
-    );
-  }
-  if (status === 'absent') {
-    return (
-      <span className="inline-flex items-center justify-center rounded bg-rose-500/10 border border-rose-500/25 px-1 py-0.2 text-[9px] font-bold text-rose-600 dark:text-rose-400" title="결근">
-        결근
-      </span>
-    );
-  }
-  if (status === 'missing_in' || status === 'missing_out') {
-    return (
-      <span className="inline-flex items-center justify-center rounded bg-stone-500/10 border border-stone-500/25 px-1 py-0.2 text-[9px] font-medium text-stone-600 dark:text-stone-400" title="출/퇴근 미기록">
-        미체크
-      </span>
-    );
-  }
-  return <span className="text-[9px] text-ink3/40 font-mono">—</span>;
+/** 근태표 칸의 상태 — [[statusDisplay]] 표준 짧은 표기·색. 표시할 상태가 없으면 '—'. */
+function CellStatusBadge({ record }: { record?: CommuteRecord }) {
+  return (
+    <StatusBadges
+      compact
+      chips={describeCommuteRecord(record)}
+      className="flex-col"
+      empty={<span className="text-[9px] text-ink3/40 font-mono">—</span>}
+    />
+  );
 }
+
+/** 범례 — 근태표에 나오는 표기를 모두 보인다 */
+const LEGEND: StatusChip[] = [
+  chipOf('normal', '정상'),
+  chipOf('annual', '연차'),
+  chipOf('half', '반차', '오전/오후 반차'),
+  chipOf('quarter', '반반', '반반차 (2시간)'),
+  chipOf('outside', '외근'),
+  chipOf('trip', '출장'),
+  chipOf('holiday_work', '휴근', '휴일근무 (결재 승인)'),
+  chipOf('late', '지각'),
+  chipOf('absent', '결근'),
+  chipOf('missing', '미체크', '출·퇴근 미기록'),
+  chipOf('holiday', '휴', '공휴일'),
+];
 
 export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: CommuteMatrixViewProps) {
   const [year, mm] = month.split('-').map(Number);
@@ -135,13 +90,13 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
           {/* 부서로 묶지 않고 전사 정렬 순서(업무계획 > 정렬 순서) 그대로 한 줄로 보인다. 좁혀 보기는 위 필터로 한다. */}
           <span>전 직원 근태 (총 {rows.length}명)</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-[9.5px] font-semibold text-ink2">
-          <span className="flex items-center gap-1"><span className="text-teal font-black">●</span> 정상</span>
-          <span className="flex items-center gap-1"><span className="rounded bg-panel-alt border border-border px-1 py-0.2 text-[8.5px] font-bold text-ink2">반차</span> (오전/오후)</span>
-          <span className="flex items-center gap-1"><span className="rounded bg-panel-alt border border-border px-1 py-0.2 text-[8.5px] font-bold text-ink2">반반</span> (2h)</span>
-          <span className="flex items-center gap-1"><span className="rounded bg-amber-500/10 border border-amber-500/25 px-1 py-0.2 text-[8.5px] font-bold text-amber-700 dark:text-amber-400">지각</span></span>
-          <span className="flex items-center gap-1"><span className="rounded bg-rose-500/10 border border-rose-500/25 px-1 py-0.2 text-[8.5px] font-bold text-rose-600 dark:text-rose-400">결근</span></span>
-          <span className="flex items-center gap-1"><span className="rounded bg-stone-500/10 border border-stone-500/25 px-1 py-0.2 text-[8.5px] font-medium text-stone-600 dark:text-stone-400">미체크</span></span>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[9.5px] font-semibold text-ink2">
+          {LEGEND.map((chip) => (
+            <span key={chip.kind} className="flex items-center gap-1">
+              <StatusBadge chip={chip} compact />
+              {chip.label !== chip.short && <span className="text-ink3">{chip.label}</span>}
+            </span>
+          ))}
           <span className="flex items-center gap-1"><span className="text-ink3 font-mono">—</span> 휴무</span>
         </div>
       </div>
@@ -250,11 +205,7 @@ export function CommuteMatrixView({ month, rows, onSelectPerson, holidayMap }: C
 
                           {/* 중앙: 상태 뱃지 (●, 반차, 지각, 결근, — 등) */}
                           <div className="flex items-center justify-center my-0.5">
-                            <CellStatusBadge
-                              status={status}
-                              leaveName={record?.leaveName}
-                              holidayName={record?.holidayName}
-                            />
+                            <CellStatusBadge record={record} />
                           </div>
 
                           {/* 하단: 퇴근 시각 */}

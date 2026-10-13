@@ -55,7 +55,8 @@ export function timeToMinutes(timeStr?: string | null): number | null {
 
 export interface ApprovedLeaveInfo {
   leaveType: string;
-  category?: 'LEAVE' | 'OUTSIDE' | 'TRIP';
+  /** HOLIDAY_WORK: 승인된 휴일근무 신청(연장근로 서식) — 주말·공휴일 출근을 휴일근무로 인정하는 근거 */
+  category?: 'LEAVE' | 'OUTSIDE' | 'TRIP' | 'HOLIDAY_WORK';
   docTitle?: string;
   docId?: string;
   /** 반반차 시간대 슬롯 (반반차일 때만) */
@@ -226,6 +227,8 @@ export function evaluateCommuteRecord(
   }
 
   const workEntry = entries.find((e) => e.category === 'OUTSIDE' || e.category === 'TRIP');
+  // 휴일근무는 휴일근무 신청 결재가 완료된 날만 인정한다(태그만 있으면 휴무로 본다)
+  const holidayWorkApproved = (weekend || Boolean(holiday)) && entries.some((e) => e.category === 'HOLIDAY_WORK');
   const workStatus: CommuteStatus | null = workEntry ? (workEntry.category === 'OUTSIDE' ? 'outside' : 'trip') : null;
   const leaveEntries = entries.filter((e) => (e.category ?? 'LEAVE') === 'LEAVE');
   const names = {
@@ -244,6 +247,9 @@ export function evaluateCommuteRecord(
 
   // 1. 출/퇴근 태그가 모두 없는 날
   if (!inAt && !outAt) {
+    if (holidayWorkApproved) {
+      return { ...base, inAt: null, outAt: null, status: 'holiday_work', holidayName: holiday ?? (weekend ? '주말 휴무' : undefined) };
+    }
     if (workStatus) {
       return { ...base, inAt: null, outAt: null, basicMin: 480, totalMin: 480, status: workStatus, ...names };
     }
@@ -260,13 +266,17 @@ export function evaluateCommuteRecord(
       ...base,
       inAt: null,
       outAt: null,
-      status: raw.status === 'holiday_work' ? 'holiday_work' : raw.status === 'off' ? 'off' : 'absent',
+      status: raw.status === 'off' ? 'off' : 'absent',
       holidayName: holiday ?? undefined,
     };
   }
 
   // 2. 한쪽 태그만 있는 날 — 외근/출장이거나, 휴가가 하루의 시작/끝을 덮어 그 태그가 필요 없는 경우 보정
   if (!inAt || !outAt) {
+    // 주말·공휴일은 한쪽 태그만 있어도 미기록으로 보지 않는다 — 승인됐으면 휴일근무, 아니면 휴무
+    if (weekend || holiday) {
+      return { ...base, inAt, outAt, status: holidayWorkApproved ? 'holiday_work' : 'off', ...names };
+    }
     const leaveCoversEnd = required.length > 0 && required[required.length - 1][1] < dayEnd;
     const leaveCoversStart = required.length > 0 && required[0][0] > dayStart;
     const forgiven = inAt ? leaveCoversEnd : leaveCoversStart;
@@ -291,7 +301,8 @@ export function evaluateCommuteRecord(
   let status: CommuteStatus = 'normal';
   let lateMin = 0;
   if (weekend || holiday) {
-    status = 'holiday_work';
+    // 승인 없는 주말·공휴일 출근은 휴일근무로 세지 않는다(태그 시각은 남긴다)
+    status = holidayWorkApproved ? 'holiday_work' : 'off';
   } else if (workStatus) {
     status = workStatus; // 외근/출장 승인일은 지각 면제
   } else if (required.length > 0) {

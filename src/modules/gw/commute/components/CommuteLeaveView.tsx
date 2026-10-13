@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import type { CommutePersonRow } from '../types';
 import { FileText, CalendarCheck2 } from 'lucide-react';
-import { calculateLeaveDays, getLeaveBadgeLabel } from '@/domain/leave/policy';
+import { calculateLeaveDays } from '@/domain/leave/policy';
+import { leaveChip } from '@/domain/commute/statusDisplay';
+import { StatusBadge } from '@/features/commute/StatusBadge';
 
 interface CommuteLeaveViewProps {
   month: string;
@@ -94,17 +96,7 @@ export function CommuteLeaveView({ month, approvals, personMap, onSelectPerson }
                     </td>
                     <td className="p-3 text-ink2">{doc.drafterDept || matchedPerson?.dept || '—'}</td>
                     <td className="p-3 text-center">
-                      {(() => {
-                        const badge = getLeaveBadgeLabel(leaveType, doc.title);
-                        return (
-                          <span
-                            className="inline-block rounded-md bg-panel-alt border border-border px-2 py-0.5 text-[10px] font-bold text-ink2"
-                            title={badge.tooltip}
-                          >
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
+                      <StatusBadge chip={leaveChip(leaveType, doc.title)} />
                     </td>
                     <td className="p-3 text-center tabular-nums font-bold text-ink">
                       {daysCount}일

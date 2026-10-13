@@ -17,6 +17,7 @@ import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { scheduleChip } from '@/domain/commute/statusDisplay';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useHolidays } from '@/features/holiday/useHolidays';
 
@@ -95,7 +96,7 @@ export default function MobileCalendarScreen() {
       const drafterWithPos = drafterUser?.position ? `${drafter} ${drafterUser.position}` : drafter;
 
       // 연차 프라이버시: 사유는 비공개, '부재 여부와 시간' 중심 표기 (이름과 직급 표시)
-      const title = isLeave ? `[휴가] ${drafterWithPos}` : `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${drafterWithPos}`;
+      const title = isLeave ? `[휴가] ${drafterWithPos} (${scheduleChip(s).label})` : `${prefix} ${typeLabel}${s.destination ? ` (${s.destination})` : ''} - ${drafterWithPos}`;
 
       while (curr <= last) {
         const yyyy = curr.getFullYear();
@@ -312,8 +313,9 @@ export default function MobileCalendarScreen() {
                   <div className="flex items-center gap-0.5 mt-0.5 h-1.5">
                     {cellEvents.slice(0, 3).map((e, idx) => {
                       let dotColor = 'bg-teal';
-                      if (e.eventType === 'VACATION') dotColor = 'bg-sky-400';
-                      else if (e.eventType === 'OUTSIDE') dotColor = 'bg-amber-400';
+                      // 웹·근태와 같은 색([[statusDisplay]]): 휴가 초록, 외근 파랑, 출장 남색
+                      if (e.eventType === 'VACATION') dotColor = 'bg-emerald-500';
+                      else if (e.eventType === 'OUTSIDE') dotColor = e.title.startsWith('[출장]') ? 'bg-indigo-500' : 'bg-blue-500';
 
                       return (
                         <span

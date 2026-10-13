@@ -161,3 +161,36 @@ test('연차는 종일 휴가로, 반차는 해당 시간대로 돌려준다', (
   assert.deepEqual(approvedLeaveSpans(policy, [leave('오전반차')]), { fullDay: false, windows: [[510, 690]] });
   assert.deepEqual(approvedLeaveSpans(policy, [OUTSIDE]), { fullDay: false, windows: [] });
 });
+
+// ── 휴일근무: 휴일근무 신청 결재가 완료된 날만 인정 ──
+const SAT = '2026-09-19'; // 토요일
+const HOLIDAY_WORK: ApprovedLeaveInfo = { leaveType: '휴일근무', category: 'HOLIDAY_WORK', docId: 'AP-H' };
+function evalSat(inHm: string | null, outHm: string | null, entries: ApprovedLeaveInfo[] = []) {
+  const leaveMap = new Map<string, ApprovedLeaveInfo[]>();
+  if (entries.length) leaveMap.set(SAT, entries);
+  const t = (hm: string | null) => (hm ? `${SAT}T${hm}:00` : null);
+  return evaluateCommuteRecord({ empId: 1, date: SAT, inAt: t(inHm), outAt: t(outHm) }, policy, leaveMap);
+}
+
+test('휴일근무: 승인 없이 주말에 출근하면 휴일근무가 아니라 휴무(태그 시각은 남김)', () => {
+  const r = evalSat('09:00', '13:00');
+  assert.equal(r.status, 'off');
+  assert.ok(r.inAt && r.outAt);
+});
+
+test('휴일근무: 휴일근무 신청이 승인된 주말 출근은 휴일근무', () => {
+  assert.equal(evalSat('09:00', '13:00', [HOLIDAY_WORK]).status, 'holiday_work');
+});
+
+test('휴일근무: 승인된 날은 태그가 없어도 휴일근무로 표시', () => {
+  assert.equal(evalSat(null, null, [HOLIDAY_WORK]).status, 'holiday_work');
+});
+
+test('휴일근무: 주말에 한쪽 태그만 있어도 미기록으로 보지 않는다', () => {
+  assert.equal(evalSat('09:00', null).status, 'off');
+  assert.equal(evalSat('09:00', null, [HOLIDAY_WORK]).status, 'holiday_work');
+});
+
+test('휴일근무: 평일의 연장근로 승인은 근태 상태를 바꾸지 않는다', () => {
+  assert.equal(evalDay('08:20', '20:00', [HOLIDAY_WORK]).status, 'normal');
+});

@@ -6,7 +6,10 @@ import { useLeave } from '@/features/gw/useLeave';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import { calculateLeaveDays, getLeaveBadgeLabel, isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { calculateLeaveDays, isAnnualLeaveDeduction } from '@/domain/leave/policy';
+import { describeCommuteRecord, leaveChip } from '@/domain/commute/statusDisplay';
+import { StatusBadges } from '@/features/commute/StatusBadge';
+import { StatusBadge } from '@/features/commute/StatusBadge';
 import { Button } from '@/shared/ui/Button';
 import {
   Calendar as CalendarIcon,
@@ -218,6 +221,16 @@ export function MyCommuteLeaveTab({
                   <span>{todayRecord.leaveName || '휴가 중'}</span>
                 </div>
                 <div className="text-[11px] text-ink3">승인된 휴가 일정이 적용되었습니다.</div>
+              </div>
+            ) : todayRecord?.status === 'holiday_work' ? (
+              <div className="py-1">
+                <div className="text-[18px] font-extrabold text-ink">휴일근무</div>
+                <div className="text-[11px] text-ink3">승인된 휴일근무 신청이 적용되었습니다.</div>
+              </div>
+            ) : getKoreanHoliday(todayStr, holidayMap) && !isWeekend(todayStr) ? (
+              <div className="py-1">
+                <div className="text-[18px] font-extrabold text-ink3">{getKoreanHoliday(todayStr, holidayMap)}</div>
+                <div className="text-[11px] text-ink3">공휴일 휴무입니다.</div>
               </div>
             ) : isWeekend(todayStr) ? (
               <div className="py-1">
@@ -482,29 +495,10 @@ export function MyCommuteLeaveTab({
                     </div>
 
                     <div className="mt-auto space-y-1">
-                      {/* 휴가 상태인 경우 */}
-                      {row.status === 'leave' ? (() => {
-                        const badge = getLeaveBadgeLabel(row.leaveName);
-                        return (
-                          <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
-                            <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
-                              <span className="truncate">{badge.label}</span>
-                            </div>
-                            <div className="text-[8.5px] font-medium text-ink3">{badge.tooltip}</div>
-                          </div>
-                        );
-                      })() : row.status === 'outside' ? (
-                        <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
-                          <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
-                            <span className="truncate">{row.outsideName || '외근'}</span>
-                          </div>
-                          <div className="text-[8.5px] font-medium text-ink3">승인 완료</div>
-                        </div>
-                      ) : row.status === 'trip' ? (
-                        <div className="rounded-md bg-panel-alt p-1 text-center border border-border">
-                          <div className="text-[10px] font-bold text-ink flex items-center justify-center gap-1">
-                            <span className="truncate">{row.tripName || '출장'}</span>
-                          </div>
+                      {/* 휴가·외근·출장(태그 없는 날) — 표준 배지([[statusDisplay]]) */}
+                      {row.status === 'leave' || ((row.status === 'outside' || row.status === 'trip') && !row.inAt && !row.outAt) ? (
+                        <div className="flex flex-col items-center gap-0.5 rounded-md bg-panel-alt/60 p-1 border border-border">
+                          <StatusBadges chips={describeCommuteRecord(row)} className="flex-col" />
                           <div className="text-[8.5px] font-medium text-ink3">승인 완료</div>
                         </div>
                       ) : row.inAt || row.outAt ? (
@@ -520,9 +514,10 @@ export function MyCommuteLeaveTab({
                               <span className="font-bold text-ink">{timeOf(row.outAt)}</span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between text-[9px] px-0.5">
+                          <div className="flex items-center justify-between gap-1 text-[9px] px-0.5">
                             <span className="text-teal font-bold">{hourText(row.totalMin)}</span>
-                            {row.lateMin > 0 && <span className="text-amber font-extrabold">지각 {row.lateMin}m</span>}
+                            {/* 반차·지각·외근·휴근·미기록 등 겹친 상태를 함께 보인다(정상은 생략) */}
+                            <StatusBadges compact chips={describeCommuteRecord(row).filter((c) => c.kind !== 'normal')} />
                           </div>
                         </>
                       ) : (
@@ -530,6 +525,8 @@ export function MyCommuteLeaveTab({
                         <div className="py-1 text-center text-[9px] text-ink3/70">
                           {isBeforeHireDay || row.status === 'unknown' ? (
                             <span className="text-ink3/40 font-mono">—</span>
+                          ) : row.status === 'holiday_work' ? (
+                            <StatusBadges chips={describeCommuteRecord(row)} />
                           ) : holiday || isSun || isSat || row.status === 'off' ? (
                             '휴무'
                           ) : row.date >= todayStr ? (
@@ -585,31 +582,14 @@ export function MyCommuteLeaveTab({
                       <td className="p-2 text-ink2 font-medium">{hourText(row.totalMin)}</td>
                       <td className="p-2 text-ink2">{row.lateMin > 0 ? `${row.lateMin}분` : '—'}</td>
                       <td className="p-2">
-                        {isBeforeHireDay || row.status === 'unknown' ? (
+                        {isBeforeHireDay ? (
                           <span className="text-ink3/40 text-[10px]">—</span>
-                        ) : row.status === 'leave' ? (() => {
-                          const badge = getLeaveBadgeLabel(row.leaveName);
-                          return (
-                            <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2" title={badge.tooltip}>
-                              {badge.label}
-                            </span>
-                          );
-                        })() : row.status === 'outside' ? (
-                          <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2">
-                            {row.outsideName || '외근'}
-                          </span>
-                        ) : row.status === 'trip' ? (
-                          <span className="inline-flex items-center rounded bg-panel-alt border border-border px-2 py-0.5 text-[9.5px] font-bold text-ink2">
-                            {row.tripName || '출장'}
-                          </span>
-                        ) : row.status === 'normal' ? (
-                          <span className="rounded bg-teal/15 px-2 py-0.5 text-[9.5px] font-bold text-teal">정상 출근</span>
-                        ) : row.status === 'late' ? (
-                          <span className="rounded bg-amber/20 px-2 py-0.5 text-[9.5px] font-bold text-amber">지각</span>
-                        ) : row.status === 'absent' ? (
-                          <span className="rounded bg-rose-500/15 px-2 py-0.5 text-[9.5px] font-bold text-rose-600">결근</span>
                         ) : (
-                          <span className="text-ink3 text-[10px]">—</span>
+                          <StatusBadges
+                            chips={describeCommuteRecord(row)}
+                            className="justify-start"
+                            empty={<span className="text-ink3 text-[10px]">—</span>}
+                          />
                         )}
                       </td>
                     </tr>
@@ -717,14 +697,7 @@ export function MyCommuteLeaveTab({
                         <tr key={d.id} className="hover:bg-panel-alt/30 transition-colors">
                           <td className="p-2 text-ink2 font-medium">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2">
-                            {(() => {
-                              const badge = getLeaveBadgeLabel(d.form?.leaveType, d.title);
-                              return (
-                                <span className="rounded bg-panel-alt border border-border px-1.5 py-0.5 font-bold text-ink2" title={badge.tooltip}>
-                                  {badge.label}
-                                </span>
-                              );
-                            })()}
+                            <StatusBadge chip={leaveChip(d.form?.leaveType, d.title)} />
                           </td>
                           <td className="p-2 text-rose-500 font-extrabold">-{usedDays}일</td>
                           <td className="p-2 text-ink truncate max-w-[240px]">{d.body || d.title}</td>
@@ -791,14 +764,7 @@ export function MyCommuteLeaveTab({
                         >
                           <td className="p-2 text-ink3 font-mono">{d.docNo || d.id.slice(0, 8)}</td>
                           <td className="p-2 font-bold text-ink">
-                            {(() => {
-                              const badge = getLeaveBadgeLabel(d.form?.leaveType, d.title);
-                              return (
-                                <span className="rounded bg-panel-alt border border-border px-1.5 py-0.5 text-[10px] font-bold text-ink2" title={badge.tooltip}>
-                                  {badge.label}
-                                </span>
-                              );
-                            })()}
+                            <StatusBadge chip={leaveChip(d.form?.leaveType, d.title)} />
                           </td>
                           <td className="p-2 text-ink2">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2 font-extrabold text-ink tabular-nums">{d.form?.days}일</td>

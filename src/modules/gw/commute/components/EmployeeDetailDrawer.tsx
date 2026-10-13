@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import type { CommutePersonRow } from '../types';
 import { X, Calendar, Building } from 'lucide-react';
 import { getKoreanHoliday, isWeekend } from '@/domain/commute/engine';
-import { getLeaveBadgeLabel } from '@/domain/leave/policy';
-import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
-import { COMMUTE_STATUS_TONES } from '@/data/commute/commute.fixture';
+import { describeCommuteRecord } from '@/domain/commute/statusDisplay';
+import { StatusBadges } from '@/features/commute/StatusBadge';
 
 interface EmployeeDetailDrawerProps {
   person: CommutePersonRow | null;
@@ -187,17 +186,6 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
                         {holiday}
                       </span>
                     )}
-                    {rec.leaveName && (() => {
-                      const badge = getLeaveBadgeLabel(rec.leaveName);
-                      return (
-                        <span
-                          className="rounded bg-panel-alt border border-border px-1.5 py-0.2 text-[9.5px] font-bold text-ink2"
-                          title={badge.tooltip}
-                        >
-                          {badge.label}
-                        </span>
-                      );
-                    })()}
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -211,18 +199,12 @@ export function EmployeeDetailDrawer({ person, onClose, month, holidayMap }: Emp
                       </div>
                     </div>
 
-                    <div className="w-16 text-right">
-                      {rec.status === 'unknown' ? (
-                        <span className="text-[11px] text-ink3/70 font-medium">—</span>
-                      ) : (
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
-                            COMMUTE_STATUS_TONES[rec.status]
-                          }`}
-                        >
-                          {COMMUTE_STATUS_LABELS[rec.status]}
-                        </span>
-                      )}
+                    <div className="min-w-16 text-right">
+                      <StatusBadges
+                        chips={describeCommuteRecord(rec)}
+                        className="justify-end"
+                        empty={<span className="text-[11px] text-ink3/70 font-medium">—</span>}
+                      />
                     </div>
                   </div>
                 </div>

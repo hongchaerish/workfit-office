@@ -1,4 +1,4 @@
-import type { CommuteEmployee, CommuteRecord, CommuteStatus } from '@/domain/commute/schema';
+import type { CommuteEmployee, CommuteRecord } from '@/domain/commute/schema';
 
 /**
  * 근태 로컬 fixture — Firebase 미설정 환경용 샘플.
@@ -56,18 +56,3 @@ function buildRecords(): CommuteRecord[] {
 }
 
 export const COMMUTE_RECORD_FIXTURE: CommuteRecord[] = buildRecords();
-
-/** 화면 배지 색은 상태 의미와 짝을 맞춘다. */
-export const COMMUTE_STATUS_TONES: Record<CommuteStatus, string> = {
-  normal: 'bg-teal/15 text-teal',
-  late: 'bg-amber/15 text-amber',
-  holiday_work: 'bg-blue/12 text-blue',
-  off: 'bg-ink3/12 text-ink2',
-  absent: 'bg-red-500/12 text-red-500',
-  leave: 'bg-emerald-500/15 text-emerald-600 font-bold',
-  outside: 'bg-blue-500/15 text-blue-600 font-bold',
-  trip: 'bg-purple-500/15 text-purple-600 font-bold',
-  missing_out: 'bg-amber/15 text-amber',
-  missing_in: 'bg-amber/15 text-amber',
-  unknown: 'bg-ink3/12 text-ink2',
-};

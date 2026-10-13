@@ -644,10 +644,13 @@ export default function CommuteScreen() {
           );
           if (!hasMissing) return false;
         } else if (statusFilter === 'present' || statusFilter === 'normal') {
-          const hasNormal = row.records.some(
-            (r) => r.status === 'normal' || r.status === 'outside' || r.status === 'trip'
-          );
-          if (!hasNormal) return false;
+          // 정상 출근만 — 외근·출장은 따로 거른다
+          if (!row.records.some((r) => r.status === 'normal' && !r.leaveName)) return false;
+        } else if (statusFilter === 'outside') {
+          if (!row.records.some((r) => r.status === 'outside' || r.status === 'trip')) return false;
+        } else if (statusFilter === 'leave') {
+          // 종일 휴가 + 반차·반반차(출근한 날)까지
+          if (!row.records.some((r) => r.status === 'leave' || Boolean(r.leaveName))) return false;
         } else {
           const hasStatus = row.records.some((r) => r.status === statusFilter);
           if (!hasStatus) return false;
@@ -665,9 +668,11 @@ export default function CommuteScreen() {
     let totalLate = 0;
     let totalAbsent = 0;
     let totalLeave = 0;
+    let totalOutside = 0;
     let totalAnomaly = 0;
 
     for (const row of allPersonRows) {
+      totalOutside += row.summary.outsideDays;
       totalPresent += row.summary.workDays;
       totalLate += row.summary.lateDays;
       totalAbsent += row.summary.absentDays;
@@ -681,6 +686,7 @@ export default function CommuteScreen() {
       totalLate,
       totalAbsent,
       totalLeave,
+      totalOutside,
       totalAnomaly,
     };
   }, [allPersonRows]);
@@ -822,7 +828,8 @@ export default function CommuteScreen() {
     <div className="space-y-3">
       {/* 1. 상단 KPI 관제 카드 (출퇴근 관리 탭일 때만 노출, 연차 원장 대장일 때는 분리) */}
       {adminTab !== 'leave_ledger' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        // 4개로 단순화(2026-10-13): 인원 · 휴가 · 외근·출장 · 확인 필요. 지각·결근 등 세부는 상태 필터로 본다
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           <StatCard
             label="전체 인원"
             value={`${kpiStats.totalMembers}명`}
@@ -834,46 +841,29 @@ export default function CommuteScreen() {
             active={statusFilter === 'ALL' && !onlyAnomaly}
           />
           <StatCard
-            label="정상 출근"
-            value={`${kpiStats.totalPresent}건`}
-            sub="당월 누적 출근"
-            onClick={() => {
-              setStatusFilter('present');
-              setOnlyAnomaly(false);
-            }}
-            active={statusFilter === 'present'}
-          />
-          <StatCard
-            label="지각"
-            value={`${kpiStats.totalLate}건`}
-            sub="규정 시각 초과"
-            onClick={() => {
-              setStatusFilter('late');
-              setOnlyAnomaly(false);
-            }}
-            active={statusFilter === 'late'}
-          />
-          <StatCard
-            label="결근"
-            value={`${kpiStats.totalAbsent}건`}
-            sub="미승인 결근"
-            onClick={() => {
-              setStatusFilter('absent');
-              setOnlyAnomaly(false);
-            }}
-            active={statusFilter === 'absent'}
-          />
-          <StatCard
             label="휴가"
-            value={`${kpiStats.totalLeave}건`}
-            sub="승인 완료 건수"
+            value={`${kpiStats.totalLeave}일`}
+            sub="당월 사용 (반차 포함)"
             onClick={() => {
-              handleAdminTabChange('leave');
+              setStatusFilter('leave');
+              setOnlyAnomaly(false);
+              handleAdminTabChange('all_matrix');
             }}
-            active={adminTab === 'leave'}
+            active={statusFilter === 'leave'}
           />
           <StatCard
-            label="이상 근태"
+            label="외근·출장"
+            value={`${kpiStats.totalOutside}일`}
+            sub="당월 승인 일수"
+            onClick={() => {
+              setStatusFilter('outside');
+              setOnlyAnomaly(false);
+              handleAdminTabChange('all_matrix');
+            }}
+            active={statusFilter === 'outside'}
+          />
+          <StatCard
+            label="확인 필요"
             value={
               kpiStats.totalAnomaly > 0 ? (
                 <span className="text-rose-600 dark:text-rose-400">{kpiStats.totalAnomaly}건</span>
@@ -960,6 +950,8 @@ export default function CommuteScreen() {
               <option value="late">지각 발생</option>
               <option value="absent">결근</option>
               <option value="leave">휴가 사용</option>
+              <option value="outside">외근·출장</option>
+              <option value="holiday_work">휴일근무</option>
               <option value="missing">출·퇴근 미기록</option>
             </select>
           </div>

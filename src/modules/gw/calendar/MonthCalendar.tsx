@@ -149,7 +149,7 @@ export default function MonthCalendar({
                     } else if (isCompany) {
                       chipStyle = 'bg-teal-500/[0.07] text-teal-700 dark:text-teal-400';
                     } else if (isVacation) {
-                      chipStyle = 'bg-amber-500/[0.07] text-amber-700 dark:text-amber-400';
+                      chipStyle = 'bg-emerald-500/[0.07] text-emerald-700 dark:text-emerald-400';
                     } else if (isTrip) {
                       chipStyle = 'bg-indigo-500/[0.07] text-indigo-700 dark:text-indigo-400';
                     } else if (isOutside) {

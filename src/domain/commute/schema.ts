@@ -85,6 +85,10 @@ export interface CommuteMonthSummary {
   lateDays: number;
   absentDays: number;
   leaveDays: number;
+  /** 외근·출장 승인일 수 */
+  outsideDays: number;
+  /** 휴일근무(결재 승인) 일 수 */
+  holidayWorkDays: number;
   totalMin: number;
   overMinTotal: number;
 }
@@ -110,6 +114,8 @@ export function summarizeCommuteMonth(rows: CommuteRecord[]): CommuteMonthSummar
     lateDays: rows.filter((row) => row.status === 'late').length,
     absentDays: rows.filter((row) => row.status === 'absent').length,
     leaveDays,
+    outsideDays: rows.filter((row) => row.status === 'outside' || row.status === 'trip').length,
+    holidayWorkDays: rows.filter((row) => row.status === 'holiday_work').length,
     totalMin: rows.reduce((sum, row) => sum + (row.totalMin ?? 0), 0),
     overMinTotal: 0,
   };

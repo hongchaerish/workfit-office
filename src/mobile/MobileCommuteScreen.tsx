@@ -15,6 +15,7 @@ import { useCommuteEmployees, useCommuteMonth } from '@/features/commute/useComm
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
 import { getKoreanHoliday, requiredWorkSpan, timeToMinutes } from '@/domain/commute/engine';
 import type { CommuteRecord } from '@/domain/commute/schema';
+import { describeCommuteRecord, STATUS_TONES } from '@/domain/commute/statusDisplay';
 import MobileCommonHeader from './MobileCommonHeader';
 import type { UserPresenceStatus } from '@/domain/userPresence/schema';
 
@@ -33,57 +34,30 @@ function moveMonth(m: string, delta: number): string {
   return `${next.getFullYear()}-${pad(next.getMonth() + 1)}`;
 }
 
-/** 근태 상태 뱃지 판정 헬퍼 (시간은 숨기고 상태 라벨과 톤만 반환) */
+/**
+ * 근태 상태 뱃지 — 웹과 같은 표준 표기·색([[statusDisplay]]). 달력 칸은 짧은 표기, 상세는 전체 이름.
+ * 겹친 상태(반차 + 지각 등)는 이어 붙이고 색은 마지막(더 눈에 띄어야 하는) 상태를 따른다.
+ */
 function getCommuteStatusBadge(
   record: CommuteRecord | undefined,
   dateStr: string,
   todayStr: string,
   isHolidayOrWeekend: boolean
 ) {
-  if (record?.status === 'late') {
+  // 오늘은 아직 출근 전일 수 있어 결근으로 표시하지 않는다
+  const chips = describeCommuteRecord(record).filter((c) => c.kind !== 'holiday' && !(c.kind === 'absent' && dateStr >= todayStr));
+  if (chips.length > 0) {
+    const last = chips[chips.length - 1];
     return {
-      label: '지각',
-      style: 'text-amber-700 bg-amber-50 border-amber-200/80 font-bold',
-      tone: 'late',
+      label: chips.map((c) => c.short).join('·'),
+      fullLabel: chips.map((c) => c.label).join(' · '),
+      style: STATUS_TONES[last.kind].badge,
+      tone: last.kind,
     };
   }
-  if (record?.leaveName || record?.status === 'leave') {
-    return {
-      label: record.leaveName || '휴가',
-      style: 'text-teal bg-teal-soft/80 border-teal/30',
-      tone: 'leave',
-    };
-  }
-  if (record?.outsideName || record?.status === 'outside') {
-    return {
-      label: record.outsideName || '외근',
-      style: 'text-blue-600 bg-blue-50 border-blue-200/70',
-      tone: 'outside',
-    };
-  }
-  if (record?.tripName || record?.status === 'trip') {
-    return {
-      label: record.tripName || '출장',
-      style: 'text-indigo-600 bg-indigo-50 border-indigo-200/70',
-      tone: 'trip',
-    };
-  }
-  if (record?.inAt || record?.outAt || record?.status === 'normal') {
-    return {
-      label: '정상',
-      style: 'text-emerald-700 bg-emerald-50 border-emerald-200/80 font-bold',
-      tone: 'normal',
-    };
-  }
-  if (isHolidayOrWeekend) {
-    return null;
-  }
+  if (isHolidayOrWeekend || record?.status === 'off' || record?.status === 'unknown') return null;
   if (dateStr < todayStr) {
-    return {
-      label: '결근',
-      style: 'text-rose-600 bg-rose-50 border-rose-200/70',
-      tone: 'absent',
-    };
+    return { label: '결근', fullLabel: '결근', style: STATUS_TONES.absent.badge, tone: 'absent' as const };
   }
   return null;
 }
@@ -551,7 +525,7 @@ export default function MobileCommuteScreen() {
                 <div>
                   {selectedDayBadge ? (
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${selectedDayBadge.style}`}>
-                      {selectedDayBadge.label}
+                      {selectedDayBadge.fullLabel}
                     </span>
                   ) : selectedDayDetail.holiday || selectedDayDetail.isSun || selectedDayDetail.isSat ? (
                     <span className="text-[10px] font-medium text-ink3">휴무</span>
