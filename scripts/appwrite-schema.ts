@@ -1023,6 +1023,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveys',
     name: '전자설문',
+    // 읽기만 공개, 쓰기는 Function survey 만(API 키) — 2026-10-14 설계 §5
+    permissions: [Permission.read(Role.any())],
     attributes: [
       S('id', 64, true),
       S('title', 100, true),
@@ -1051,6 +1053,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyQuestions',
     name: '설문 질문',
+    // 읽기만 공개, 쓰기는 Function survey 만(API 키) — 2026-10-14 설계 §5
+    permissions: [Permission.read(Role.any())],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1071,6 +1075,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyResponses',
     name: '설문 응답',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1085,6 +1091,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyAnswers',
     name: '설문 답변',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       S('id', 64, true),
       S('surveyId', 64, true),
@@ -1104,6 +1112,8 @@ const COLLECTIONS: CollectionDef[] = [
   {
     id: 'surveyParticipations',
     name: '설문 참여기록',
+    // 서버 전용 — 브라우저 접근 없음, Function survey 만 읽고 쓴다 — 2026-10-14 설계 §5
+    permissions: [],
     attributes: [
       // 문서 ID = `설문ID__사용자ID` — 중복 제출 경쟁에서 문서가 하나만 생기게 하는 결정적 키.
       S('id', 128, true),
