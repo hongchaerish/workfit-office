@@ -71,3 +71,4 @@ scratch/
 
 # superpowers 실행 작업 공간(진행 기록)
 .superpowers/
+appwrite/functions/survey/dist/

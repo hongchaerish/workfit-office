@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["server", "api", "scripts/caps-ingest-dev.ts", "scripts/caps-send-sample.ts"]
+  "include": ["server", "api", "appwrite/functions/survey/src", "scripts/caps-ingest-dev.ts", "scripts/caps-send-sample.ts"]
 }

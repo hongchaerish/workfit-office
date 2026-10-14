@@ -1,0 +1,16 @@
+{
+  "projectId": "6a8288390007f641306d",
+  "functions": [
+    {
+      "$id": "survey",
+      "name": "Survey",
+      "runtime": "node-22.0",
+      "entrypoint": "dist/main.js",
+      "commands": "",
+      "path": ".",
+      "execute": ["any"],
+      "scopes": ["databases.read", "documents.read", "documents.write"],
+      "timeout": 30
+    }
+  ]
+}

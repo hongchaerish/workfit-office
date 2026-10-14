@@ -1,0 +1,7 @@
+{
+  "name": "workfit-survey",
+  "version": "1.0.0",
+  "description": "Appwrite Function — 전자설문 쓰기·제출·결과 (esbuild 번들, 의존성 포함)",
+  "type": "module",
+  "main": "dist/main.js"
+}
