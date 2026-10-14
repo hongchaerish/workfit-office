@@ -17,6 +17,7 @@ import {
   recall as recallDoc,
   submit as submitDoc,
   currentApproverIds,
+  isEditableStatus,
 } from '@/domain/approvalDoc/engine';
 import { formatDocNo, yymmdd } from '@/domain/numbering';
 import { counterRepo } from '@/data/counter/counter.repo';
@@ -536,7 +537,7 @@ export const approvalDocRepo = {
   /** 문서 편집 — 임시저장(상신 전) 또는 반려·회수(재상신 전 수정). 진행중·완료는 불가. */
   async saveDraft(id: string, patch: Partial<ApprovalDraftInput>): Promise<ApprovalDoc> {
     const cur = await getOrThrow(id);
-    if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수', '시행반송'].includes(cur.status)) {
+    if (!isEditableStatus(cur.status)) {
       throw new Error('임시저장·반려·회수 상태에서만 수정할 수 있습니다');
     }
     const merged = approvalDocSchema.parse({ ...cur, ...patch });

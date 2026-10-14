@@ -41,6 +41,7 @@ import { X, AlertTriangle, GitFork, RefreshCw, Sparkles, History, FileText, Chec
 import { recalculateTableFormulas, type CellFormula } from './formFields/formulaEngine';
 import type { CellMerge } from './formFields/utils';
 import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
+import { isEditableStatus } from '@/domain/approvalDoc/engine';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -1510,9 +1511,14 @@ function ApprovalDraftInner({
 
 
 
+  /**
+   * 저장 — 편집 중인 문서가 임시저장·반려·회수면 **그 문서**에 저장한다(재상신도 같은 문서).
+   * 예전에는 임시저장만 그 문서에 저장하고 반려·회수는 새 문서를 만들어, 재상신 문서가
+   * 결재 완료돼도 원래 반려 문서가 상신함 [반려]에 남았다.
+   */
   const persistDraft = async (): Promise<string> => {
     const input = buildInput();
-    if (editDoc && editDoc.status === '임시저장') {
+    if (editDoc && isEditableStatus(editDoc.status)) {
       await save.mutateAsync({ id: editDoc.id, patch: input });
       return editDoc.id;
     }
