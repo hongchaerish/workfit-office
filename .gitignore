@@ -68,3 +68,6 @@ scratch/
 
 # run-app 스킬 로그인 정보(관리자 계정 비밀번호) — 저장소에 올리지 않는다
 .claude/skills/run-app/login.local.json
+
+# superpowers 실행 작업 공간(진행 기록)
+.superpowers/

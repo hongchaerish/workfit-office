@@ -100,7 +100,6 @@ export const surveyResponseRepo = {
         surveyId: survey.id,
         userId: actor.id,
         responded: true,
-        respondedAt: stamp,
       });
 
       const response = surveyResponseSchema.parse({

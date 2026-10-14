@@ -12,8 +12,11 @@ export const surveyParticipationSchema = z.object({
   id: z.string().min(1),
   surveyId: z.string().min(1),
   userId: z.string().min(1),
+  /**
+   * 참여 여부만 남긴다. 시각을 두면 익명 응답의 제출 시각과 맞춰 응답자를 알아낼 수 있다.
+   * ([[docs/superpowers/specs/2026-10-14-survey-server-design.md]] §6)
+   */
   responded: z.boolean(),
-  respondedAt: z.string().datetime(),
 }).superRefine((value, ctx) => {
   if (value.id !== surveyParticipationId(value.surveyId, value.userId)) {
     ctx.addIssue({ code: 'custom', path: ['id'], message: '참여 기록 ID는 설문ID__사용자ID 형식이어야 합니다.' });
