@@ -10,7 +10,7 @@ import {
   type ApprovalRecipient,
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
-import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
+import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc } from '@/features/gw/useApprovals';
@@ -1503,7 +1503,7 @@ function ApprovalDraftInner({
 
   useEffect(() => {
     if (disabledFormCodes.has(code)) {
-      const available = forms.find((f) => f.code !== '전체' && !disabledFormCodes.has(f.code));
+      const available = forms.find((f) => f.code !== '전체' && f.code !== CANCEL_FORM_CODE && !disabledFormCodes.has(f.code));
       if (available) setCode(available.code);
     }
   }, [disabledFormCodes, code, forms]);
