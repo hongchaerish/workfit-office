@@ -1,19 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, Paperclip, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
+import { Search, FileSignature, FileText, X, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useSendMessage, useSendAttachments, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage } from '@/features/chat/useChatThread';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useChatRooms, useLeaveRoom, useDeleteRoom, useInviteMembers, useUpdateRoomName, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
 import { hideRoom, unhideRooms } from '@/features/chat/hiddenRooms';
 import { useUsers } from '@/features/user/useUsers';
-import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
+import { type ChatMessage, type Attachment, type ApprovalBotPayload } from '@/domain/chatMessage/schema';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
@@ -21,6 +20,9 @@ import { nowLocalIso } from '@/shared/lib/datetime';
 import { CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
 import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
+import { RichEditBox } from '@/features/chat/rich/RichEditBox';
+import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
+import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
@@ -72,8 +74,6 @@ export default function MobileChatThread() {
     if (!room) return;
     return registerViewedChatRoom(room.id);
   }, [room?.id]);
-  const send = useSendMessage(roomId);
-  const sendFile = useSendAttachments(roomId);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -94,7 +94,6 @@ export default function MobileChatThread() {
     }
   };
 
-  const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
 
   const [sheetMessage, setSheetMessage] = useState<ChatMessage | null>(null);
@@ -172,7 +171,6 @@ export default function MobileChatThread() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -192,86 +190,17 @@ export default function MobileChatThread() {
     }
   };
 
-  interface StagedFile {
-    id: string;
-    file: File;
-    previewUrl?: string;
-  }
-  const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
-
-  const handleFilesAttach = (files: FileList | File[]) => {
-    const list = Array.from(files);
-    const validFiles: StagedFile[] = [];
-    for (const file of list) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        window.alert(`파일 [${file.name}]이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
-        continue;
-      }
-      const isImg = file.type.startsWith('image/');
-      validFiles.push({
-        id: `${file.name}-${Date.now()}-${Math.random()}`,
-        file,
-        previewUrl: isImg ? URL.createObjectURL(file) : undefined,
-      });
-    }
-    if (validFiles.length > 0) {
-      setAttachedFiles((prev) => [...prev, ...validFiles]);
-    }
-  };
-
-  const removeAttachedFile = (id: string) => {
-    setAttachedFiles((prev) => {
-      const target = prev.find((f) => f.id === id);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
-      return prev.filter((f) => f.id !== id);
-    });
-  };
-
-  const clearAttachedFiles = (filesList: StagedFile[]) => {
-    filesList.forEach((f) => {
-      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-    });
-    setAttachedFiles([]);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent<any>) => {
-    if (readonly) return;
-    const items = e.clipboardData?.items;
-    if (!items || items.length === 0) return;
-
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          const ext = file.type.split('/')[1] || 'png';
-          const namedFile = new File(
-            [file],
-            `capture_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i + 1}.${ext}`,
-            { type: file.type }
-          );
-          imageFiles.push(namedFile);
-        }
-      }
-    }
-
-    if (imageFiles.length > 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      handleFilesAttach(imageFiles);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      attachedFiles.forEach((f) => {
-        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-      });
-    };
-  }, [roomId, attachedFiles]);
-
   const readonly = room?.type === 'notice';
+  /** @멘션 후보 — 나를 뺀 방 참여자 */
+  const mentionCandidates = useMemo<MentionCandidate[]>(
+    () =>
+      (room?.members ?? [])
+        .filter((id) => id !== me)
+        .map((id) => users.find((u) => u.id === id))
+        .filter((u): u is NonNullable<typeof u> => Boolean(u))
+        .map((u) => ({ id: u.id, name: u.name, position: u.position, dept: u.dept })),
+    [room?.members, users, me],
+  );
   const displayName = room ? getRoomDisplayName(room, me, users) : '채팅방';
 
   // 검색 시 전체 대화를 유지하면서 위치 탐색만 하도록 변경
@@ -352,48 +281,6 @@ export default function MobileChatThread() {
     prevLengthRef.current = filteredMessages.length;
   }, [filteredMessages.length, roomId]);
 
-  const submit = async () => {
-    const t = text.trim();
-    if (!t && attachedFiles.length === 0) return;
-    if (sendFile.isPending) return;
-
-    if (attachedFiles.length > 0) {
-      try {
-        // 첫 번째 파일은 텍스트 및 답글 정보와 함께 전송
-        // 여러 장을 한 번에 — 하나씩 떨어져 올라가지 않고 한 묶음(그리드)으로 보이게
-        await sendFile.mutateAsync({
-          files: attachedFiles.map((f) => f.file),
-          senderId: me,
-          senderName: meName,
-          text: t,
-          replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
-        });
-
-        clearAttachedFiles(attachedFiles);
-        setText('');
-        setReplyTo(null);
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-      }
-    } else {
-      send.mutate({
-        text: t,
-        senderId: me,
-        senderName: meName,
-        replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null,
-      });
-      setText('');
-      setReplyTo(null);
-    }
-  };
-
-  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFilesAttach(e.target.files);
-    }
-    e.target.value = '';
-  };
-
   const onLeave = async () => {
     if (!room || leave.isPending) return;
     if (!window.confirm(`'${room.name}' 방에서 나가시겠어요?\n대화 내용은 보존됩니다.`)) return;
@@ -429,7 +316,7 @@ export default function MobileChatThread() {
   }
 
   return (
-    <div onPaste={handlePaste} className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc' }}>
+    <div className="flex h-full flex-col relative min-w-0" style={{ background: '#f2f8fc' }}>
       {(() => {
         const isDirect = room?.type === 'direct';
         const otherId = isDirect ? room.members.find((m) => m !== me) : null;
@@ -620,65 +507,16 @@ export default function MobileChatThread() {
           공지 전용 방입니다
         </div>
       ) : (
-        <div className="shrink-0 border-t border-black/10 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {replyTo && (
-            <div className="mx-2.5 mt-2 flex items-center gap-2 rounded-lg border-l-[3px] px-2.5 py-1.5" style={{ borderColor: '#4ea8de', background: '#f2f8fc' }}>
-              <div className="min-w-0 flex-1">
-                <div className="text-[10.5px] font-bold" style={{ color: '#1890ff' }}>{replyTo.senderName || '메시지'}에게 답장</div>
-                <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo)}</div>
-              </div>
-              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 active:bg-black/5">
-                <X size={13} />
-              </button>
-            </div>
-          )}
-          {/* 다중 첨부 대기 파일 칩 목록 */}
-          {attachedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2 max-h-36 overflow-y-auto px-4 py-2 border-b border-black/5">
-              {attachedFiles.map((item) => (
-                <div key={item.id} className="relative w-14 h-14 rounded-lg border border-black/10 bg-black/5 overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
-                  {item.previewUrl ? (
-                    <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
-                      <span className="text-[16px] leading-none">📄</span>
-                      <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
-                        {item.file.name}
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => removeAttachedFile(item.id)}
-                    title="첨부 취소"
-                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-4 h-4 grid place-items-center"
-                  >
-                    <X size={9} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-2 p-2.5">
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={sendFile.isPending}
-              title={`파일 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-              className="grid h-10 w-9 shrink-0 place-items-center rounded-full text-ink3 active:bg-black/5 disabled:opacity-40"
-            >
-              <Paperclip size={18} />
-            </button>
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onPaste={handlePaste}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
-              placeholder={sendFile.isPending ? '파일 전송 중…' : '메시지를 입력하세요…'}
-              className="min-w-0 flex-1 rounded-full bg-black/5 px-4 py-2.5 text-[13px] text-ink outline-none placeholder:text-ink3"
-            />
-            <button onClick={submit} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[15px] text-white" style={{ background: '#4ea8de' }}>↑</button>
-          </div>
-        </div>
+        <ChatComposer
+          key={roomId}
+          variant="mobile"
+          roomId={roomId}
+          senderId={me}
+          senderName={meName}
+          members={mentionCandidates}
+          replyTo={replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null}
+          onCancelReply={() => setReplyTo(null)}
+        />
       )}
 
       {viewer && <ImageViewer attachments={viewer.attachments} initialIdx={viewer.initialIdx} onClose={() => setViewer(null)} />}
@@ -740,7 +578,7 @@ export default function MobileChatThread() {
               >
                 텍스트 복사
               </button>
-              {sheetMessage.senderId === me && sheetMessage.type === 'text' && sheetMessage.format !== 'rich' && (
+              {sheetMessage.senderId === me && sheetMessage.type === 'text' && (
                 <button
                   onClick={() => {
                     setEditingMessageId(sheetMessage.id);
@@ -1053,7 +891,9 @@ function MessageBubble({
   const unreadCount = roomMembers.filter((uid) => uid !== m.senderId && !m.readBy.includes(uid)).length;
 
   let body;
-  if (isEditing) {
+  if (isEditing && m.format === 'rich') {
+    body = <RichEditBox message={m} onDone={onCancelEdit} variant="mobile" />;
+  } else if (isEditing) {
     body = (
       <div className="flex flex-col gap-1 w-full min-w-[180px]">
         <textarea

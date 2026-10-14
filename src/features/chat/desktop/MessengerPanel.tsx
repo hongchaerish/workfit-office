@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
-import type { ChangeEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
+import type { MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, Paperclip, Pencil, Download, Type } from 'lucide-react';
+import { Search, X, Pencil, Download } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
@@ -10,10 +10,11 @@ import { useHiddenRooms, hideRoom, unhideRooms } from '@/features/chat/hiddenRoo
 import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
 import { isSameMinute, processMessageBundles, isGroupedWithPrevious, bubbleMessagesOf, type RenderMessageItem } from '@/features/chat/messageBundles';
-import { useChatThread, useSendMessage, useSendRich, useEditRich, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
-import { ChatRichEditor, type ChatRichEditorHandle, type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
+import { useChatThread, useMarkRead, useEditMessage, useUpdateMessageReactions, useDeleteMessage, CHAT_THREAD_KEY } from '@/features/chat/useChatThread';
+import { type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
+import { RichEditBox } from '@/features/chat/rich/RichEditBox';
+import { ChatComposer, type ChatComposerHandle } from '@/features/chat/ChatComposer';
 import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
-import { isEmptyRich, isPlainOnlyRich, parseRichBody, plainTextOfRich } from '@/domain/chatMessage/richBody';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
@@ -369,7 +370,6 @@ function MessengerThread({
   const presenceMap = useAllUserPresences();
   const { data: messages = [] } = useChatThread(room.id);
   const { data: rooms = [] } = useChatRooms(me);
-  const send = useSendMessage(room.id);
   const markRead = useMarkRead();
   const leave = useLeaveRoom();
   const remove = useDeleteRoom();
@@ -422,7 +422,6 @@ function MessengerThread({
   const [activeMenu, setActiveMenu] = useState<{ m: ChatMessage; x: number; y: number; mine: boolean } | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
-  const [attachmentRetention, setAttachmentRetention] = useState<'30d' | '90d' | '180d' | '1y' | 'permanent'>('30d');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const [hasNewMsg, setHasNewMsg] = useState(false);
@@ -461,14 +460,8 @@ function MessengerThread({
   const [viewer, setViewer] = useState<{ attachments: Attachment[]; initialIdx: number } | null>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  /** 서식 입력창(Teams 방식) — 글·서식·본문 속 사진·@멘션 */
-  const composerRef = useRef<ChatRichEditorHandle>(null);
-  /** 확장 편집기 모드 — 서식 도구 막대, Enter 줄바꿈(Ctrl+Enter 전송) */
-  const [formatMode, setFormatMode] = useState(false);
-  /** 확장 모드의 서식 도구 막대 자리 — 입력창 위 한 줄 전체 */
-  const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
-  const sendRich = useSendRich(room.id);
+  /** 입력창(PC·모바일 공용) — 끌어놓기·붙여넣기 파일을 넘긴다 */
+  const composerRef = useRef<ChatComposerHandle>(null);
   const readonly = room.type === 'notice';
 
   const handleScroll = () => {
@@ -552,66 +545,6 @@ function MessengerThread({
   }, [room.members, users]);
 
   const [isDragging, setIsDragging] = useState(false);
-  interface StagedFile {
-    id: string;
-    file: File;
-    previewUrl?: string;
-  }
-
-  const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);
-
-  /** 첨부 — 사진은 입력창의 커서 자리(본문 속 사진)에, 그 밖의 파일은 아래 첨부 목록에 올린다. */
-  const handleFilesAttach = (files: FileList | File[]) => {
-    const list = Array.from(files);
-    const validFiles: StagedFile[] = [];
-    const inlineImages: File[] = [];
-    for (const file of list) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        window.alert(`파일 [${file.name}]이 너무 큽니다. 최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB까지 전송할 수 있습니다.`);
-        continue;
-      }
-      const isImg = file.type.startsWith('image/');
-      if (isImg && composerRef.current) {
-        inlineImages.push(file);
-        continue;
-      }
-      validFiles.push({
-        id: `${file.name}-${Date.now()}-${Math.random()}`,
-        file,
-        previewUrl: isImg ? URL.createObjectURL(file) : undefined,
-      });
-    }
-    if (validFiles.length > 0) {
-      setAttachedFiles((prev) => [...prev, ...validFiles]);
-    }
-    if (inlineImages.length > 0) composerRef.current?.insertImages(inlineImages);
-  };
-
-  const removeAttachedFile = (id: string) => {
-    setAttachedFiles((prev) => {
-      const target = prev.find((f) => f.id === id);
-      if (target?.previewUrl) {
-        URL.revokeObjectURL(target.previewUrl);
-      }
-      return prev.filter((f) => f.id !== id);
-    });
-  };
-
-  const clearAttachedFiles = (filesList: StagedFile[]) => {
-    filesList.forEach((f) => {
-      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-    });
-    setAttachedFiles([]);
-  };
-
-  useEffect(() => {
-    return () => {
-      attachedFiles.forEach((f) => {
-        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-      });
-    };
-  }, [room.id, attachedFiles]);
-
   const handleDragOver = (e: React.DragEvent) => {
     if (readonly) return;
     e.preventDefault();
@@ -626,7 +559,7 @@ function MessengerThread({
     setIsDragging(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFilesAttach(e.dataTransfer.files);
+      composerRef.current?.attachFiles(e.dataTransfer.files);
     }
   };
 
@@ -656,13 +589,6 @@ function MessengerThread({
   }, [searchMatchIds, currentSearchIdx]);
 
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
-
-  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFilesAttach(e.target.files);
-    }
-    e.target.value = '';
-  };
 
   const canLeave = room.type === 'group';
   const canDelete = isAdmin;
@@ -731,46 +657,9 @@ function MessengerThread({
     prevLengthRef.current = filteredMessages.length;
   }, [filteredMessages.length, room.id]);
 
-  /**
-   * 전송 — 메시지 1건.
-   * 꾸밈·사진·멘션·첨부가 하나도 없으면 예전처럼 평문 메시지, 아니면 서식 메시지(본문 + 첨부)로 보낸다.
-   */
-  const submit = async () => {
-    const draft = composerRef.current?.getDraft();
-    if (!draft) return;
-    const hasFiles = attachedFiles.length > 0;
-    if (isEmptyRich(draft.doc) && !hasFiles) return;
-    if (sendRich.isPending) return;
-
-    const reply = replyTo
-      ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo as any) }
-      : null;
-    const reset = () => {
-      composerRef.current?.clear();
-      setReplyTo(null);
-    };
-
-    if (!hasFiles && isPlainOnlyRich(draft.doc)) {
-      send.mutate({ text: plainTextOfRich(draft.doc), senderId: me, senderName: meName, replyTo: reply });
-      reset();
-      return;
-    }
-    try {
-      await sendRich.mutateAsync({
-        draft: { doc: draft.doc, pendingImages: draft.pendingImages, files: attachedFiles.map((f) => f.file) },
-        senderId: me,
-        senderName: meName,
-        replyTo: reply,
-      });
-      clearAttachedFiles(attachedFiles);
-      reset();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-    }
-  };
-
   const handlePaste = (e: React.ClipboardEvent<any>) => {
-    if (readonly) return;
+    // 입력창 안에서 붙여넣은 사진은 편집기가 이미 넣었다 — 여기서 또 넣으면 두 장이 된다
+    if (readonly || e.defaultPrevented) return;
     const items = e.clipboardData?.items;
     if (!items || items.length === 0) return;
 
@@ -794,7 +683,7 @@ function MessengerThread({
     if (imageFiles.length > 0) {
       e.preventDefault();
       e.stopPropagation();
-      handleFilesAttach(imageFiles);
+      composerRef.current?.attachFiles(imageFiles);
     }
   };
 
@@ -1157,121 +1046,16 @@ function MessengerThread({
       {readonly ? (
         <div className="shrink-0 border-t border-border bg-panel-alt px-4 py-3 text-center text-[11px] text-ink3">공지 전용 방입니다</div>
       ) : (
-        <div className="shrink-0 border-t border-border bg-panel p-3">
-          {replyTo && (
-            <div className="mb-1.5 flex items-center gap-2 rounded-lg border-l-[3px] border-amber bg-panel-alt px-2.5 py-1.5">
-              <div className="min-w-0 flex-1">
-                <div className="text-[10.5px] font-bold text-amber">{(replyTo.senderName || '메시지')}에게 답장</div>
-                <div className="truncate text-[11px] text-ink3">{msgPreview(replyTo as any)}</div>
-              </div>
-              <button onClick={() => setReplyTo(null)} title="답장 취소" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink3 hover:bg-black/5">
-                <X size={13} />
-              </button>
-            </div>
-          )}
-          {attachedFiles.length > 0 && (
-            <div className="mb-2 space-y-1.5 border-b border-border pb-2 px-1">
-              <div className="flex items-center justify-between text-[10px] text-ink3 font-medium">
-                <span className="flex items-center gap-1.5 font-bold text-ink2">
-                  <span className="flex items-center gap-1"><Paperclip size={11} className="shrink-0 text-ink3" /> 첨부 {attachedFiles.length}개</span>
-                  <span>· 보존기한:</span>
-                  <select
-                    value={attachmentRetention}
-                    onChange={(e) => setAttachmentRetention(e.target.value as any)}
-                    className="rounded border border-border bg-panel px-1.5 py-0.5 text-[10px] font-bold text-teal outline-none"
-                  >
-                    <option value="30d">30일 (기본)</option>
-                    <option value="90d">90일 (3개월)</option>
-                    <option value="180d">180일 (6개월)</option>
-                    <option value="1y">1년</option>
-                    <option value="permanent">영구보존</option>
-                  </select>
-                </span>
-                <span className="text-[9.5px] text-amber font-semibold">
-                  {attachmentRetention === 'permanent' ? '영구 보관' : `기한 만료 시 자동 파기`}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto py-0.5">
-                {attachedFiles.map((item) => (
-                  <div key={item.id} className="relative w-14 h-14 rounded-lg border border-border-hi bg-panel-alt overflow-hidden flex items-center justify-center shrink-0 shadow-3xs">
-                    {item.previewUrl ? (
-                      <img src={item.previewUrl} alt="preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-1 text-center w-full h-full">
-                        <span className="text-[16px] leading-none">📄</span>
-                        <span className="text-[8px] font-semibold truncate w-full mt-0.5 px-0.5 text-ink leading-tight" title={item.file.name}>
-                          {item.file.name}
-                        </span>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => removeAttachedFile(item.id)}
-                      title="첨부 취소"
-                      className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-black/80 text-white rounded-full w-4 h-4 grid place-items-center transition-colors"
-                    >
-                      <X size={9} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/*
-            입력창 — 글은 맨 왼쪽부터, 첨부·서식·보내기 버튼은 오른쪽에 모은다.
-            [서식]을 누르면 입력창이 위로 넓어지고 맨 위에 서식 도구 막대가 생긴다(Teams 방식).
-          */}
-          <div className={`rounded-2xl border bg-panel py-1 pl-3 pr-1.5 transition-shadow duration-200 ${formatMode ? 'border-teal/50 shadow-[0_4px_16px_rgba(16,24,48,0.10)]' : 'border-border-hi'}`}>
-            {formatMode && <div ref={setToolbarEl} className="pt-0.5" />}
-            <div className={`flex gap-1.5 ${formatMode ? 'flex-col' : 'items-end'}`}>
-              <ChatRichEditor
-                ref={composerRef}
-                expanded={formatMode}
-                members={mentionCandidates}
-                disabled={sendRich.isPending}
-                onSubmit={() => void submit()}
-                onFiles={handleFilesAttach}
-                minHeight={formatMode ? 120 : 0}
-                maxHeight={formatMode ? 300 : 160}
-                toolbarContainer={formatMode ? toolbarEl : null}
-                placeholder={formatMode ? '메시지 입력 (Ctrl+Enter 전송)' : '메시지 입력 (@멘션, 사진 붙여넣기)'}
-              />
-              <div className="mb-0.5 flex shrink-0 items-center gap-0.5 self-end">
-                <input ref={fileRef} type="file" multiple className="hidden" onChange={onPickFile} />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={sendRich.isPending}
-                  title={`파일·사진 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
-                  className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none"
-                >
-                  <Paperclip size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormatMode((v) => !v);
-                    requestAnimationFrame(() => composerRef.current?.focus());
-                  }}
-                  title={formatMode ? '서식 도구 닫기' : '서식 편집 (굵게·목록·코드…) — 입력창이 넓어지고 Enter 는 줄바꿈, Ctrl+Enter 전송'}
-                  aria-pressed={formatMode}
-                  className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full select-none ${formatMode ? 'bg-teal-soft text-teal' : 'text-ink3 hover:bg-panel-alt'}`}
-                >
-                  <Type size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void submit()}
-                  disabled={sendRich.isPending}
-                  title={formatMode ? '보내기 (Ctrl+Enter)' : '보내기 (Enter)'}
-                  className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-amber disabled:opacity-50 text-[14px] text-white select-none hover:bg-amber-dark transition-colors"
-                >
-                  ↑
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ChatComposer
+          key={room.id}
+          ref={composerRef}
+          roomId={room.id}
+          senderId={me}
+          senderName={meName}
+          members={mentionCandidates}
+          replyTo={replyTo ? { id: replyTo.id, senderName: replyTo.senderName || '알 수 없음', text: msgPreview(replyTo) } : null}
+          onCancelReply={() => setReplyTo(null)}
+        />
       )}
       </div>
       )}
@@ -1602,49 +1386,6 @@ function CompositeMessageBubble({
 function withoutStoragePath(att: Attachment): Attachment {
   const { path: _path, ...rest } = att;
   return rest;
-}
-
-/** 서식 메시지 수정 — 말풍선 자리에서 편집기를 열고 저장(Ctrl+Enter)·취소 */
-function RichEditBox({ message, onDone }: { message: ChatMessage; onDone: () => void }) {
-  const editorRef = useRef<ChatRichEditorHandle>(null);
-  const editRich = useEditRich(message.roomId);
-  const initialDoc = useMemo(() => parseRichBody(message.body), [message.body]);
-  const save = async () => {
-    const draft = editorRef.current?.getDraft();
-    if (!draft) return;
-    if (isEmptyRich(draft.doc) && !(message.attachments ?? []).some((a) => !a.mime.startsWith('image/'))) {
-      window.alert('내용을 입력해 주세요.');
-      return;
-    }
-    try {
-      await editRich.mutateAsync({ message, draft: { ...draft, files: [] }, actorName: message.senderName });
-      onDone();
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : '수정에 실패했습니다.');
-    }
-  };
-  return (
-    <div className="flex w-[min(420px,100%)] flex-col gap-1 rounded-xl border border-[#bae0ff] bg-[#f8fbfe] px-2 py-1.5">
-      <ChatRichEditor
-        ref={editorRef}
-        expanded
-        initialDoc={initialDoc}
-        initialAttachments={message.attachments}
-        onSubmit={() => void save()}
-        disabled={editRich.isPending}
-        maxHeight={240}
-      />
-      <div className="flex items-center justify-between gap-1 text-[9.5px]">
-        <span className="text-ink3">Ctrl+Enter 저장 · 사진은 붙여넣어 추가</span>
-        <span className="flex gap-1">
-          <button onClick={onDone} className="rounded bg-[#bae0ff]/30 px-1.5 py-0.5 text-ink2 hover:bg-[#bae0ff]/50">취소</button>
-          <button onClick={() => void save()} disabled={editRich.isPending} className="rounded bg-amber px-1.5 py-0.5 text-white hover:bg-amber-dark disabled:opacity-50">
-            {editRich.isPending ? '...' : '저장'}
-          </button>
-        </span>
-      </div>
-    </div>
-  );
 }
 
 function MessageBubble({
