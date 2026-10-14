@@ -19,6 +19,7 @@
  */
 import { Client, Databases, Query } from 'node-appwrite';
 import crypto from 'crypto';
+import { findLoginUser } from './match.js';
 
 /**
  * 발급 토큰의 서명 키.
@@ -52,11 +53,9 @@ export default async ({ req, res, log, error }) => {
     const apiKey = req.headers['x-appwrite-key'] || process.env.APPWRITE_API_KEY;
     const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey));
 
-    // 앱과 동일하게 empNo/email 대소문자 무시 매칭(사용자 수 적음 → 전체 로드 후 매칭)
+    // 앱 로그인과 같은 규칙(사번·ID·이메일·이메일 앞부분)으로 찾는다(사용자 수 적음 → 전체 로드 후 매칭)
     const list = await dbs.listDocuments(DB, 'users', [Query.limit(100)]);
-    const user = list.documents.find(
-      (u) => String(u.empNo || '').toLowerCase() === loginId || String(u.email || '').toLowerCase() === loginId,
-    );
+    const user = findLoginUser(list.documents, loginId);
     if (!user) return res.json({ error: '인증 실패' }, 401);
     if (user.status === '잠금' || user.status === '미사용') return res.json({ error: '계정 사용 불가' }, 403);
     if (user.password !== sha256hex(password)) return res.json({ error: '인증 실패' }, 401);
