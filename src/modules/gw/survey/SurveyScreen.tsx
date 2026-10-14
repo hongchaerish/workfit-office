@@ -39,7 +39,6 @@ const TAB_LABELS: Record<TabId, string> = {
 function LocalSurveyScreen() {
   const { user: authenticatedUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [demoUserId, setDemoUserId] = useState('U009');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -48,10 +47,8 @@ function LocalSurveyScreen() {
   const categoriesQuery = useCodeOptions(SURVEY_CATEGORY_GROUP_CODE);
   const users = usersQuery.data ?? [];
   const departments = useMemo(() => departmentsQuery.data ?? [], [departmentsQuery.data]);
-  const actor = authenticatedUser
-    ?? users.find((user) => user.id === demoUserId)
-    ?? users.find((user) => user.status === '사용')
-    ?? null;
+  // 설문 서버가 로그인 토큰으로 요청자를 정하므로 로그인 사용자만 쓴다(시연용 사용자 선택 제거).
+  const actor = authenticatedUser ?? null;
   const actorDeptId = useMemo(() => resolveUserDeptId(departments, actor), [departments, actor]);
 
   const mineQuery = useMySurveys(actor);
@@ -130,11 +127,6 @@ function LocalSurveyScreen() {
         name="전자설문"
         right={
           <div className="flex items-center gap-2">
-            {!authenticatedUser && (
-              <select value={actor.id} onChange={(event) => { setDemoUserId(event.target.value); go({ tab }); }} title="사용자 선택" className="h-9 rounded-lg border border-amber/30 bg-amber-soft/30 px-3 text-[10.5px] font-bold text-ink outline-none">
-                {users.filter((user) => user.status === '사용').map((user) => <option key={user.id} value={user.id}>{user.name} · {user.position || user.dept || '사원'}</option>)}
-              </select>
-            )}
             {canCreateSurvey(actor) && !detail && (
               <Button disabled={createDraft.isPending} onClick={createNew} variant="primary">+ 새 설문</Button>
             )}
@@ -183,8 +175,6 @@ function LocalSurveyScreen() {
             actor={actor}
             survey={resultSurvey}
             questions={questions}
-            users={users}
-            departments={departments}
             onBack={() => go({ tab })}
             onNotice={setNotice}
           />

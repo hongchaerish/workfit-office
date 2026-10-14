@@ -1,30 +1,16 @@
-import { useMemo, useState } from 'react';
-import type { Department } from '@/domain/department/schema';
+import { useState } from 'react';
 import type { User } from '@/domain/user/schema';
-import { aggregateSurveyResult, type SurveyQuestionResult } from '@/domain/survey/aggregate';
-import { canManageSurvey, countSurveyAudience, SurveyError } from '@/domain/survey/engine';
+import type { SurveyQuestionResult } from '@/domain/survey/aggregate';
+import { canManageSurvey, SurveyError } from '@/domain/survey/engine';
 import type { Survey } from '@/domain/survey/schema';
 import type { SurveyQuestion } from '@/domain/surveyQuestion/schema';
-import type { SurveyResponse } from '@/domain/surveyResponse/schema';
 import { useCloseSurvey } from '@/features/survey/useSurveys';
-import { resolveUserDeptId, useSurveyResult } from '@/features/survey/useSurveyResponse';
+import { useSurveyResult } from '@/features/survey/useSurveyResponse';
 import { audienceLabel, AnonymousBadge, QuestionTypeBadge, SurveyStatusBadge } from './SurveyBadges';
-import { formatSurveyDateTime, formatSurveyPeriod } from './surveyDate';
+import { formatSurveyDate, formatSurveyDateTime, formatSurveyPeriod } from './surveyDate';
 import { Button } from '@/shared/ui/Button';
 
 const percent = (ratio: number) => `${(ratio * 100).toFixed(1)}%`;
-
-/** 응답자 표기. 익명 설문은 응답에 사용자·부서가 없어 항상 익명으로 남는다. */
-function respondentLabel(
-  response: SurveyResponse | undefined,
-  users: User[],
-  departments: Department[],
-): string {
-  if (!response || response.respondentUserId === null) return '익명';
-  const name = users.find((user) => user.id === response.respondentUserId)?.name ?? '알 수 없음';
-  const dept = departments.find((row) => row.id === response.respondentDeptId)?.name;
-  return dept ? `${name} · ${dept}` : name;
-}
 
 function Summary({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -52,17 +38,16 @@ function Bar({ label, count, ratio, tone }: { label: string; count: number; rati
   );
 }
 
-function QuestionCard({ index, result, responses, users, departments }: {
+/**
+ * 문항 카드. 응답자 이름은 서버가 기명 설문의 작성자·관리자에게만 채워 준다(`respondents`).
+ * 익명 설문은 응답 ID가 비어 오고 제출 시각도 날짜뿐이라 날짜만 보여 준다.
+ */
+function QuestionCard({ index, result, respondents, anonymous }: {
   index: number;
   result: SurveyQuestionResult;
-  responses: SurveyResponse[];
-  users: User[];
-  departments: Department[];
+  respondents: Record<string, string>;
+  anonymous: boolean;
 }) {
-  const responseById = useMemo(
-    () => new Map(responses.map((row) => [row.id, row])),
-    [responses],
-  );
 
   return (
     <section className="rounded-xl border border-border bg-panel p-4 shadow-sm">
@@ -114,12 +99,12 @@ function QuestionCard({ index, result, responses, users, departments }: {
 
           {result.kind === 'TEXT' && (
             <ul className="space-y-2">
-              {result.entries.map((entry) => (
-                <li key={entry.responseId} className="rounded-lg border border-border bg-ink3/4 px-3 py-2.5">
+              {result.entries.map((entry, i) => (
+                <li key={`${entry.responseId}-${i}`} className="rounded-lg border border-border bg-ink3/4 px-3 py-2.5">
                   <p className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-ink">{entry.value}</p>
                   <div className="mt-1.5 flex flex-wrap gap-x-2 text-[9.5px] text-ink3">
-                    <span>{respondentLabel(responseById.get(entry.responseId), users, departments)}</span>
-                    <span>{formatSurveyDateTime(entry.submittedAt)}</span>
+                    <span>{respondents[entry.responseId] ?? '익명'}</span>
+                    <span>{anonymous ? formatSurveyDate(entry.submittedAt) : formatSurveyDateTime(entry.submittedAt)}</span>
                   </div>
                 </li>
               ))}
@@ -140,8 +125,6 @@ interface Props {
   actor: User;
   survey: Survey;
   questions: SurveyQuestion[];
-  users: User[];
-  departments: Department[];
   onBack: () => void;
   onNotice: (text: string) => void;
 }
@@ -154,7 +137,7 @@ interface Props {
  *
  * 익명 설문에는 사용자·부서 필터를 두지 않는다. 필터 조건을 좁히면 응답을 역추적할 수 있다.
  */
-export default function SurveyResult({ actor, survey, questions, users, departments, onBack, onNotice }: Props) {
+export default function SurveyResult({ actor, survey, questions, onBack, onNotice }: Props) {
   const [error, setError] = useState('');
   const resultQuery = useSurveyResult(actor, survey.id);
   const close = useCloseSurvey();
@@ -162,15 +145,10 @@ export default function SurveyResult({ actor, survey, questions, users, departme
   const manageable = canManageSurvey(actor, survey);
   const closable = manageable && (survey.status === 'ACTIVE' || survey.status === 'SCHEDULED');
 
-  const audienceCount = useMemo(
-    () => countSurveyAudience(survey, users, (user) => resolveUserDeptId(departments, user)),
-    [survey, users, departments],
-  );
-
-  const summary = useMemo(() => {
-    if (!resultQuery.data) return null;
-    return aggregateSurveyResult(questions, resultQuery.data.responses, resultQuery.data.answers, audienceCount);
-  }, [questions, resultQuery.data, audienceCount]);
+  // 대상자 수·집계는 서버가 현재 재직자 명단으로 계산해 준다.
+  const summary = resultQuery.data?.summary ?? null;
+  const respondents = resultQuery.data?.respondents ?? {};
+  const audienceCount = summary?.audienceCount ?? 0;
 
   const closeSurvey = async () => {
     setError('');
@@ -254,9 +232,8 @@ export default function SurveyResult({ actor, survey, questions, users, departme
                 key={result.question.id}
                 index={index}
                 result={result}
-                responses={resultQuery.data?.responses ?? []}
-                users={users}
-                departments={departments}
+                respondents={respondents}
+                anonymous={survey.anonymous}
               />
             ))
           )}
