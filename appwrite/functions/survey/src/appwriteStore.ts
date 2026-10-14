@@ -9,6 +9,7 @@ import { departmentSchema } from '@/domain/department/schema';
 import { roleGroupSchema } from '@/domain/roleGroup/schema';
 import { positionSchema } from '@/domain/position/schema';
 import type { Coll, DirectoryPort, SurveyStorePort } from '../../../../server/survey/port';
+import { withDeadline } from '../../../../server/survey/deadline';
 
 /** Appwrite 스칼라 속성에 못 담는 중첩 필드 — 앱의 crudBackend 와 같은 규칙으로 JSON 문자열에 담는다. */
 const JSON_FIELDS: Partial<Record<string, string[]>> = {
@@ -22,8 +23,32 @@ type Parser<T> = { safeParse(value: unknown): { success: boolean; data?: T } };
 const isCode = (error: unknown, code: number) => (error as { code?: number })?.code === code;
 
 /** node-appwrite 로 설문 저장소·명부 포트를 만든다. 키는 함수의 동적 키(x-appwrite-key)를 쓴다. */
-export function createAppwritePorts(endpoint: string, project: string, key: string, databaseId: string) {
-  const dbs = new Databases(new Client().setEndpoint(endpoint).setProject(project).setKey(key));
+export function createAppwritePorts(endpoint: string, project: string, key: string, databaseId: string, trace?: (message: string) => void) {
+  const raw = new Databases(new Client().setEndpoint(endpoint).setProject(project).setKey(key));
+  /**
+   * 모든 DB 호출에 시간 제한을 건다(`server/survey/deadline.ts` 참고). 읽기는 멈추면 다시 보내고,
+   * 쓰기는 다시 보내지 않는다. SURVEY_DEBUG 이면 호출마다 걸린 시간을 로그로 남긴다.
+   */
+  const dbs = new Proxy(raw, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+      const read = prop === 'listDocuments' || prop === 'getDocument';
+      return async (...args: unknown[]) => {
+        const started = Date.now();
+        const label = `${String(prop)} ${(args[0] as { collectionId?: string })?.collectionId ?? ''}`;
+        trace?.(`→ ${label}`);
+        try {
+          return await withDeadline(
+            () => (value as (...a: unknown[]) => Promise<unknown>).apply(target, args),
+            read ? { timeoutMs: 4000, attempts: 3, label } : { timeoutMs: 10000, attempts: 1, label },
+          );
+        } finally {
+          trace?.(`← ${label} ${Date.now() - started}ms`);
+        }
+      };
+    },
+  });
 
   const decode = (coll: string, doc: Record<string, unknown>) => {
     const row: Record<string, unknown> = { ...doc };

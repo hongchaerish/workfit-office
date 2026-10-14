@@ -21,17 +21,19 @@ import { createAppwritePorts } from './appwriteStore';
 interface FnContext {
   req: { bodyJson?: unknown; headers: Record<string, string | undefined> };
   res: { json(body: unknown, status?: number): unknown };
+  log(message: string): void;
   error(message: string): void;
 }
 
-export default async ({ req, res, error }: FnContext) => {
+export default async ({ req, res, log, error }: FnContext) => {
   const secret = process.env.AUTH_TOKEN_SECRET || process.env.WIDDY_TOKEN_SECRET || '';
   if (!secret) return res.json({ error: { code: 'INVALID_INPUT', message: '설문 서버가 설정되지 않았습니다.' } }, 500);
 
   const endpoint = process.env.APPWRITE_ENDPOINT || process.env.APPWRITE_FUNCTION_API_ENDPOINT || '';
   const project = process.env.APPWRITE_FUNCTION_PROJECT_ID || '';
   const key = req.headers['x-appwrite-key'] || process.env.APPWRITE_API_KEY || '';
-  const ports = createAppwritePorts(endpoint, project, key, process.env.APPWRITE_DATABASE_ID || 'workfit');
+  const trace = process.env.SURVEY_DEBUG ? (message: string) => log(`${new Date().toISOString().slice(11, 23)} ${message}`) : undefined;
+  const ports = createAppwritePorts(endpoint, project, key, process.env.APPWRITE_DATABASE_ID || 'workfit', trace);
 
   try {
     const result = await dispatch(req.bodyJson, {
