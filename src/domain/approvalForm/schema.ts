@@ -141,6 +141,22 @@ export function documentBodyKeyOf(fields?: Array<Pick<FormField, 'key' | 'type'>
   return !bodyField || bodyField.type === '장문' ? RESERVED_BODY_KEY : BODY_BOX_FALLBACK_KEY;
 }
 
+/** 기존 문서 취소 전용 서식 코드 — 문서 상세의 [취소 기안]으로만 작성한다. */
+export const CANCEL_FORM_CODE = '취소신청';
+
+type FormIdentity = Pick<ApprovalForm, 'id' | 'code' | 'active'>;
+const isCancelForm = (form: FormIdentity) => form.code === CANCEL_FORM_CODE || form.id === CANCEL_FORM_CODE;
+
+/** 기안 화면이 서식을 찾는 목록 — 활성 서식 전부(취소 기안이 취소신청서를 찾아야 한다). */
+export function draftableForms<T extends FormIdentity>(forms: T[]): T[] {
+  return forms.filter((form) => form.active);
+}
+
+/** 서식 선택 목록 — 취소신청서는 기존 문서 취소 전용이라 뺀다. */
+export function draftCatalogForms<T extends FormIdentity>(forms: T[]): T[] {
+  return draftableForms(forms).filter((form) => !isCancelForm(form));
+}
+
 /** 서식의 금액 필드(있으면) — 상신 시 이 값을 amount 로 승격. */
 export const amountFieldOf = (form: ApprovalForm): FormField | undefined =>
   form.fields.find((f) => f.type === '금액' && f.isAmountKey) ?? form.fields.find((f) => f.type === '금액');

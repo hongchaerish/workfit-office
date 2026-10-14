@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useActiveApprovalForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
+import { useDraftCatalogForms, useApprovalFolders } from '@/features/gw/useApprovalForms';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
@@ -44,7 +44,7 @@ export function DraftFormSelectModal({
 }: DraftFormSelectModalProps) {
   const { user } = useAuth();
   const org = useOrgTree();
-  const { data: forms = [] } = useActiveApprovalForms();
+  const { data: forms = [] } = useDraftCatalogForms();
   const { data: folders = [] } = useApprovalFolders();
 
   const [search, setSearch] = useState('');

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { approvalFormRepo } from '@/data/approvalForm/approvalForm.repo';
-import type { ApprovalForm, ApprovalFolder } from '@/domain/approvalForm/schema';
+import { draftableForms, draftCatalogForms, type ApprovalForm, type ApprovalFolder } from '@/domain/approvalForm/schema';
 
 /**
  * 결재서식 마스터 훅 — 기준정보 결재서식 관리 CRUD + 상신 모달/문서뷰 공유.
@@ -14,15 +14,16 @@ export function useApprovalForms() {
   return useQuery({ queryKey: [KEY], queryFn: () => approvalFormRepo.list() });
 }
 
-/** 활성 서식만 — 상신 유형 선택용 (취소신청서는 기존 문서 취소 전용 특수 서식이므로 기안 카탈로그에서 제외). */
+/** 활성 서식 전부 — 기안 화면이 서식을 찾는 목록(취소 기안의 취소신청서 포함). */
 export function useActiveApprovalForms() {
   const q = useApprovalForms();
-  return {
-    ...q,
-    data: (q.data ?? []).filter(
-      (form) => form.active && form.code !== '취소신청' && form.id !== '취소신청'
-    ),
-  };
+  return { ...q, data: draftableForms(q.data ?? []) };
+}
+
+/** 서식 선택 목록 — 취소신청서는 기존 문서 취소 전용 특수 서식이므로 뺀다. */
+export function useDraftCatalogForms() {
+  const q = useApprovalForms();
+  return { ...q, data: draftCatalogForms(q.data ?? []) };
 }
 
 export function useUpsertApprovalForm() {
