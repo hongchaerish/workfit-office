@@ -41,7 +41,7 @@ function Brand({ logoUrl, onLogoClick }: { logoUrl?: string; onLogoClick?: () =>
       <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-white overflow-hidden p-0.5 shadow-sm border border-black/5">
         <img src={logoUrl || defaultLogo} alt="Logo" className="h-full w-full object-contain" />
       </div>
-      <div className="leading-[1.1]">
+      <div className="leading-[1.1] @max-[760px]:hidden">
         <div style={{ color: 'var(--color-header-text)' }} className="text-sm font-extrabold tracking-tight">
           WorkFit<span className="text-teal">Intranet</span>
         </div>
@@ -146,10 +146,20 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
   }, [notiOpen]);
   return (
     <header
-      style={{ backgroundColor: 'var(--color-header-bg)', color: 'var(--color-header-text)' }}
-      className="sticky top-0 z-50 flex h-[58px] shrink-0 items-center gap-2.5 px-3.5 w-full min-w-full"
+      style={{
+        backgroundColor: 'var(--color-header-bg)',
+        color: 'var(--color-header-text)',
+        // 본문이 창보다 넓어 가로 스크롤이 생겨도 상단바는 보이는 창 너비에 고정한다 —
+        // 오른쪽 알림·프로필 아이콘이 늘 창 오른쪽 끝에 보인다.
+        width: 'calc(100vw / var(--font-scale, 1))',
+      }}
+      /*
+        @container — 창이 좁아지면 왼쪽(테스트 계정 글자 → 로고 글자 → 메뉴 글자)부터 줄인다.
+        기준 너비는 화면 배율(--font-scale) 적용 후의 CSS 픽셀이다.
+      */
+      className="@container sticky left-0 top-0 z-50 flex h-[58px] shrink-0 items-center gap-2.5 px-3.5"
     >
-      <div className="flex shrink-0 items-center gap-7">
+      <div className="flex shrink-0 items-center gap-7 @max-[760px]:gap-3">
         <Brand logoUrl={logoUrl} onLogoClick={() => navigate('/exec')} />
         <nav className="flex gap-0.5">
           {MENU_TREE.filter((m) => {
@@ -199,11 +209,12 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                     }
                   }}
                   style={{ color: 'var(--color-header-text)', opacity: active || isOpen ? 1 : 0.7 }}
-                  className={`relative flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
+                  title={m.name}
+                  className={`relative flex flex-col items-center gap-[3px] rounded-lg px-[11px] py-1.5 @max-[720px]:px-2 transition-all hover:opacity-100 ${active || isOpen ? 'bg-white/[0.15]' : 'hover:bg-white/[0.08]'
                     }`}
                 >
                   <MenuGlyph glyph={m.icon} size={18} />
-                  <span className={`whitespace-nowrap text-[11px] ${active ? 'font-bold' : 'font-semibold'}`}>{m.name}</span>
+                  <span className={`whitespace-nowrap text-[11px] @max-[720px]:hidden ${active ? 'font-bold' : 'font-semibold'}`}>{m.name}</span>
                   {m.id === 'M_MSG' && chatUnreadCount > 0 && (
                     <span className="absolute top-1 right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white shadow animate-pulse">
                       {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
@@ -277,7 +288,7 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             title={showTestAccounts ? '테스트 계정 표시 중 — 눌러서 숨기기' : '테스트 계정 숨김 중 — 눌러서 표시하기'}
           >
             <span className="text-[14px] leading-none">🧪</span>
-            <span>테스트 계정</span>
+            <span className="@max-[800px]:hidden">테스트 계정</span>
             <span
               className={`relative h-4 w-7 rounded-full transition-colors ${showTestAccounts ? 'bg-teal' : 'bg-white/30'}`}
             >
