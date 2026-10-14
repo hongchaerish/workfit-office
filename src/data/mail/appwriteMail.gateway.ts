@@ -4,6 +4,7 @@ import type { MailDetail, MailFolder, MailRef } from '@/domain/mail/schema';
 import { Functions } from 'appwrite';
 import { client } from '@/shared/lib/appwrite';
 import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
+import { RELOGIN_MESSAGE, requestRelogin } from '@/shared/lib/relogin';
 import type {
   MailAttachmentContent,
   MailConnectionResult,
@@ -73,10 +74,8 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
 
   const token = getWiddyToken();
   if (!token) {
-    throw new MailError(
-      'FORBIDDEN',
-      '로그인 정보가 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.',
-    );
+    requestRelogin();
+    throw new MailError('FORBIDDEN', RELOGIN_MESSAGE);
   }
 
   let raw: string;
@@ -116,6 +115,11 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
   }
 
   if (body.error) {
+    // 서명 토큰이 무효(키 교체·만료) — 앱 셸이 다시 로그인하도록 안내한다.
+    if (status === 401) {
+      requestRelogin();
+      throw new MailError('FORBIDDEN', RELOGIN_MESSAGE);
+    }
     const code = ERROR_MAP[body.error.code] ?? 'PROVIDER_UNAVAILABLE';
     throw new MailError(code, body.error.message || '메일 서버 요청을 처리하지 못했습니다.');
   }

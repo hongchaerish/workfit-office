@@ -28,6 +28,7 @@ import { useSendMail } from '@/features/mail/useMailbox';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import MailAddressField from './MailAddressField';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 
 const MODE_TITLE: Record<MailComposeMode, string> = {
   new: '새 메일',
@@ -342,7 +343,7 @@ export default function MailComposer({ actor, accounts, mode, source, draft, ini
           }
         }}
       >
-        {error && <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+        {error && <ErrorNotice message={error} />}
 
           <label className="block">
             <span className="mb-1 block text-[10px] font-bold text-ink3">보내는 계정</span>

@@ -26,6 +26,7 @@ import MobileGalleryScreen from './MobileGalleryScreen';
 import MobileOrgChartScreen from './MobileOrgChartScreen';
 import MobileComingSoon from './MobileComingSoon';
 import IosPwaGuideModal, { checkDeviceEnvironment, isGuideDismissedToday } from './IosPwaGuideModal';
+import { ReloginDialog } from '@/app/auth/ReloginDialog';
 
 /**
  * 모바일 메신저 PWA 셸 — 데스크톱 AppShell 밖의 전체화면 라우트(/m).
@@ -105,6 +106,7 @@ export default function MobileApp() {
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center bg-black/10">
+      <ReloginDialog variant="mobile" />
       <div
         className="flex h-full w-full max-w-[480px] flex-col overflow-hidden shadow-xl"
         style={{ background: '#101830', paddingTop: 'env(safe-area-inset-top)' }}

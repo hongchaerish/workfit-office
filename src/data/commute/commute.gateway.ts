@@ -1,6 +1,7 @@
 import { Functions } from 'appwrite';
 import { client } from '@/shared/lib/appwrite';
 import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
+import { RELOGIN_MESSAGE, requestRelogin } from '@/shared/lib/relogin';
 import {
   commuteEmployeeSchema,
   commuteRecordSchema,
@@ -48,7 +49,8 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
   const token = getWiddyToken();
   const userId = getCurrentUserId();
   if (!token && !userId) {
-    throw new CommuteGatewayError('FORBIDDEN', '로그인 정보가 만료되었습니다. 다시 로그인해 주세요.');
+    requestRelogin();
+    throw new CommuteGatewayError('FORBIDDEN', RELOGIN_MESSAGE);
   }
 
   let raw: string;
