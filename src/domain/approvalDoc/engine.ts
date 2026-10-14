@@ -154,11 +154,22 @@ export function applyDecision(
 }
 
 /**
+ * 고쳐서 (재)상신할 수 있는 상태 — 상신 전(임시저장)과 되돌아온 문서(반려·회수·시행반송).
+ * 이 상태의 문서는 **그 문서 그대로** 고쳐 다시 상신한다. 새 문서를 만들면 원래 반려 문서가
+ * 상신함 [반려]에 계속 남는다(2026-10-14 수정 전 기안 화면의 버그).
+ */
+const EDITABLE_STATUSES = ['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수', '시행반송'];
+
+export function isEditableStatus(status: string): boolean {
+  return EDITABLE_STATUSES.includes(status);
+}
+
+/**
  * 상신/재상신 — 임시저장|반려|회수 → 진행중. 결재선에 차단 노드 1개 이상 필요.
  * 재상신 시 이전 라운드의 결정을 초기화(대기)해 새 결재 라운드를 시작한다.
  */
 export function submit(doc: ApprovalDoc, at: string): ApprovalDoc {
-  if (!['임시저장', '반려', '긴급 조치 사후 검토 반려', '회수', '시행반송'].includes(doc.status)) {
+  if (!isEditableStatus(doc.status)) {
     throw new ApprovalError('임시저장·반려·회수 상태에서만 상신할 수 있습니다');
   }
   if (!doc.steps.some(isBlocking)) throw new ApprovalError('결재자를 1명 이상 지정하세요');
