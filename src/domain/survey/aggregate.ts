@@ -127,3 +127,13 @@ export function aggregateSurveyResult(
     questions: results,
   };
 }
+
+/**
+ * 결과 화면에 보내는 값 — 서버가 집계해 준다.
+ * 익명 설문은 주관식의 응답 ID를 비우고 순서를 섞어서 보낸다.
+ */
+export interface SurveyResultView {
+  summary: SurveyResultSummary;
+  /** responseId → 표시 이름. 기명 설문을 작성자·관리자가 볼 때만 채운다. 익명이면 빈 객체. */
+  respondents: Record<string, string>;
+}
