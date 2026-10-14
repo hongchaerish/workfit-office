@@ -51,7 +51,18 @@ export function UserMenu({ onClose }: UserMenuProps) {
   return (
     <>
       <div className="fixed inset-0 z-[55]" onClick={onClose} />
-      <div className="absolute right-[-4px] top-[calc(100%+12px)] z-[60] w-84 overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.28)]">
+      {/*
+        화면 배율(--font-scale)만큼 커지므로 높이·너비를 실제 화면에 맞춰 제한한다.
+        내용은 가운데만 스크롤되고, [도움말 | 로그아웃] 줄은 작은 화면에서도 항상 맨 아래에 보인다.
+      */}
+      <div
+        className="absolute right-[-4px] top-[calc(100%+12px)] z-[60] flex w-84 flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-[0_16px_48px_rgba(16,24,48,0.28)]"
+        style={{
+          maxHeight: 'calc(100vh / var(--font-scale, 1) - 72px)',
+          maxWidth: 'calc(100vw / var(--font-scale, 1) - 16px)',
+        }}
+      >
+        <div className="menu-scroll min-h-0 flex-1 overflow-y-auto">
         {/* 프로필 헤더 */}
         <div className="flex flex-col items-center gap-2 bg-teal-soft/80 px-5 pb-4 pt-5">
           {/* 프로필 사진 또는 이니셜 아바타 + 상태 점 */}
@@ -184,7 +195,9 @@ export function UserMenu({ onClose }: UserMenuProps) {
           </button>
         </div>
 
-        <div className="flex border-t border-border">
+        </div>
+
+        <div className="flex shrink-0 border-t border-border">
           <button onClick={onClose} className="flex-1 border-r border-border py-2.5 text-[11.5px] font-semibold text-ink2 hover:bg-panel-alt">도움말</button>
           <button
             onClick={() => {
