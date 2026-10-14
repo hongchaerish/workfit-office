@@ -80,8 +80,11 @@ function LocalSurveyScreen() {
   const detail = openSurvey ?? respondSurvey ?? resultSurvey;
   const questionsQuery = useSurveyQuestions(detail?.id ?? null);
 
-  const loading = usersQuery.isLoading || departmentsQuery.isLoading || mineQuery.isLoading || respondentQuery.isLoading;
-  const queryError = usersQuery.error ?? departmentsQuery.error ?? mineQuery.error ?? respondentQuery.error;
+  // 참여 기록을 못 읽으면 모든 설문이 '미참여'로 보이므로 화면 전체 오류로 다룬다.
+  const loading = usersQuery.isLoading || departmentsQuery.isLoading || mineQuery.isLoading || respondentQuery.isLoading
+    || participationQuery.isLoading;
+  const queryError = usersQuery.error ?? departmentsQuery.error ?? mineQuery.error ?? respondentQuery.error
+    ?? participationQuery.error;
 
   const go = (params: Record<string, string>) => {
     setNotice('');
@@ -129,6 +132,10 @@ function LocalSurveyScreen() {
   if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   const questions = questionsQuery.data ?? [];
+  // 질문을 다 받기 전에는 상세 화면을 그리지 않는다. 빈 목록으로 편집기를 열고 저장하면 질문이 모두 지워진다.
+  // 한 번 받은 뒤 다시 불러오기가 실패해도 편집 중인 화면을 내리지 않도록 데이터 유무로 본다.
+  const questionsReady = questionsQuery.data !== undefined;
+  const questionsError = questionsQuery.error;
   const hasOpenToAnswer = inbox.some((row) => row.status === 'ACTIVE' && !(participationQuery.data ?? []).includes(row.id));
 
   return (
@@ -169,7 +176,18 @@ function LocalSurveyScreen() {
         )}
       >
         <main>
-        {respondSurvey && (
+        {detail && !questionsReady && (questionsError ? (
+          <div className="flex flex-col items-start gap-2">
+            <ErrorNotice message={questionsError instanceof Error ? `설문 질문을 불러오지 못했습니다. ${questionsError.message}` : '설문 질문을 불러오지 못했습니다.'} />
+            <div className="flex gap-2">
+              <Button onClick={() => questionsQuery.refetch()} variant="primary" size="sm">다시 불러오기</Button>
+              <Button onClick={() => go({ tab })} size="sm">목록으로</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid min-h-[calc(40vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">설문 질문을 불러오는 중…</div>
+        ))}
+        {questionsReady && respondSurvey && (
           <SurveyResponseForm
             key={respondSurvey.id}
             actor={actor}
@@ -180,7 +198,7 @@ function LocalSurveyScreen() {
             onBack={() => go({ tab: 'participate' })}
           />
         )}
-        {resultSurvey && (
+        {questionsReady && resultSurvey && (
           <SurveyResult
             key={resultSurvey.id}
             actor={actor}
@@ -190,10 +208,10 @@ function LocalSurveyScreen() {
             onNotice={setNotice}
           />
         )}
-        {openSurvey && previewId && (
+        {questionsReady && openSurvey && previewId && (
           <SurveyPreview survey={openSurvey} questions={questions} onBack={() => go({ tab: 'mine' })} />
         )}
-        {openSurvey && editId && (
+        {questionsReady && openSurvey && editId && (
           <SurveyBuilder
             key={openSurvey.id}
             actor={actor}

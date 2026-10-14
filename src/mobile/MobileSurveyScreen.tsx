@@ -11,6 +11,7 @@ import { resolveUserDeptId } from '@/features/survey/useSurveyResponse';
 import { useMySurveys } from '@/features/survey/useSurveys';
 import { usePermission } from '@/features/auth/usePermission';
 import type { Survey } from '@/domain/survey/schema';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 import MobileCommonHeader from './MobileCommonHeader';
 
 export default function MobileSurveyScreen() {
@@ -42,6 +43,11 @@ export default function MobileSurveyScreen() {
   const completedSurveys = useMemo(() => {
     return surveys.filter((s) => completedIds.has(s.id) || s.status === 'CLOSED');
   }, [surveys, completedIds]);
+
+  // 불러오기 실패를 빈 목록으로 보이면 "설문이 없다"·"아직 안 했다"로 오인한다.
+  const listQueries = activeTab === 'mine' ? [mySurveysQuery] : [respondentQuery, participationQuery];
+  const listError = listQueries.find((query) => query.error)?.error ?? null;
+  const listLoading = listQueries.some((query) => query.isLoading);
 
   const list = activeTab === 'pending'
     ? pendingSurveys
@@ -110,7 +116,11 @@ export default function MobileSurveyScreen() {
 
       {/* 2. 설문 목록 */}
       <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2.5">
-        {list.length === 0 ? (
+        {listError ? (
+          <ErrorNotice message={listError instanceof Error ? listError.message : '설문 목록을 불러오지 못했습니다.'} />
+        ) : listLoading ? (
+          <div className="py-16 text-center text-[12px] font-semibold text-ink3">설문을 불러오는 중…</div>
+        ) : list.length === 0 ? (
           <div className="py-16 text-center text-ink3 border border-dashed border-border/80 rounded-2xl bg-white/60">
             <BarChart3 size={28} className="mx-auto mb-1.5 text-ink3/40" />
             <p className="text-[12px] font-bold text-ink">
