@@ -66,6 +66,8 @@ export function aggregateSurveyResult(
   const submittedAtById = new Map(responses.map((response) => [response.id, response.submittedAt]));
   const answersByQuestion = new Map<string, SurveyAnswer[]>();
   for (const answer of answers) {
+    // 응답 문서가 없는 답변은 끝나지 않은 제출의 잔여물이다(응답을 마지막에 저장한다).
+    if (!submittedAtById.has(answer.responseId)) continue;
     const bucket = answersByQuestion.get(answer.questionId);
     if (bucket) bucket.push(answer);
     else answersByQuestion.set(answer.questionId, [answer]);

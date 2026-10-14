@@ -18,6 +18,8 @@ export interface DispatchDeps {
   secret: string;
   now?: () => Date;
   newId: () => string;
+  /** 요청 마감까지 남은 시간(ms). 함수 진입점이 실행 제한에 맞춰 넘긴다. */
+  remainingMs?: () => number;
 }
 
 type Body = { data: unknown } | { error: { code: string; message: string } };
@@ -71,6 +73,7 @@ export async function dispatch(raw: unknown, deps: DispatchDeps): Promise<Dispat
     directory: deps.directory,
     now: deps.now ?? (() => new Date()),
     newId: deps.newId,
+    remainingMs: deps.remainingMs,
     actor: { user, deptId: resolveDeptId(departments, user.dept), isAdmin },
   };
   try {
@@ -78,6 +81,9 @@ export async function dispatch(raw: unknown, deps: DispatchDeps): Promise<Dispat
   } catch (error) {
     if (error instanceof SurveyError) return fail(400, error.code, error.message);
     if (error instanceof Error && error.name === 'ZodError') return fail(400, 'INVALID_INPUT', '입력값이 올바르지 않습니다.');
+    if (error instanceof Error && error.name === 'DeadlineError') {
+      return fail(503, 'TRY_AGAIN', '설문 서버 응답이 늦습니다. 잠시 후 다시 시도하세요.');
+    }
     throw error;
   }
 }

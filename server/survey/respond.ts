@@ -10,7 +10,7 @@ import {
   SurveyError,
   validateSurveyAnswers,
 } from '@/domain/survey/engine';
-import { surveySchema, type Survey } from '@/domain/survey/schema';
+import type { Survey } from '@/domain/survey/schema';
 import { surveyAnswerSchema, type SurveyAnswerInput } from '@/domain/surveyAnswer/schema';
 import { surveyParticipationId, surveyParticipationSchema } from '@/domain/surveyParticipation/schema';
 import { assertAnonymousResponse, surveyResponseSchema } from '@/domain/surveyResponse/schema';
@@ -22,9 +22,12 @@ import type { ServiceCtx } from './port';
  * 응답 제출·참여 현황·결과.
  *
  * 익명 설문에서 응답자를 알아낼 수 있는 값을 남기지 않는다 — 참여 기록에는 시각이 없고,
- * 응답은 무작위 ID에 날짜만 갖는다. 결과도 서버가 집계해 응답 ID·순서를 지운 채 보낸다.
+ * 응답은 무작위 ID에 날짜만 갖는다. 제출은 설문 문서도 고치지 않는다(갱신 시각이 드러나므로). 결과도 서버가 집계해 응답 ID·순서를 지운 채 보낸다.
  * ([[docs/superpowers/specs/2026-10-14-survey-server-design.md]] §6 · §7)
  */
+
+/** 제출 쓰기를 시작하려면 요청 마감까지 이만큼은 남아 있어야 한다(쓰기·되돌리기 시간). */
+const SUBMIT_MIN_REMAINING_MS = 8000;
 
 export interface SurveySubmission {
   surveyId: string;
@@ -43,17 +46,16 @@ export async function submit(ctx: ServiceCtx, submission: SurveySubmission): Pro
   const now = ctx.now();
   const stamp = survey.anonymous ? kstDayStamp(now) : now.toISOString();
 
-  // 1) 참여 기록을 새로 만드는 데 성공한 요청만 진행한다 — 동시 제출 중 하나만 통과한다.
+  if (ctx.remainingMs && ctx.remainingMs() < SUBMIT_MIN_REMAINING_MS) {
+    throw new SurveyError('TRY_AGAIN', '서버 응답이 늦어 제출하지 못했습니다. 잠시 후 다시 제출하세요.');
+  }
+
   const participation = surveyParticipationSchema.parse({
     id: surveyParticipationId(survey.id, user.id),
     surveyId: survey.id,
     userId: user.id,
     responded: true,
   });
-  if ((await ctx.store.insert('surveyParticipations', participation)) === 'exists') {
-    throw new SurveyError('ALREADY_RESPONDED', '이미 참여한 설문입니다.');
-  }
-
   const response = surveyResponseSchema.parse({
     id: ctx.newId(),
     surveyId: survey.id,
@@ -74,29 +76,47 @@ export async function submit(ctx: ServiceCtx, submission: SurveySubmission): Pro
     createdAt: stamp,
   }));
 
-  // 2) 응답·답변. 중간에 실패하면 쓴 것을 지우고 참여 기록도 되돌려 다시 낼 수 있게 한다.
-  const written: { coll: 'surveyResponses' | 'surveyAnswers'; id: string }[] = [];
-  try {
-    await ctx.store.insert('surveyResponses', response);
-    written.push({ coll: 'surveyResponses', id: response.id });
-    for (const row of rows) {
-      await ctx.store.insert('surveyAnswers', row);
-      written.push({ coll: 'surveyAnswers', id: row.id });
-    }
-  } catch (error) {
-    for (const item of written.reverse()) await ctx.store.remove(item.coll, item.id).catch(() => undefined);
+  /**
+   * 실패 시 되돌리기. 시간 초과로 실패한 쓰기는 실제로는 저장됐을 수 있으므로, 성공 여부와
+   * 상관없이 시도한 문서를 모두 지운다(없으면 404 를 무시한다). 참여 기록은 지운 뒤 다시
+   * 확인해, 늦게 도착한 생성이 남아 있으면 한 번 더 지운다.
+   */
+  const rollback = async (answerIds: string[]) => {
+    await Promise.all(answerIds.map((id) => ctx.store.remove('surveyAnswers', id).catch(() => undefined)));
     await ctx.store.remove('surveyParticipations', participation.id).catch(() => undefined);
+    if (await ctx.store.exists('surveyParticipations', participation.id).catch(() => false)) {
+      await ctx.store.remove('surveyParticipations', participation.id).catch(() => undefined);
+    }
+  };
+
+  // 1) 참여 기록을 새로 만드는 데 성공한 요청만 진행한다 — 동시 제출 중 하나만 통과한다.
+  let claimed: 'created' | 'exists';
+  try {
+    claimed = await ctx.store.insert('surveyParticipations', participation);
+  } catch (error) {
+    await rollback([]);
     throw error;
   }
+  if (claimed === 'exists') throw new SurveyError('ALREADY_RESPONDED', '이미 참여한 설문입니다.');
 
-  // 3) 응답 수는 더하지 않고 센다. 첫 응답 시각은 익명이면 날짜만.
-  const latest = await requireSurvey(ctx, survey.id);
-  await ctx.store.save('surveys', surveySchema.parse({
-    ...latest,
-    responseCount: await ctx.store.countResponses(survey.id),
-    firstRespondedAt: latest.firstRespondedAt ?? stamp,
-    updatedAt: now.toISOString(),
-  }));
+  // 2) 답변. 응답 문서가 없는 답변은 결과에 세지 않으므로, 여기서 끊겨도 결과가 틀리지 않는다.
+  const settled = await Promise.allSettled(rows.map((row) => ctx.store.insert('surveyAnswers', row)));
+  const failed = settled.find((item): item is PromiseRejectedResult => item.status === 'rejected');
+  if (failed) {
+    await rollback(rows.map((row) => row.id));
+    throw failed.reason;
+  }
+
+  // 3) 응답을 마지막에 쓴다 — 이 문서가 생겨야 제출이 완료된 것이다.
+  //    결과를 모르는 실패면 실제로 저장됐는지 확인해, 저장됐으면 성공으로 본다.
+  try {
+    await ctx.store.insert('surveyResponses', response);
+  } catch (error) {
+    if (await ctx.store.exists('surveyResponses', response.id).catch(() => false)) return { submitted: true };
+    await ctx.store.remove('surveyResponses', response.id).catch(() => undefined);
+    await rollback(rows.map((row) => row.id));
+    throw error;
+  }
   return { submitted: true };
 }
 

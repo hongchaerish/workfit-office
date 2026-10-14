@@ -11,6 +11,8 @@ export type MemoryStore = SurveyStorePort & {
   dump(coll: Coll): Row[];
   /** 지정한 컬렉션의 다음 insert 를 한 번 실패시킨다(보상 처리 시험용). */
   failNextInsert?: Coll;
+  /** 지정한 컬렉션의 다음 insert 를 저장은 하되 실패로 돌려준다(응답만 늦은 시간 초과 흉내). */
+  landThenFailNextInsert?: Coll;
 };
 
 /** 테스트용 메모리 저장소. 깊은 복사로 돌려줘 호출부가 내부 상태를 바꾸지 못하게 한다. */
@@ -40,7 +42,10 @@ export function createMemoryStore(seed: Partial<Record<Coll, Row[]>> = {}): Memo
     async listQuestions(surveyId) { return bySurvey<SurveyQuestion>('surveyQuestions', surveyId); },
     async listResponses(surveyId) { return bySurvey<SurveyResponse>('surveyResponses', surveyId); },
     async listAnswers(surveyId) { return bySurvey<SurveyAnswer>('surveyAnswers', surveyId); },
-    async countResponses(surveyId) { return bySurvey<SurveyResponse>('surveyResponses', surveyId).length; },
+    async responseStats(surveyId) {
+      const rows = bySurvey<SurveyResponse>('surveyResponses', surveyId);
+      return { count: rows.length, firstSubmittedAt: rows[0]?.submittedAt ?? null };
+    },
     async hasParticipation(surveyId, userId) { return data.surveyParticipations.has(`${surveyId}__${userId}`); },
     async listParticipatedSurveyIds(userId) {
       return all<SurveyParticipation>('surveyParticipations')
@@ -54,9 +59,19 @@ export function createMemoryStore(seed: Partial<Record<Coll, Row[]>> = {}): Memo
       }
       if (data[coll].has(row.id)) return 'exists';
       data[coll].set(row.id, structuredClone(row));
+      if (store.landThenFailNextInsert === coll) {
+        store.landThenFailNextInsert = undefined;
+        throw new Error(`insert ${coll} 응답 없음(테스트)`);
+      }
       return 'created';
     },
     async save(coll, row) { data[coll].set(row.id, structuredClone(row)); },
+    async update(coll, id, patch) {
+      const row = data[coll].get(id);
+      if (!row) throw Object.assign(new Error(`${coll}/${id} 없음`), { code: 404 });
+      data[coll].set(id, { ...row, ...structuredClone(patch) });
+    },
+    async exists(coll, id) { return data[coll].has(id); },
     async remove(coll, id) { data[coll].delete(id); },
     dump(coll) { return all<Row>(coll); },
   };

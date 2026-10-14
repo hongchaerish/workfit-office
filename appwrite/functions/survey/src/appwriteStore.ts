@@ -23,7 +23,15 @@ type Parser<T> = { safeParse(value: unknown): { success: boolean; data?: T } };
 const isCode = (error: unknown, code: number) => (error as { code?: number })?.code === code;
 
 /** node-appwrite 로 설문 저장소·명부 포트를 만든다. 키는 함수의 동적 키(x-appwrite-key)를 쓴다. */
-export function createAppwritePorts(endpoint: string, project: string, key: string, databaseId: string, trace?: (message: string) => void) {
+export function createAppwritePorts(
+  endpoint: string,
+  project: string,
+  key: string,
+  databaseId: string,
+  trace?: (message: string) => void,
+  /** 요청 전체 마감(epoch ms). 이 시각이 지나면 DB 호출을 보내지 않는다. */
+  until?: number,
+) {
   const raw = new Databases(new Client().setEndpoint(endpoint).setProject(project).setKey(key));
   /**
    * 모든 DB 호출에 시간 제한을 건다(`server/survey/deadline.ts` 참고). 읽기는 멈추면 다시 보내고,
@@ -41,7 +49,7 @@ export function createAppwritePorts(endpoint: string, project: string, key: stri
         try {
           return await withDeadline(
             () => (value as (...a: unknown[]) => Promise<unknown>).apply(target, args),
-            read ? { timeoutMs: 4000, attempts: 3, label } : { timeoutMs: 10000, attempts: 1, label },
+            read ? { timeoutMs: 4000, attempts: 3, label, until } : { timeoutMs: 10000, attempts: 1, label, until },
           );
         } finally {
           trace?.(`← ${label} ${Date.now() - started}ms`);
@@ -60,9 +68,11 @@ export function createAppwritePorts(endpoint: string, project: string, key: stri
     }
     return row;
   };
-  const encode = (coll: string, item: { id: string }) => {
+  const encode = (coll: string, item: Record<string, unknown>) => {
     const row: Record<string, unknown> = { ...item };
-    for (const field of JSON_FIELDS[coll] ?? []) row[field] = row[field] == null ? null : JSON.stringify(row[field]);
+    for (const field of JSON_FIELDS[coll] ?? []) {
+      if (field in row) row[field] = row[field] == null ? null : JSON.stringify(row[field]);
+    }
     return row;
   };
 
@@ -101,13 +111,14 @@ export function createAppwritePorts(endpoint: string, project: string, key: stri
     listQuestions: (surveyId) => listAll('surveyQuestions', surveyQuestionSchema, bySurvey(surveyId)),
     listResponses: (surveyId) => listAll('surveyResponses', surveyResponseSchema, bySurvey(surveyId)),
     listAnswers: (surveyId) => listAll('surveyAnswers', surveyAnswerSchema, bySurvey(surveyId)),
-    async countResponses(surveyId) {
+    async responseStats(surveyId) {
       const page = await dbs.listDocuments({
         databaseId,
         collectionId: 'surveyResponses',
-        queries: [...bySurvey(surveyId), Query.limit(1)],
+        queries: [...bySurvey(surveyId), Query.orderAsc('$createdAt'), Query.limit(1)],
       });
-      return page.total;
+      const first = page.documents[0] as unknown as { submittedAt?: string } | undefined;
+      return { count: page.total, firstSubmittedAt: first?.submittedAt ?? null };
     },
     async hasParticipation(surveyId, userId) {
       try {
@@ -137,6 +148,18 @@ export function createAppwritePorts(endpoint: string, project: string, key: stri
       } catch (error) {
         if (!isCode(error, 404)) throw error;
         await dbs.createDocument({ databaseId, collectionId: coll, documentId: row.id, data: encode(coll, row) });
+      }
+    },
+    async update(coll: Coll, id, patch) {
+      await dbs.updateDocument({ databaseId, collectionId: coll, documentId: id, data: encode(coll, patch) });
+    },
+    async exists(coll: Coll, id) {
+      try {
+        await dbs.getDocument({ databaseId, collectionId: coll, documentId: id });
+        return true;
+      } catch (error) {
+        if (isCode(error, 404)) return false;
+        throw error;
       }
     },
     async remove(coll: Coll, id) {

@@ -40,11 +40,29 @@ const ymd = (date: Date) => {
   return `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, '0')}${String(kst.getUTCDate()).padStart(2, '0')}`;
 };
 
-/** 기간이 지난 설문은 저장 상태도 맞춰 둔다. 바뀐 게 없으면 쓰지 않는다. */
+/**
+ * 읽을 때마다 거치는 정리.
+ *   - 기간이 지난 설문은 저장 상태도 맞춰 둔다. 상태 칸만 고쳐 그 사이 작성자가 고친 내용을 덮지 않는다.
+ *   - 응답 수·첫 응답은 응답 문서에서 센다. 제출이 설문 문서를 고치면 그 갱신 시각으로
+ *     누가 언제 냈는지 드러나므로, 제출은 설문 문서를 건드리지 않는다.
+ */
 async function fresh(ctx: ServiceCtx, row: Survey): Promise<Survey> {
   const next = deriveSurvey(row, ctx.now());
-  if (next !== row) await ctx.store.save('surveys', surveySchema.parse(next));
-  return next;
+  if (next !== row) {
+    await ctx.store.update('surveys', row.id, {
+      status: next.status,
+      closedAt: next.closedAt,
+      version: next.version,
+      updatedAt: next.updatedAt,
+    });
+  }
+  if (next.status === 'DRAFT') return { ...next, responseCount: 0, firstRespondedAt: null };
+  const stats = await ctx.store.responseStats(row.id);
+  return surveySchema.parse({
+    ...next,
+    responseCount: stats.count,
+    firstRespondedAt: stats.count > 0 ? stats.firstSubmittedAt : null,
+  });
 }
 
 export async function requireSurvey(ctx: ServiceCtx, id: string): Promise<Survey> {
@@ -107,9 +125,11 @@ async function insertQuestions(ctx: ServiceCtx, rows: Omit<SurveyQuestion, 'id'>
   return out;
 }
 
+/** 응답 수·첫 응답은 읽을 때 세는 값이라 저장하지 않는다(`fresh`). */
 async function saveSurvey(ctx: ServiceCtx, row: Survey): Promise<Survey> {
   const valid = surveySchema.parse(row);
-  await ctx.store.save('surveys', valid);
+  const { id, responseCount: _count, firstRespondedAt: _first, ...patch } = valid;
+  await ctx.store.update('surveys', id, patch);
   return valid;
 }
 

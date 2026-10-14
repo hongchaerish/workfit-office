@@ -25,7 +25,14 @@ interface FnContext {
   error(message: string): void;
 }
 
+/**
+ * 요청 하나에 쓸 시간. 함수 실행 제한(appwrite.json timeout 30초)보다 짧게 잡아, 강제 종료로
+ * 쓰기가 반쯤 남는 대신 '잠시 후 다시' 오류로 끝나게 한다.
+ */
+const REQUEST_BUDGET_MS = 25_000;
+
 export default async ({ req, res, log, error }: FnContext) => {
+  const deadlineAt = Date.now() + REQUEST_BUDGET_MS;
   const secret = process.env.AUTH_TOKEN_SECRET || process.env.WIDDY_TOKEN_SECRET || '';
   if (!secret) return res.json({ error: { code: 'INVALID_INPUT', message: '설문 서버가 설정되지 않았습니다.' } }, 500);
 
@@ -33,12 +40,13 @@ export default async ({ req, res, log, error }: FnContext) => {
   const project = process.env.APPWRITE_FUNCTION_PROJECT_ID || '';
   const key = req.headers['x-appwrite-key'] || process.env.APPWRITE_API_KEY || '';
   const trace = process.env.SURVEY_DEBUG ? (message: string) => log(`${new Date().toISOString().slice(11, 23)} ${message}`) : undefined;
-  const ports = createAppwritePorts(endpoint, project, key, process.env.APPWRITE_DATABASE_ID || 'workfit', trace);
+  const ports = createAppwritePorts(endpoint, project, key, process.env.APPWRITE_DATABASE_ID || 'workfit', trace, deadlineAt);
 
   try {
     const result = await dispatch(req.bodyJson, {
       ...ports,
       secret,
+      remainingMs: () => deadlineAt - Date.now(),
       // 응답·답변 ID — 순번이 아닌 무작위(제출 순서를 감춘다). Appwrite ID 규칙(36자) 안.
       newId: () => crypto.randomUUID().replace(/-/g, '').slice(0, 20),
     });

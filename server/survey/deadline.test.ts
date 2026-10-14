@@ -29,3 +29,13 @@ test('시간 초과가 아닌 오류(404 등)는 다시 시도하지 않고 그�
   await assert.rejects(withDeadline(() => { calls += 1; return Promise.reject(notFound); }, { timeoutMs: 50, attempts: 3 }), (e: unknown) => e === notFound);
   assert.equal(calls, 1);
 });
+
+test('요청 전체 마감(until)을 넘기면 시도마다의 제한보다 먼저 끊고, 지난 뒤에는 보내지도 않는다', async () => {
+  let calls = 0;
+  const started = Date.now();
+  await assert.rejects(withDeadline(() => { calls += 1; return never(); }, { timeoutMs: 5000, attempts: 3, until: Date.now() + 30 }), /시간 초과/);
+  assert.ok(Date.now() - started < 1000);
+  const before = calls;
+  await assert.rejects(withDeadline(() => { calls += 1; return Promise.resolve('x'); }, { timeoutMs: 5000, attempts: 3, until: Date.now() - 1 }), /시간 초과/);
+  assert.equal(calls, before);
+});

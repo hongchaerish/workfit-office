@@ -23,7 +23,8 @@ export type SurveyErrorCode =
   | 'VERSION_CHANGED'
   | 'QUESTION_LIMIT'
   | 'REQUIRED_ANSWER'
-  | 'ANSWER_FORMAT';
+  | 'ANSWER_FORMAT'
+  | 'TRY_AGAIN';
 
 export class SurveyError extends Error {
   constructor(public readonly code: SurveyErrorCode, message: string) {

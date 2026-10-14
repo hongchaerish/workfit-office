@@ -19,7 +19,7 @@ test('설문별 조회는 surveyId 로 좁힌다', async () => {
     ],
   });
   assert.deepEqual((await store.listResponses('S1')).map((r) => r.id), ['r1']);
-  assert.equal(await store.countResponses('S2'), 1);
+  assert.equal((await store.responseStats('S2')).count, 1);
 });
 
 test('failNextInsert 로 지정한 컬렉션의 다음 insert 는 실패한다(보상 시험용)', async () => {

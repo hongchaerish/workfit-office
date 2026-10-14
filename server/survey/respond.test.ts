@@ -117,3 +117,77 @@ test('참여 현황과 응답자 목록', async () => {
   assert.deepEqual(await myParticipations(as(a), {}), [id]);
   assert.deepEqual((await listForRespondent(as(b), {})).map((s) => s.id), [id]);
 });
+
+/* ---------------------------------------------------- 최종 검토 I1~I3 */
+
+test('I1 제출은 설문 문서를 고치지 않는다 — 응답 수·첫 응답은 읽을 때 센다', async () => {
+  const { ctx, id, as, answer } = await setup();
+  const before = ctx.store.dump('surveys').find((row) => row.id === id);
+  await submit(as(a), answer('x'));
+  assert.deepEqual(ctx.store.dump('surveys').find((row) => row.id === id), before);
+  const read = await getSurvey(ctx, { id });
+  assert.equal(read.responseCount, 1);
+  assert.equal(read.firstRespondedAt, '2026-10-13T15:00:00.000Z');
+});
+
+test('I2 기간 만료 상태 정리는 상태 칸만 고친다 — 그 사이 작성자가 고친 제목을 덮지 않는다', async () => {
+  const { ctx, id } = await setup();
+  const later = { ...ctx, now: () => new Date('2026-10-21T00:00:00Z') };
+  const stale = await ctx.store.getSurvey(id);
+  // 작성자가 방금 제목을 고쳤지만, 이 요청은 그 전에 읽은 문서를 들고 있다
+  await ctx.store.update('surveys', id, { title: '새 제목' });
+  const getSurveyOrig = ctx.store.getSurvey;
+  ctx.store.getSurvey = async () => stale;
+  await getSurvey(later, { id });
+  ctx.store.getSurvey = getSurveyOrig;
+  const saved = ctx.store.dump('surveys').find((row) => row.id === id) as Record<string, unknown>;
+  assert.equal(saved.title, '새 제목');
+  assert.equal(saved.status, 'CLOSED');
+});
+
+test('I3a 참여 기록 저장이 실제로는 됐는데 실패로 돌아오면 지우고 다시 낼 수 있다', async () => {
+  const { ctx, as, answer } = await setup();
+  ctx.store.landThenFailNextInsert = 'surveyParticipations';
+  await assert.rejects(submit(as(a), answer('x')));
+  assert.equal(ctx.store.dump('surveyParticipations').length, 0);
+  await submit(as(a), answer('x'));
+  assert.equal(ctx.store.dump('surveyResponses').length, 1);
+});
+
+test('I3b 답변 저장이 실제로는 됐는데 실패로 돌아와도 고아 답변을 남기지 않는다', async () => {
+  const { ctx, as, answer } = await setup();
+  ctx.store.landThenFailNextInsert = 'surveyAnswers';
+  await assert.rejects(submit(as(a), answer('x')));
+  assert.equal(ctx.store.dump('surveyAnswers').length, 0);
+  assert.equal(ctx.store.dump('surveyResponses').length, 0);
+  assert.equal(ctx.store.dump('surveyParticipations').length, 0);
+});
+
+test('I3b 응답(마지막 저장)이 실제로는 됐는데 실패로 돌아오면 제출 성공으로 본다', async () => {
+  const { ctx, id, as, answer } = await setup();
+  ctx.store.landThenFailNextInsert = 'surveyResponses';
+  await submit(as(a), answer('x'));
+  assert.equal(ctx.store.dump('surveyResponses').length, 1);
+  assert.equal(ctx.store.dump('surveyAnswers').length, 2);
+  assert.deepEqual(await myParticipations(as(a), {}), [id]);
+});
+
+test('I3c 남은 시간이 모자라면 아무것도 쓰지 않고 다시 시도하라고 한다', async () => {
+  const { ctx, as, answer } = await setup();
+  await assert.rejects(submit({ ...as(a), remainingMs: () => 3000 }, answer('x')), isCode('TRY_AGAIN'));
+  assert.equal(ctx.store.dump('surveyParticipations').length, 0);
+  assert.equal(ctx.store.dump('surveyAnswers').length, 0);
+});
+
+test('I3b 응답 문서 없는 답변(늦게 도착한 고아)은 결과에 세지 않는다', async () => {
+  const { ctx, as, answer, id, qs } = await setup({ ...DRAFT, anonymous: false });
+  await submit(as(a), answer('하나'));
+  await ctx.store.insert('surveyAnswers', {
+    id: 'orphan1', surveyId: id, responseId: 'ghost', questionId: qs[1].id,
+    selectedOptionIds: [], textValue: '유령', ratingValue: null, createdAt: '2026-10-14T03:00:00.000Z',
+  } as never);
+  const view = await readResult(as(owner), { surveyId: id });
+  const text = view.summary.questions.find((q) => q.kind === 'TEXT');
+  assert.ok(text && text.kind === 'TEXT');
+  assert.deepEqual(text.entries.map((e) => e.value), ['하나']);
+});
