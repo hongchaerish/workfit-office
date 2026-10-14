@@ -14,6 +14,7 @@ import { ScrollTopButton } from './ScrollTopButton';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useToastNotificationsTrigger } from '@/features/notification/useNotifications';
+import { ReloginDialog } from '@/app/auth/ReloginDialog';
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -217,6 +218,7 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-bg w-full min-w-fit">
+      <ReloginDialog />
       <Topbar
         activeModuleId={activeModuleId}
         activeUrl={activeUrl}

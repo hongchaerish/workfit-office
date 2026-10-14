@@ -1,4 +1,5 @@
 import { SurveyError, type SurveyErrorCode } from '@/domain/survey/engine';
+import { RELOGIN_MESSAGE as RELOGIN } from '@/shared/lib/relogin';
 
 /**
  * 설문 Function 응답 해석 — 순수 함수(브라우저 SDK 없이 시험한다).
@@ -8,7 +9,7 @@ const KNOWN_CODES: SurveyErrorCode[] = [
   'INVALID_INPUT', 'FORBIDDEN', 'INVALID_STATUS', 'NOT_AUDIENCE', 'NOT_OPEN',
   'ALREADY_RESPONDED', 'LOCKED', 'VERSION_CHANGED', 'QUESTION_LIMIT', 'REQUIRED_ANSWER', 'ANSWER_FORMAT',
 ];
-export const RELOGIN = '로그인 정보가 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.';
+export { RELOGIN };
 
 /** Function 응답 본문 → data. 계약은 `{ data }` 또는 `{ error: { code, message } }` 뿐이다. */
 export function parseSurveyResponse<T>(raw: string, status: number): T {

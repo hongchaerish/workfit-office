@@ -17,6 +17,7 @@ import {
 import { isConnectionOk, type MailCredential } from '@/data/mail/mail.gateway';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 
 interface Props {
   actor: User;
@@ -176,7 +177,7 @@ export default function MailAccountDialog({ actor, account, onClose, onDone }: P
       }
     >
       <div className="space-y-3">
-        {error && <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+        {error && <ErrorNotice message={error} />}
 
           <label className="block">
             <span className="mb-1 block text-[10px] font-bold text-ink3">공급자</span>

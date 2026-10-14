@@ -40,6 +40,7 @@ import MailFolderNav from './MailFolderNav';
 import MailComposer from './MailComposer';
 import MailDetail from './MailDetail';
 import MailList from './MailList';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 
 /**
  * 메일 서버가 연결되지 않았을 때.
@@ -451,7 +452,7 @@ function LocalMailScreen() {
       />
 
       {notice && <div className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2.5 text-[11px] font-semibold text-teal">{notice}</div>}
-      {error && <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+      {error && <ErrorNotice message={error} className="mt-4" />}
 
       {accounts.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">

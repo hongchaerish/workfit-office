@@ -28,6 +28,8 @@ import SurveyResponseForm from './SurveyResponseForm';
 import SurveyResult from './SurveyResult';
 import { defaultSurveyPeriod } from './surveyDate';
 import { Button } from '@/shared/ui/Button';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
+import { isReloginError } from '@/shared/lib/relogin';
 
 type TabId = 'participate' | 'mine';
 
@@ -114,7 +116,16 @@ function LocalSurveyScreen() {
   };
 
   if (loading) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">전자설문을 불러오는 중…</div>;
-  if (queryError) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center px-5 text-center text-[12px] font-semibold text-red-500">전자설문 데이터를 불러오지 못했습니다.<br />{queryError instanceof Error ? queryError.message : ''}</div>;
+  if (queryError) {
+    const message = queryError instanceof Error ? queryError.message : '';
+    return (
+      <div className="mx-auto grid min-h-[calc(60vh/var(--font-scale,1))] max-w-md place-items-center px-5">
+        {isReloginError(queryError)
+          ? <ErrorNotice message={message} />
+          : <ErrorNotice message={`전자설문 데이터를 불러오지 못했습니다. ${message}`} />}
+      </div>
+    );
+  }
   if (!actor) return <div className="grid min-h-[calc(60vh/var(--font-scale,1))] place-items-center text-[12px] font-semibold text-ink3">사용자 정보를 불러올 수 없습니다.</div>;
 
   const questions = questionsQuery.data ?? [];
@@ -135,7 +146,7 @@ function LocalSurveyScreen() {
       />
 
       {notice && <div className="mt-4 rounded-lg border border-teal/20 bg-teal-soft/25 px-3 py-2.5 text-[11px] font-semibold text-teal">{notice}</div>}
-      {error && <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+      {error && <ErrorNotice message={error} className="mt-4" />}
       {detailId && !detail && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-amber/20 bg-amber-soft/25 px-3 py-2.5 text-[11px] font-semibold text-amber">
           <span>설문을 찾을 수 없거나 현재 계정에 접근 권한이 없습니다.</span>

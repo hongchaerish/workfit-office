@@ -3,6 +3,7 @@ import { client } from '@/shared/lib/appwrite';
 import { getWiddyToken } from '@/data/widdyChat/widdyAuth';
 import { SurveyError } from '@/domain/survey/engine';
 import { parseSurveyResponse, RELOGIN } from './survey.protocol';
+import { requestRelogin } from '@/shared/lib/relogin';
 
 /**
  * 전자설문 Function(`survey`) 호출.
@@ -15,7 +16,10 @@ const FUNCTION_ID = (import.meta.env?.VITE_SURVEY_FUNCTION_ID as string | undefi
 export async function callSurvey<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   if (!client) throw new SurveyError('INVALID_INPUT', '설문 서버가 설정되지 않았습니다.');
   const token = getWiddyToken();
-  if (!token) throw new SurveyError('FORBIDDEN', RELOGIN);
+  if (!token) {
+    requestRelogin();
+    throw new SurveyError('FORBIDDEN', RELOGIN);
+  }
 
   let raw: string;
   let status: number;
@@ -26,5 +30,7 @@ export async function callSurvey<T>(action: string, payload: Record<string, unkn
   } catch {
     throw new SurveyError('INVALID_INPUT', '설문 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.');
   }
+  // 서명 토큰이 무효(키 교체·만료) — 앱 셸이 다시 로그인하도록 안내한다.
+  if (status === 401) requestRelogin();
   return parseSurveyResponse<T>(raw, status);
 }
