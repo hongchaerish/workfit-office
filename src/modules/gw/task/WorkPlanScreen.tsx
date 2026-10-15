@@ -85,7 +85,7 @@ export default function WorkPlanScreen() {
   const [meetingModal, setMeetingModal] = useState<{ date: string; event?: CalendarEvent } | null>(null);
   /** 외근·출장 상세(결재 완료·직접 등록 공용)와 직접 등록·수정 창 */
   const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
-  const [outsideForm, setOutsideForm] = useState<{ date: string; work?: OutsideWork; existing: OutsideScheduleView[] } | null>(null);
+  const [outsideForm, setOutsideForm] = useState<{ date: string; work?: OutsideWork } | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -408,7 +408,6 @@ export default function WorkPlanScreen() {
         onEditorReady={setCellEditor}
         onOpenMeeting={(event) => setMeetingModal({ date: event.date, event })}
         onOpenOutside={setOutsideDetail}
-        onAddOutside={actor.status === '사용' ? (date, existing) => setOutsideForm({ date, existing }) : undefined}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={(
           <>
@@ -470,6 +469,10 @@ export default function WorkPlanScreen() {
           onContentChange={setEditingContent}
           editor={cellEditor}
           onAddMeeting={() => setMeetingModal({ date: editingTarget.date })}
+          // 내 칸을 편집할 때만 — 외근·출장은 본인만 등록한다. 시작일은 편집 중인 칸의 날짜.
+          onAddOutside={actor.status === '사용' && (!editingTarget.targetUser || editingTarget.targetUser.id === actor.id)
+            ? () => setOutsideForm({ date: editingTarget.date })
+            : undefined}
           todayEvents={editingDateEvents}
           isSaving={isSavingPlan}
           conflictError={conflictError}
@@ -570,7 +573,7 @@ export default function WorkPlanScreen() {
           viewer={{ userId: actor.id, active: actor.status === '사용', dept: actor.dept }}
           users={users}
           onClose={() => setOutsideDetail(null)}
-          onEdit={(view) => view.self && setOutsideForm({ date: view.startDate, work: view.self, existing: [] })}
+          onEdit={(view) => view.self && setOutsideForm({ date: view.startDate, work: view.self })}
         />
       )}
 
@@ -581,7 +584,6 @@ export default function WorkPlanScreen() {
           initialDate={outsideForm.date}
           work={outsideForm.work}
           users={users}
-          existing={outsideForm.existing}
           onClose={() => setOutsideForm(null)}
           onSaved={() => setNotice('외근·출장을 저장했습니다. 업무계획·캘린더와 근태·근무 상태에 반영됩니다.')}
         />

@@ -18,6 +18,7 @@ import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { isWorkPlanDerivedEvent } from '@/domain/workPlan/workPlanCalendarBridge';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
+import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
 import {
   ChevronLeft,
   ChevronRight,
@@ -26,7 +27,6 @@ import {
   Calendar as CalendarIcon,
   Settings,
   LocateFixed,
-  Car,
 } from 'lucide-react';
 
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -92,8 +92,6 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onOpenMeeting?: (event: CalendarEvent) => void;
   /** 외근·출장 칩 클릭 → 상세(결재 완료·직접 등록 공용) */
   onOpenOutside?: (view: OutsideScheduleView) => void;
-  /** 외근·출장 직접 등록 — 그 날짜로 등록 창을 연다. 같은 사람의 그 무렵 외근·출장을 함께 넘긴다. */
-  onAddOutside?: (date: string, existing: OutsideScheduleView[]) => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
   /** 상단 고정 바 바로 아래에 붙일 편집 리본 */
@@ -117,7 +115,6 @@ export function WorkPlanTeamMonthlyMatrix({
   onEditorReady,
   onOpenMeeting,
   onOpenOutside,
-  onAddOutside,
   editingToolbar,
   filters,
 }: WorkPlanTeamMonthlyMatrixProps) {
@@ -366,13 +363,24 @@ export function WorkPlanTeamMonthlyMatrix({
     return map;
   }, [approvalsQuery.data, calendarEventsQuery.data, outsideWorksQuery.data, allDays, members]);
 
-  /** 한 사람의 이번 화면 범위 외근·출장(중복 없이) — 등록 창의 기간 겹침 경고용 */
-  const outsideViewsOf = (userId: string): OutsideScheduleView[] => {
-    const seen = new Map<string, OutsideScheduleView>();
-    for (const items of projectedSchedulesMap.get(userId)?.values() ?? []) {
-      for (const item of items) if (item.outside) seen.set(item.outside.key, item.outside);
+  /**
+   * 한 사람의 한 주에서 여러 날에 걸친 외근·출장 — 칸을 가로지르는 막대로 그린다.
+   * 하루짜리는 지금처럼 칸 안의 칩으로 둔다.
+   */
+  const weekBarsOf = (userId: string, weekDates: string[]) => {
+    const views = new Map<string, OutsideScheduleView>();
+    const sample = new Map<string, ProjectedChip>();
+    const dateMap = projectedSchedulesMap.get(userId);
+    for (const date of weekDates) {
+      for (const item of dateMap?.get(date) ?? []) {
+        if (item.outside && item.outside.startDate < item.outside.endDate && !views.has(item.outside.key)) {
+          views.set(item.outside.key, item.outside);
+          sample.set(item.outside.key, item);
+        }
+      }
     }
-    return [...seen.values()];
+    const bars = layoutWeekBars([...views.values()], weekDates);
+    return { bars, chipOf: (key: string) => sample.get(key)!, keys: new Set(views.keys()) };
   };
 
   // 이번 주차로 부드럽게 스크롤 — 내 행이 있으면 내 입력칸, 없으면 주차 머리행
@@ -560,17 +568,6 @@ export function WorkPlanTeamMonthlyMatrix({
         {/* 필터·검색 및 액션 버튼 */}
         <div className="flex flex-wrap items-center gap-1.5">
           {filters}
-          {onAddOutside && (
-            <button
-              type="button"
-              onClick={() => onAddOutside(todayStr, outsideViewsOf(actor.id))}
-              title="결재 없이 외근·출장을 바로 등록합니다 (근태·근무 상태에 반영)"
-              className="flex items-center gap-1 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[11.5px] font-bold text-blue-700 dark:text-blue-400 hover:bg-blue-500/15 transition-colors shadow-2xs cursor-pointer"
-            >
-              <Car size={12} />
-              <span>외근·출장 등록</span>
-            </button>
-          )}
           {onOpenConfig && (
             <button
               type="button"
@@ -698,6 +695,9 @@ export function WorkPlanTeamMonthlyMatrix({
                     members.map((member) => {
                       const isMe = member.id === actor.id;
                       const userPlans = plansByUserAndDate.get(member.id);
+                      const weekDates = week.days.map((day) => day.dateStr);
+                      const { bars: weekBars, chipOf, keys: barKeys } = weekBarsOf(member.id, weekDates);
+                      const barLanes = weekBars.reduce((max, bar) => Math.max(max, bar.lane + 1), 0);
                       return (
                         <Fragment key={`${week.weekNum}-${member.id}`}>
                         <tr
@@ -730,12 +730,15 @@ export function WorkPlanTeamMonthlyMatrix({
                           </td>
 
                           {/* 7일치 셀 (월~일) */}
-                          {week.days.map((d) => {
+                          {week.days.map((d, dayIndex) => {
                             const dayStr = d.dateStr;
                             const plan = userPlans?.get(dayStr);
                             const parsed = plan ? parseWorkPlanItems(plan.content) : [];
                             const userProjectedDateMap = projectedSchedulesMap.get(member.id);
-                            const projectedItems = userProjectedDateMap?.get(dayStr) ?? [];
+                            // 여러 날 외근·출장은 막대로 그리므로 칸 칩에서 뺀다
+                            const projectedItems = (userProjectedDateMap?.get(dayStr) ?? []).filter(
+                              (item) => !(item.outside && barKeys.has(item.outside.key)),
+                            );
 
                             // 3단계 시각적 위계:
                             // tier 1: 오늘 내 일정 (흰색 배경 + 잉크 글씨)
@@ -780,22 +783,16 @@ export function WorkPlanTeamMonthlyMatrix({
                                   !d.inCurrentMonth ? 'opacity-50' : ''
                                 }`}
                               >
-                                {/* 내 칸: 마우스를 올리면 그 날짜로 외근·출장 등록 */}
-                                {isMe && onAddOutside && !isEditingThisCell && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation(); // 칸 편집이 열리지 않게
-                                      onAddOutside(dayStr, outsideViewsOf(member.id));
-                                    }}
-                                    title="이 날짜로 외근·출장 등록"
-                                    aria-label="이 날짜로 외근·출장 등록"
-                                    className="absolute right-1 top-1 z-10 hidden items-center gap-0.5 rounded border border-blue-500/30 bg-panel px-1 py-0.5 text-[8.5px] font-bold text-blue-700 shadow-2xs hover:bg-blue-500/10 group-hover/day:flex dark:text-blue-400"
-                                  >
-                                    <Car size={10} />
-                                    <Plus size={9} />
-                                  </button>
-                                )}
+                                {/* 0) 여러 날 외근·출장 막대 — 시작 칸에서 그려 옆 칸으로 가로지른다. 모든 칸이 같은 높이를 비워 둔다 */}
+                                {weekBars.filter((bar) => bar.startIndex === dayIndex).map((bar) => (
+                                  <OutsideSpanBar
+                                    key={bar.key}
+                                    bar={bar}
+                                    chip={chipOf(bar.key)}
+                                    onOpen={onOpenOutside}
+                                  />
+                                ))}
+                                {barLanes > 0 && <div style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
                                 {/* 1) 결재 일정 및 회의 투영 칩 */}
                                 {projectedItems.length > 0 && (
                                   <div className="space-y-1 mb-1.5 pb-1 border-b border-border/40">
@@ -936,6 +933,49 @@ export function WorkPlanTeamMonthlyMatrix({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** 여러 날 막대 한 줄의 높이(px) — 칸마다 이만큼 위를 비워 막대가 글과 겹치지 않게 한다 */
+const SPAN_LANE_HEIGHT = 20;
+/** 칸 안쪽 여백(p-2)과 같은 값 */
+const CELL_PADDING = 8;
+
+type ProjectedChip = {
+  id: string;
+  label: string;
+  badgeClass: string;
+  timeStr?: string;
+  outside?: OutsideScheduleView;
+};
+
+/** 여러 날 외근·출장 막대 — 결재 완료 건은 끝에 옅은 체크, 누르면 상세. */
+function OutsideSpanBar({ bar, chip, onOpen }: { bar: WeekBar; chip: ProjectedChip; onOpen?: (view: OutsideScheduleView) => void }) {
+  const range = chip.outside ? `${chip.outside.startDate.slice(5).replace('-', '/')}~${chip.outside.endDate.slice(5).replace('-', '/')}` : '';
+  return (
+    <div
+      role="button"
+      onClick={(e) => {
+        e.stopPropagation(); // 칸 편집이 열리지 않게
+        if (chip.outside) onOpen?.(chip.outside);
+      }}
+      title={`${chip.label} (${range}${chip.timeStr ? ` · ${chip.timeStr}` : ''}) — 눌러서 상세 보기`}
+      className={`absolute z-10 flex items-center justify-between gap-1 border px-1.5 text-[9px] font-bold shadow-2xs cursor-pointer hover:brightness-95 ${chip.badgeClass} ${
+        bar.continuesBefore ? 'rounded-l-none border-l-0' : 'rounded-l'
+      } ${bar.continuesAfter ? 'rounded-r-none border-r-0' : 'rounded-r'}`}
+      style={{
+        top: CELL_PADDING + bar.lane * SPAN_LANE_HEIGHT,
+        left: bar.continuesBefore ? 0 : CELL_PADDING / 2,
+        width: `calc(${bar.span * 100}% + ${bar.span - 1}px - ${(bar.continuesBefore ? 0 : CELL_PADDING / 2) + (bar.continuesAfter ? 0 : CELL_PADDING / 2)}px)`,
+        height: SPAN_LANE_HEIGHT - 3,
+      }}
+    >
+      <span className="truncate">{bar.continuesBefore ? '◂ ' : ''}{chip.label}</span>
+      <span className="flex shrink-0 items-center gap-1">
+        <span className="text-[8px] font-normal opacity-80">{range}{bar.continuesAfter ? ' ▸' : ''}</span>
+        {chip.outside?.source === 'APPROVAL' && <Check size={8} strokeWidth={3} className="opacity-40" aria-label="결재 완료" />}
+      </span>
     </div>
   );
 }
