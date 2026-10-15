@@ -696,6 +696,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('title', 200, true),
       S('content', 8000, true),
       S('author', 64, true),
+      // 작성자 사용자 ID — 본인 판별용(2026-10-15). 이전 글에는 없다.
+      S('authorId', 64, false),
       S('date', 40, true),
       INT('views', false, 0),
       BOOL('isPinned', false),

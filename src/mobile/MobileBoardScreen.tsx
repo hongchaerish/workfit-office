@@ -14,7 +14,10 @@ import {
   Download,
 } from 'lucide-react';
 import { boardRepo } from '@/data/board/board.repo';
+import { DocumentExistsError } from '@/data/_backend/crudBackend';
 import type { Post } from '@/domain/board/schema';
+import { postDateLabel, postDateStamp, sortPostsForList } from '@/domain/board/rules';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 import { usePermission } from '@/features/auth/usePermission';
 import { downloadFile } from '@/shared/lib/download';
 import { fileStorage } from '@/shared/lib/storage';
@@ -38,6 +41,9 @@ export default function MobileBoardScreen() {
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  // 불러오기 실패를 '게시글이 없습니다'로 보이지 않게 따로 둔다.
+  const [loadError, setLoadError] = useState('');
+  const [formError, setFormError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<BoardCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -55,11 +61,13 @@ export default function MobileBoardScreen() {
 
   const loadPosts = useCallback(async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const list = await boardRepo.list();
       setPosts(list);
     } catch (err) {
       console.error('Failed to load board posts:', err);
+      setLoadError(`게시글을 불러오지 못했습니다.${err instanceof Error && err.message ? ` (${err.message})` : ''}`);
     } finally {
       setIsLoading(false);
     }
@@ -83,13 +91,14 @@ export default function MobileBoardScreen() {
     e.preventDefault();
     if (submittingRef.current) return;
     if (!canCreate || !user) {
-      alert('게시글 작성 권한이 없습니다.');
+      setFormError('게시글 작성 권한이 없습니다.');
       return;
     }
     if (!newTitle.trim() || !newContent.trim()) {
-      alert('제목과 내용을 입력해주세요.');
+      setFormError('제목과 내용을 입력해주세요.');
       return;
     }
+    setFormError('');
     submittingRef.current = true;
     setIsSubmitting(true);
     pendingPostIdRef.current ??= `POST_${Date.now()}`;
@@ -99,7 +108,8 @@ export default function MobileBoardScreen() {
         let attachment = uploadedFilesRef.current.get(selected.id);
         if (!attachment) {
           // Unique per selected file, so uploads never reuse an existing board file path.
-          const url = await fileStorage.put(`chat/board/${selected.id}_${selected.file.name}`, selected.file, {
+          const path = `chat/board/${selected.id}_${selected.file.name}`;
+          const url = await fileStorage.put(path, selected.file, {
             contentType: selected.file.type,
             filename: selected.file.name,
           });
@@ -108,6 +118,7 @@ export default function MobileBoardScreen() {
             name: selected.file.name,
             size: (selected.file.size / (1024 * 1024)).toFixed(1) + ' MB',
             url,
+            path,
           };
           // Keep completed uploads if a later upload or post save fails.
           uploadedFilesRef.current.set(selected.id, attachment);
@@ -119,14 +130,21 @@ export default function MobileBoardScreen() {
         boardId: newCategory,
         title: newTitle.trim(),
         content: newContent.trim(),
-        author: user?.name || '작성자',
-        date: new Date().toISOString(),
+        // PC와 같은 형식 — 표시는 '이름 직급', 본인 판별은 authorId.
+        author: [user.name, user.position].filter(Boolean).join(' ') || '작성자',
+        authorId: user.id,
+        date: postDateStamp(),
         isPinned: false,
         views: 0,
         hasAttachment: attachedFiles.length > 0,
         attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
       };
-      await boardRepo.save(newPost);
+      try {
+        await boardRepo.create(newPost);
+      } catch (err) {
+        // 앞선 시도가 실제로는 저장됐는데 응답만 실패한 경우 — 같은 ID로 다시 누르면 여기로 온다.
+        if (!(err instanceof DocumentExistsError)) throw err;
+      }
       setNewTitle('');
       setNewContent('');
       setSelectedFiles([]);
@@ -136,7 +154,7 @@ export default function MobileBoardScreen() {
       await loadPosts();
     } catch (err) {
       console.error('게시글 등록 실패:', err);
-      alert(`게시글 등록에 실패했습니다. ${err instanceof Error ? err.message : '다시 시도해 주세요.'}`);
+      setFormError(`게시글 등록에 실패했습니다. ${err instanceof Error ? err.message : '다시 시도해 주세요.'}`);
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -163,12 +181,8 @@ export default function MobileBoardScreen() {
       );
     }
 
-    // 정렬: isPinned 최우선, 그 다음 date 최신순
-    return list.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+    // 정렬: 고정 글 먼저, 그다음 최신 글 (PC와 같은 규칙)
+    return sortPostsForList(list);
   }, [posts, selectedCategory, searchQuery]);
 
   const getCategoryLabel = (boardId: string) => {
@@ -227,6 +241,11 @@ export default function MobileBoardScreen() {
       <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2">
         {isLoading ? (
           <div className="py-16 text-center text-[12px] text-ink3">게시글을 불러오는 중입니다…</div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-2 py-10">
+            <ErrorNotice message={loadError} />
+            <button type="button" onClick={loadPosts} className="rounded-xl border border-border bg-white px-4 py-2 text-[12px] font-bold text-ink2">다시 불러오기</button>
+          </div>
         ) : filteredPosts.length === 0 ? (
           <div className="py-16 text-center text-ink3 border border-dashed border-border/80 rounded-2xl bg-white/60">
             <FileText size={28} className="mx-auto mb-1.5 text-ink3/40" />
@@ -261,7 +280,7 @@ export default function MobileBoardScreen() {
                   </div>
 
                   <span className="text-[10.5px] text-ink3 font-mono">
-                    {post.date.slice(0, 10)}
+                    {postDateLabel(post.date)}
                   </span>
                 </div>
 
@@ -417,11 +436,12 @@ export default function MobileBoardScreen() {
               </div>
             </div>
 
+            {formError && <div className="px-3 pb-2"><ErrorNotice message={formError} /></div>}
             {/* 하단 저장 바 */}
             <div className="border-t border-border bg-white p-3 shrink-0 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsWriteOpen(false)}
+                onClick={() => { setIsWriteOpen(false); setFormError(''); }}
                 disabled={isSubmitting}
                 className="flex-1 rounded-xl border border-border py-2.5 text-[12px] font-bold text-ink2 hover:bg-panel"
               >
@@ -477,7 +497,7 @@ export default function MobileBoardScreen() {
 
                 <div className="flex items-center justify-between text-[11px] text-ink3 pt-1">
                   <span>작성자: {selectedPost.author}</span>
-                  <span>{selectedPost.date.slice(0, 16).replace('T', ' ')}</span>
+                  <span>{postDateLabel(selectedPost.date)}</span>
                 </div>
               </div>
 

@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, runTransaction, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/shared/lib/firebase';
 import { databases, APPWRITE_DATABASE_ID, Query, safeDocId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
@@ -43,6 +43,15 @@ export interface InsertableCrudBackend<T> extends CrudBackend<T> {
   insert(item: T): Promise<void>;
 }
 
+export interface PatchableCrudBackend<T> extends InsertableCrudBackend<T> {
+  /**
+   * 준 칸만 고친다. 문서 전체를 다시 쓰는 `save` 와 달리, 그 사이 다른 사람이 고친 칸을 덮지 않는다.
+   * (예: 게시글 조회수 — 글을 열 때마다 전체를 저장하면 작성자의 수정 내용을 되돌린다.)
+   * jsonFields 칸은 넘기지 않는다고 가정한다.
+   */
+  patch(id: string, fields: Partial<T>): Promise<void>;
+}
+
 export interface CrudOpts<T> {
   coll: string;
   /** 안전 파싱: 성공 시 T, 실패 시 null(스킵). 불량 문서 1건이 전체를 깨지 않게. */
@@ -61,7 +70,7 @@ export interface CrudOpts<T> {
   firestoreDecode?: (raw: unknown) => unknown;
 }
 
-export function createCrudBackend<T>(opts: CrudOpts<T>): InsertableCrudBackend<T> {
+export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T> {
   const { coll, parse, idOf, seed, jsonFields = [], stripFields = [], firestoreEncode, firestoreDecode } = opts;
 
   // ── Appwrite 직렬화(중첩 → JSON 문자열) ──
@@ -156,6 +165,9 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): InsertableCrudBackend<T
           throw e;
         }
       },
+      async patch(id: string, fields: Partial<T>) {
+        await dbs().updateDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id), fields as Record<string, unknown>);
+      },
       async remove(id: string) {
         try {
           await dbs().deleteDocument(APPWRITE_DATABASE_ID, coll, safeDocId(id));
@@ -197,6 +209,9 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): InsertableCrudBackend<T
           tx.set(ref, payload as Record<string, unknown>);
         });
       },
+      async patch(id: string, fields: Partial<T>) {
+        await updateDoc(doc(db!, coll, id), fields as { [key: string]: Partial<unknown> });
+      },
       async remove(id: string) {
         await deleteDoc(doc(db!, coll, id));
       },
@@ -220,6 +235,9 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): InsertableCrudBackend<T
     async insert(item: T) {
       if (mem.some((m) => idOf(m) === idOf(item))) throw new DocumentExistsError(coll, idOf(item));
       mem = [...mem, item];
+    },
+    async patch(id: string, fields: Partial<T>) {
+      mem = mem.map((m) => (idOf(m) === id ? { ...m, ...fields } : m));
     },
     async remove(id: string) {
       mem = mem.filter((m) => idOf(m) !== id);
