@@ -5,6 +5,7 @@ import { z } from 'zod';
  * roleGroup 은 roleGroups.code 참조(FK). ([[데이터_모델_설계서.md]] users)
  */
 export const USER_STATUS = ['사용', '잠금', '미사용'] as const;
+export type UserStatus = (typeof USER_STATUS)[number];
 
 /**
  * 신규 사용자 공통 초기 비밀번호(데모). 사용자관리에서 등록 시 자동 부여되며,

@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeProfileRepo, type SelfEditableProfilePatch } from '@/data/employeeProfile/employeeProfile.repo';
 import { userRepo } from '@/data/user/user.repo';
 import type { EmployeeProfile, EmployeeProfileFormValues } from '@/domain/employeeProfile/schema';
+import { accountStatusOnTransition } from '@/domain/employeeProfile/lifecycle';
+import { userSchema } from '@/domain/user/schema';
 
 const QUERY_KEY = ['employeeProfiles'] as const;
 
@@ -36,8 +38,16 @@ export function useUpsertEmployeeProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, values }: { id: string; values: Partial<EmployeeProfileFormValues> }) => {
+    mutationFn: async ({ id, values, email }: {
+      id: string;
+      values: Partial<EmployeeProfileFormValues>;
+      /** 업무 이메일 — 계정(users)에 저장한다. 바뀌었을 때만 넘긴다. */
+      email?: string;
+    }) => {
       const existing = await employeeProfileRepo.get(id);
+      // 퇴직은 여기서 바꾸지 않는다(퇴직 처리 절차로만). 재직 상태가 바뀔 때만 계정 상태를 맞춘다.
+      const nextStatus = values.status || existing?.status || 'ACTIVE';
+      const accountStatus = accountStatusOnTransition(existing?.status, nextStatus);
       const updated: EmployeeProfile = {
         id,
         userId: values.userId || existing?.userId || id,
@@ -46,7 +56,7 @@ export function useUpsertEmployeeProfile() {
         dept: values.dept || existing?.dept || '미지정',
         position: values.position || existing?.position || '사원',
         jobTitle: values.jobTitle || existing?.jobTitle || '팀원',
-        status: values.status || existing?.status || 'ACTIVE',
+        status: nextStatus,
         isAttendanceTarget: values.isAttendanceTarget !== undefined ? values.isAttendanceTarget : (existing?.isAttendanceTarget ?? true),
         phone: values.phone !== undefined ? values.phone : (existing?.phone || ''),
         hireDate: values.hireDate !== undefined ? values.hireDate : (existing?.hireDate || ''),
@@ -65,21 +75,18 @@ export function useUpsertEmployeeProfile() {
       // 1. employeeProfiles 저장
       await employeeProfileRepo.save(updated);
 
-      // 2. users 컬렉션 기본 필드 동기화 (기존 시스템 호환)
-      try {
-        const u = await userRepo.get(updated.userId);
-        if (u) {
-          const userStatus = updated.status === 'ACTIVE' ? '사용' : updated.status === 'LEAVE' ? '잠금' : '미사용';
-          await userRepo.save({
-            ...u,
-            dept: updated.dept,
-            position: updated.position,
-            jobTitle: updated.jobTitle,
-            status: userStatus as any,
-          });
-        }
-      } catch (err) {
-        console.warn('Syncing to user record failed (non-blocking):', err);
+      // 2. 계정(users)에 인사 소속 사본을 맞춘다. 계정 상태는 재직 상태가 바뀐 경우에만,
+      //    업무 이메일은 넘어온 경우에만 바꾼다 — 사용자 관리에서 정한 계정 값을 덮지 않게.
+      const u = await userRepo.get(updated.userId);
+      if (u) {
+        await userRepo.save(userSchema.parse({
+          ...u,
+          dept: updated.dept,
+          position: updated.position,
+          jobTitle: updated.jobTitle,
+          ...(accountStatus ? { status: accountStatus } : {}),
+          ...(email !== undefined ? { email: email.trim() } : {}),
+        }));
       }
 
       return updated;

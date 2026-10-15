@@ -1,12 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Modal } from '@/shared/ui/Modal';
 import { ActionButton } from '@/shared/ui/ActionBar';
 import type { User } from '@/domain/user/schema';
 import { useUsers } from '@/features/user/useUsers';
-import { useBlockingApprovals, useResignUser } from '@/features/user/useResignation';
+import { useBlockingApprovals, useRetireEmployee } from '@/features/employeeProfile/useRetirement';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 
-interface ResignModalProps {
+interface RetireModalProps {
   open: boolean;
   user: User | null;
   onClose: () => void;
@@ -14,14 +15,15 @@ interface ResignModalProps {
 }
 
 /**
- * 퇴사 처리 확인 모달(Phase 1).
- * 처리 내역(계정 비활성화 + 상급자 재연결)을 요약하고,
- * 퇴사 시 정체될 진행중 결재를 사전 경고한 뒤 확정한다.
+ * 퇴직 처리 확인 창 — 인명관리 전용(사용자 관리는 계정만 다룬다, 2026-10-15).
+ * 처리 내역(계정 비활성화 + 상급자 재연결 + 재직 상태 '퇴직')을 요약하고,
+ * 퇴직 시 정체될 진행 중 결재를 미리 알린 뒤 확정한다.
  */
-export default function ResignModal({ open, user, onClose, onDone }: ResignModalProps) {
+export default function RetireModal({ open, user, onClose, onDone }: RetireModalProps) {
   const { data: all = [] } = useUsers();
   const { data: blocking = [], isLoading: loadingBlocking } = useBlockingApprovals(user?.id);
-  const resign = useResignUser();
+  const resign = useRetireEmployee();
+  const [error, setError] = useState('');
 
   const reports = useMemo(
     () => (user ? all.filter((u) => u.managerId === user.id && u.id !== user.id) : []),
@@ -35,15 +37,16 @@ export default function ResignModal({ open, user, onClose, onDone }: ResignModal
   if (!user) return null;
 
   const handleConfirm = async () => {
+    setError('');
     try {
       const res = await resign.mutateAsync(user.id);
       onDone?.(
-        `${user.name} 님을 퇴사 처리했습니다.` +
+        `${user.name} 님을 퇴직 처리했습니다.` +
           (res.reconnectedReports > 0 ? ` (상급자 재연결 ${res.reconnectedReports}명)` : ''),
       );
       onClose();
     } catch (e) {
-      alert(`퇴사 처리에 실패했습니다: ${e instanceof Error ? e.message : e}`);
+      setError(`퇴직 처리에 실패했습니다: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -51,14 +54,14 @@ export default function ResignModal({ open, user, onClose, onDone }: ResignModal
     <Modal
       open={open}
       onClose={onClose}
-      title="퇴사 처리"
+      title="퇴직 처리"
       width={540}
       footer={
         <>
           <ActionButton icon="refresh" label="취소" onClick={onClose} disabled={resign.isPending} />
           <ActionButton
             icon="save"
-            label={resign.isPending ? '처리 중…' : '퇴사 처리 확정'}
+            label={resign.isPending ? '처리 중…' : '퇴직 처리 확정'}
             variant="primary"
             onClick={handleConfirm}
             disabled={resign.isPending}
@@ -85,7 +88,7 @@ export default function ResignModal({ open, user, onClose, onDone }: ResignModal
               <span className="text-ink3">1.</span>
               <span>
                 계정 <b>비활성화</b> — 상태를 <b>미사용</b>으로 변경하여 로그인을 차단하고, 모바일
-                푸시 토큰을 제거합니다. (퇴사일 기록)
+                푸시 토큰을 제거합니다. (퇴사일 기록) 인사 재직 상태는 <b>퇴직</b>으로 바뀝니다.
               </span>
             </li>
             <li className="flex gap-2">
@@ -130,12 +133,13 @@ export default function ResignModal({ open, user, onClose, onDone }: ResignModal
                 ))}
               </ul>
               <div className="mt-2 text-[10.5px] text-amber-700">
-                퇴사 처리 후 해당 문서는 <b>대결/전결자 지정</b> 또는 <b>결재선 교체</b>로 별도
+                퇴직 처리 후 해당 문서는 <b>대결/전결자 지정</b> 또는 <b>결재선 교체</b>로 별도
                 처리해야 합니다. (자동 대체는 다음 단계에서 지원)
               </div>
             </div>
           )}
         </div>
+        {error && <ErrorNotice message={error} />}
       </div>
     </Modal>
   );

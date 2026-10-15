@@ -13,7 +13,6 @@ import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveUserRoleNames } from '@/domain/roleGroup/roleResolver';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
-import ResignModal from './ResignModal';
 import { successionRepo, SUCCESSION_UPDATED_EVENT } from '@/data/succession/succession.repo';
 import type { ApprovalSuccession } from '@/data/seeds/succession.seed';
 import { useEffect } from 'react';
@@ -40,7 +39,6 @@ export default function UserScreen() {
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
-  const [resigning, setResigning] = useState<User | null>(null);
   const [notice, setNotice] = useState<string>('');
 
   // ── 권한 승계(인수인계) 동적 관리 상태 및 핸들러 ──
@@ -174,13 +172,6 @@ export default function UserScreen() {
     setSelected([]);
   };
 
-  // 퇴사 처리 — 정확히 1명 선택 + 아직 미사용이 아닌 경우만.
-  const singleSelected =
-    selected.length === 1 ? all.find((u) => String(u.id) === String(selected[0])) ?? null : null;
-  const canResign = !!singleSelected && singleSelected.status !== '미사용';
-  const handleResign = () => {
-    if (singleSelected) setResigning(singleSelected);
-  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -188,11 +179,12 @@ export default function UserScreen() {
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자관리</h1>
           <p className="mt-0.5 text-xs text-ink3">기준 정보 / 사용자관리</p>
+          <p className="mt-1 text-[11px] text-ink3">로그인 계정(사번·이름·이메일·비밀번호·계정 상태)만 관리합니다. 부서·직급과 퇴직 처리는 그룹웨어 &gt; 인명관리에서 합니다.</p>
         </div>
         <ActionBar actions={['refresh']} />
       </div>
 
-      {/* 퇴사 처리 결과 알림 */}
+      {/* 처리 결과 알림 */}
       {notice && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-teal-300 bg-teal-soft px-3.5 py-2.5 text-[12px] text-navy">
           <span className="flex items-center gap-1.5"><CheckCircle2 size={15} className="text-teal" /> {notice}</span>
@@ -278,7 +270,6 @@ export default function UserScreen() {
           <ActionBar
             screenId="S_BASE_USER"
             actions={[
-              { icon: 'logout', label: '퇴사 처리', onClick: handleResign, disabled: !canResign || !canDelete },
               { preset: 'delete', onClick: handleDelete, disabled: selected.length === 0 || !canDelete },
               { preset: 'add', label: '사용자 추가', variant: 'primary', onClick: () => setEditing(null), disabled: !canCreate },
             ]}
@@ -440,16 +431,6 @@ export default function UserScreen() {
         initial={editing}
         onClose={() => setEditing(undefined)}
         onSubmit={handleSubmit}
-      />
-
-      <ResignModal
-        open={resigning !== null}
-        user={resigning}
-        onClose={() => setResigning(null)}
-        onDone={(msg) => {
-          setNotice(msg);
-          setSelected([]);
-        }}
       />
     </div>
   );
