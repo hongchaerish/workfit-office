@@ -141,7 +141,6 @@ export default function MobileCalendarScreen() {
       const prefix = w.category === 'TRIP' ? '[출장]' : '[외근]';
       const companions = w.companionUserIds.map((id) => userMap.get(id)?.name ?? id).join(', ');
       const memo = [
-        '직접 등록(결재 없음)',
         `장소: ${w.destination}`,
         w.purpose && `목적: ${w.purpose}`,
         companions && `동행: ${companions}`,
