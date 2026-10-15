@@ -7,7 +7,7 @@ import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { unreadPostReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import MobileNotificationBell from './MobileNotificationBell';
-import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useDeptArchiveDocs } from '@/features/gw/useDeptArchiveDocs';
 import { APPROVAL_SEARCH_SCOPES, searchApprovalDocs, type ApprovalSearchScope } from '@/domain/approvalDoc/search';
@@ -86,16 +86,15 @@ export default function MobileApprovalList() {
   const [searchBoxFilter, setSearchBoxFilter] = useState<ApprovalSearchScope>('all');
   const deptArchiveDocs = useDeptArchiveDocs(me);
 
-  const preds = useMemo(() => getPredecessorsOf(me), [me]);
 
   // 1. 내가 즉시 승인/결재해야 할 활성 대기 건수 (전임자 승계 건 포함)
   const activePendingCount = useMemo(() => {
     const list = byBox['대기'] ?? [];
     return list.filter((d: ApprovalDoc) => {
       const approvers = currentApproverIds(d);
-      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      return approvers.includes(me);
     }).length;
-  }, [byBox, me, preds]);
+  }, [byBox, me]);
 
   // 2. 상신한 문서 중 반려되어 조치가 필요한 건수
   const rejectedDraftCount = useMemo(() => {
@@ -170,17 +169,16 @@ export default function MobileApprovalList() {
 
     // 1. 결재 대기함 필터링
     if (box === '대기') {
-      const preds = getPredecessorsOf(me);
       if (todoFilter === 'pending') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+          return approvers.includes(me);
         });
       }
       if (todoFilter === 'progress') {
         return rawDocs.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me) && !approvers.some((id) => preds.includes(id));
+          return !approvers.includes(me);
         });
       }
       return rawDocs;
@@ -207,11 +205,10 @@ export default function MobileApprovalList() {
 
     // 4.5 반려함 필터링
     if (box === '반려') {
-      const preds = getPredecessorsOf(me);
       const isMyReject = (d: ApprovalDoc) =>
         d.steps.some(
           (s) =>
-            (s.approverId === me || s.delegatedFromId === me || preds.includes(s.approverId)) &&
+            (s.approverId === me || s.delegatedFromId === me) &&
             s.decision === '반려'
         );
       if (rejectFilter === 'rejected') {

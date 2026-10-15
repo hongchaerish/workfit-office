@@ -13,7 +13,7 @@ import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { useAllUserPresences, useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
-import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
 
@@ -28,14 +28,13 @@ export default function MobileChatList() {
   const presenceMap = useAllUserPresences();
   const { meta: presenceMeta, presence: myPresence } = useMyPresence();
   const { byBox } = useApprovalBoxes(me);
-  const preds = useMemo(() => getPredecessorsOf(me), [me]);
   const pendingApprovals = useMemo(() => {
     const list = byBox['대기'] ?? [];
     return list.filter((d: ApprovalDoc) => {
       const approvers = currentApproverIds(d);
-      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      return approvers.includes(me);
     }).length;
-  }, [byBox, me, preds]);
+  }, [byBox, me]);
   const [q, setQ] = useState('');
   const [sheetRoom, setSheetRoom] = useState<{ id: string; type: string } | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);

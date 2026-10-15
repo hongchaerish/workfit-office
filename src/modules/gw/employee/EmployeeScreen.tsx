@@ -424,7 +424,7 @@ export default function EmployeeScreen() {
   // 3. 임직원 정보 편집 저장 제출 (신규 employeeProfiles & departmentMembers 연동)
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUserId || !editEmpName.trim()) return;
+    if (!selectedUserId) return;
 
     const targetUser = users.find((u) => u.id === selectedUserId);
     if (!targetUser) return;
@@ -448,7 +448,8 @@ export default function EmployeeScreen() {
         values: {
           userId: targetUser.id,
           empNo: targetUser.empNo,
-          name: editEmpName.trim(),
+          // 이름은 계정(사용자 관리) 기준
+          name: targetUser.name,
           dept: editEmpDept || '미지정',
           position: editEmpPos || '사원',
           jobTitle: finalDuty,
@@ -1428,13 +1429,13 @@ export default function EmployeeScreen() {
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <label className="font-bold text-ink2">이름 (필수)</label>
+                      <label className="font-bold text-ink2">이름</label>
+                      {/* 이름은 계정 정보라 사용자 관리에서만 바꾼다 — 여기서는 보여 주기만 한다 */}
                       <input
                         type="text"
                         value={editEmpName}
-                        onChange={(e) => setEditEmpName(e.target.value)}
-                        required
-                        className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"
+                        readOnly
+                        className="h-9 w-full rounded-lg border border-border bg-panel-alt px-3 text-[12px] text-ink2 outline-none"
                       />
                     </div>
                   </div>

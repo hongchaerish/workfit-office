@@ -4,7 +4,7 @@ import { usePermission } from '@/features/auth/usePermission';
 import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
-import { getPredecessorsOf, getEffectiveRecipients } from '@/domain/approvalDoc/engine';
+import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText, getCellMergeInfo, type CellMerge } from '@/modules/gw/approval/formFields';
 import { ApprovalStampTable } from './components/ApprovalStampTable';
@@ -161,7 +161,7 @@ export function ApprovalDocumentView({
   const isPostReadRecipient = Boolean(
     currentUser?.id &&
       (postReadQuery.data ?? []).some(
-        (s) => s.toUserId === currentUser.id || getPredecessorsOf(currentUser.id).includes(s.toUserId),
+        (s) => s.toUserId === currentUser.id,
       ),
   );
 
@@ -184,10 +184,6 @@ export function ApprovalDocumentView({
       return false;
     });
 
-    // 후임자 승계 대상자 판별
-    const preds = getPredecessorsOf(currentUser.id);
-    const isPredecessorRelated = preds.includes(doc.drafterId) || doc.steps.some(s => preds.includes(s.approverId));
-
     // 시행 담당 부서 및 시행 부서원 여부 판별
     const isExecutor = doc.executionDepts?.some((d) => {
       if (d.id === userObj?.dept) return true;
@@ -201,7 +197,7 @@ export function ApprovalDocumentView({
       return false;
     });
 
-    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || isPredecessorRelated || !!isExecutor || isPostReadRecipient;
+    const isOfficialRelated = isDrafter || isApprover || !!isRecipient || !!isExecutor || isPostReadRecipient;
 
     // 공식 관계자(후열 전달받은 사람 포함) 및 후임자 승계자인 경우 등급/공개범위 무관 무조건 열람 가능 (제1순위)
     if (isOfficialRelated) return true;

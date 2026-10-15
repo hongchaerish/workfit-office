@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
-import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
+import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceBadge } from '@/features/userPresence/PresenceIndicator';
@@ -69,7 +69,6 @@ export default function MobileModuleLauncher() {
 
   const { presence: myPresence } = useMyPresence();
   const { byBox } = useApprovalBoxes(me);
-  const preds = useMemo(() => (me ? getPredecessorsOf(me) : []), [me]);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   // 1. 미결재 건수 계산
@@ -78,9 +77,9 @@ export default function MobileModuleLauncher() {
     const list = byBox['대기'] ?? [];
     return list.filter((d: ApprovalDoc) => {
       const approvers = currentApproverIds(d);
-      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      return approvers.includes(me);
     }).length;
-  }, [byBox, me, preds]);
+  }, [byBox, me]);
 
   // 2. 오늘 날짜 텍스트
   const todayText = useMemo(() => {
