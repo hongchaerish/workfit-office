@@ -63,3 +63,12 @@ test('사용 중지 계정은 등록할 수 없다', async () => {
     (e) => e instanceof OutsideWorkError && e.code === 'FORBIDDEN',
   );
 });
+
+test('결재 건과 연결하면 목록에서 빠진다 — 본인만 연결할 수 있다', async () => {
+  const created = await outsideWorkRepo.create(owner, draft({ startDate: '2026-11-03', endDate: '2026-11-04', destination: '연결 시험' }));
+  await assert.rejects(outsideWorkRepo.link(other, created.id, 'AP-261103-001'), (e: unknown) => e instanceof OutsideWorkError && e.code === 'FORBIDDEN');
+  assert.ok((await outsideWorkRepo.listAll({ from: '2026-11-03', to: '2026-11-03' })).some((w) => w.id === created.id));
+  const linked = await outsideWorkRepo.link(owner, created.id, 'AP-261103-001');
+  assert.equal(linked.linkedApprovalDocId, 'AP-261103-001');
+  assert.equal((await outsideWorkRepo.listAll({ from: '2026-11-03', to: '2026-11-03' })).some((w) => w.id === created.id), false);
+});

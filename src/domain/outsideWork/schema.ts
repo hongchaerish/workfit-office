@@ -43,6 +43,11 @@ export const outsideWorkSchema = z.object({
   transportation: z.string().trim().max(50).default(''),
   contact: z.string().trim().max(50).default(''),
   memo: z.string().trim().max(2_000).default(''),
+  /**
+   * 같은 일정의 결재 문서를 나중에 연결하면 그 문서 id. 연결된 등록은 목록에서 빠지고
+   * 결재 건만 보인다(`outsideWorkRepo.listAll`). 결재 문서는 건드리지 않는다.
+   */
+  linkedApprovalDocId: z.string().nullable().optional().default(null),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 }).superRefine((value, ctx) => {
@@ -64,4 +69,4 @@ export const outsideWorkSchema = z.object({
 });
 
 export type OutsideWork = z.infer<typeof outsideWorkSchema>;
-export type OutsideWorkDraft = Omit<OutsideWork, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt'>;
+export type OutsideWorkDraft = Omit<OutsideWork, 'id' | 'ownerUserId' | 'createdAt' | 'updatedAt' | 'linkedApprovalDocId'>;

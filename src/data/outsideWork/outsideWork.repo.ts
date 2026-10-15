@@ -68,13 +68,26 @@ const sortWorks = (rows: OutsideWork[]) =>
   rows.sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.startTime ?? '').localeCompare(b.startTime ?? '') || a.id.localeCompare(b.id));
 
 export const outsideWorkRepo = {
-  /** 전사 공개 — 기간이 범위와 겹치는 전원의 외근·출장. 범위가 없으면 전부. */
+  /**
+   * 전사 공개 — 기간이 범위와 겹치는 전원의 외근·출장. 범위가 없으면 전부.
+   * 결재 문서와 연결된 등록은 뺀다 — 같은 일정을 결재 건으로만 보이게(업무계획·캘린더·근태 공통).
+   */
   async listAll(filter?: OutsideWorkFilter): Promise<OutsideWork[]> {
     validateFilter(filter);
     const rows = await backend.loadAll();
     const from = filter?.from ?? '0000-01-01';
     const to = filter?.to ?? '9999-12-31';
-    return sortWorks(rows.filter((r) => overlapsRange(r, from, to)).map((r) => ({ ...r })));
+    return sortWorks(rows.filter((r) => !r.linkedApprovalDocId && overlapsRange(r, from, to)).map((r) => ({ ...r })));
+  },
+
+  /** 같은 일정의 결재 완료 문서와 연결 — 이후 이 등록은 목록에서 빠진다. 본인만. */
+  async link(actor: OutsideWorkActor, id: string, approvalDocId: string): Promise<OutsideWork> {
+    requireActive(actor);
+    if (!approvalDocId.trim()) throw new OutsideWorkError('INVALID_INPUT', '연결할 결재 문서를 고르세요.');
+    const current = findOwned(await backend.loadAll(), actor, id);
+    const linked = parseWork({ ...current, linkedApprovalDocId: approvalDocId, updatedAt: new Date().toISOString() });
+    await backend.save(linked);
+    return { ...linked };
   },
 
   async create(actor: OutsideWorkActor, draft: OutsideWorkDraft): Promise<OutsideWork> {
@@ -82,7 +95,7 @@ export const outsideWorkRepo = {
     const rows = await backend.loadAll();
     const now = new Date().toISOString();
     for (let attempt = 0; attempt < MAX_ID_ATTEMPTS; attempt += 1) {
-      const row = parseWork({ ...draft, id: nextId(rows, draft.startDate, attempt), ownerUserId: actor.userId, createdAt: now, updatedAt: now });
+      const row = parseWork({ ...draft, id: nextId(rows, draft.startDate, attempt), ownerUserId: actor.userId, linkedApprovalDocId: null, createdAt: now, updatedAt: now });
       try {
         await backend.insert(row);
         return { ...row };

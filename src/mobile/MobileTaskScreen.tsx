@@ -38,6 +38,11 @@ import { useDepartments } from '@/features/department/useDepartments';
 import { resolveDeptId } from '@/domain/department/engine';
 import { isMeeting } from '@/domain/calendarEvent/meeting';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
+import { useOutsideSchedulesOf, useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
+import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
+import { fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { OutsideWork } from '@/domain/outsideWork/schema';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -87,6 +92,20 @@ export default function MobileTaskScreen() {
     [dayEventsQuery.data, user],
   );
   const [meetingModal, setMeetingModal] = useState<{ event?: CalendarEvent } | null>(null);
+
+  // 외근·출장 — 결재 완료 건과 직접 등록 건(웹 업무계획과 같은 규칙). 등록은 결재 없이 본인이 바로 한다.
+  const myOutsideAll = useOutsideSchedulesOf(user?.id ?? '__anonymous__', user?.name ?? '');
+  // 내가 동행자로 지정된 다른 사람의 등록도 함께 보인다(웹 업무계획 동행 칩과 같은 규칙)
+  const outsideWorksQuery = useOutsideWorks({ from: selectedDateStr, to: selectedDateStr }, Boolean(user));
+  const myOutside = useMemo(() => {
+    const userName = (id: string) => (usersQuery.data ?? []).find((u) => u.id === id)?.name;
+    const asCompanion = (outsideWorksQuery.data ?? [])
+      .filter((w) => w.ownerUserId !== user?.id && w.companionUserIds.includes(user?.id ?? ''))
+      .map((w) => fromOutsideWork(w, userName));
+    return [...myOutsideAll, ...asCompanion].filter((v) => v.startDate <= selectedDateStr && selectedDateStr <= v.endDate);
+  }, [myOutsideAll, outsideWorksQuery.data, selectedDateStr, user, usersQuery.data]);
+  const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
+  const [outsideForm, setOutsideForm] = useState<{ work?: OutsideWork } | null>(null);
 
   // 선택 날짜의 내 업무계획
   const myTodayPlan = useMemo(() => {
@@ -359,6 +378,38 @@ export default function MobileTaskScreen() {
                 <span className="min-w-0 truncate text-[11.5px] font-bold text-ink">{m.title.replace(/^[(회의|미팅)]s*/, '')}</span>
                 <span className="shrink-0 text-[10px] text-ink3">
                   {m.allDay ? '종일' : `${m.startTime}~${m.endTime}`} · {m.ownerUserId === user?.id ? '주최' : '참석'}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* 내 외근·출장(결재 완료 + 직접 등록) + 등록 */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-blue-700">외근·출장 {myOutside.length > 0 ? `${myOutside.length}건` : ''}</span>
+              {user?.status === '사용' && (
+                <button
+                  type="button"
+                  onClick={() => setOutsideForm({})}
+                  className="rounded-full border border-blue-500/40 bg-blue-500/10 px-2.5 py-0.5 text-[10.5px] font-bold text-blue-700 active:scale-95"
+                >
+                  + 외근·출장 등록
+                </button>
+              )}
+            </div>
+            {myOutside.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                onClick={() => setOutsideDetail(v)}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5 text-left active:scale-[0.99]"
+              >
+                <span className="min-w-0 truncate text-[11.5px] font-bold text-ink">
+                  [{v.ownerUserId !== user?.id ? '동행' : v.category === 'TRIP' ? '출장' : '외근'}] {v.subType}{v.ownerUserId !== user?.id && v.ownerName ? ` · ${v.ownerName}` : ''}{v.destination ? ` (${v.destination})` : ''}
+                </span>
+                <span className="shrink-0 text-[10px] text-ink3">
+                  {v.startDate === v.endDate ? (v.startTime && v.endTime ? `${v.startTime}~${v.endTime}` : '종일') : `${v.startDate.slice(5)}~${v.endDate.slice(5)}`}
+                  {v.source === 'APPROVAL' ? ' · 결재' : ''}
                 </span>
               </button>
             ))}
@@ -673,6 +724,29 @@ export default function MobileTaskScreen() {
           onClose={() => setMeetingModal(null)}
           onSaved={() => setMeetingModal(null)}
           onRemoved={() => setMeetingModal(null)}
+        />
+      )}
+      {outsideDetail && user && (
+        <OutsideWorkDetailModal
+          view={outsideDetail}
+          viewer={{ userId: user.id, active: user.status === '사용', dept: user.dept }}
+          users={usersQuery.data ?? []}
+          onClose={() => setOutsideDetail(null)}
+          onEdit={(view) => {
+            if (!view.self) return;
+            setOutsideDetail(null);
+            setOutsideForm({ work: view.self });
+          }}
+        />
+      )}
+      {outsideForm && user && (
+        <OutsideWorkFormModal
+          key={outsideForm.work?.id ?? `new-${selectedDateStr}`}
+          actor={{ userId: user.id, active: user.status === '사용' }}
+          initialDate={selectedDateStr}
+          work={outsideForm.work}
+          users={usersQuery.data ?? []}
+          onClose={() => setOutsideForm(null)}
         />
       )}
     </div>
