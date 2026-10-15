@@ -1573,7 +1573,7 @@ function DocDetail({
                         </div>
                         <span className="text-ink3">{s.decidedAt ? fmtDateTime(s.decidedAt) : ''}</span>
                       </div>
-                      <div className="text-[11.5px] text-ink leading-relaxed whitespace-pre-wrap pl-2 border-l-2 border-teal/40 ml-1">
+                      <div className="text-[11.5px] text-ink leading-relaxed whitespace-pre-wrap wrap-anywhere pl-2 border-l-2 border-teal/40 ml-1">
                         “{s.comment}”
                       </div>
                     </div>

@@ -272,13 +272,13 @@ export default function MobileApprovalDetail() {
                   {doc.postApprovalActionTaken && (
                     <div className="text-[11.5px]">
                       <div className="font-bold text-rose-800">1. 선조치 내용 및 결과</div>
-                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalActionTaken}</div>
+                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap wrap-anywhere text-ink leading-relaxed">{doc.postApprovalActionTaken}</div>
                     </div>
                   )}
                   {doc.postApprovalNecessity && (
                     <div className="text-[11.5px]">
                       <div className="font-bold text-rose-800">2. 긴급성 및 불가피성 소명</div>
-                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap text-ink leading-relaxed">{doc.postApprovalNecessity}</div>
+                      <div className="mt-0.5 rounded bg-white p-2 border border-rose-100/70 whitespace-pre-wrap wrap-anywhere text-ink leading-relaxed">{doc.postApprovalNecessity}</div>
                     </div>
                   )}
                 </div>

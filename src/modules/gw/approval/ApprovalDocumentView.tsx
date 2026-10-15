@@ -601,7 +601,7 @@ export function ApprovalDocumentView({
               {doc.postApprovalActionTaken && (
                 <div className="flex flex-col gap-0.5">
                   <span className="font-bold text-rose-800 text-[11px]">1. 선조치(긴급 조치) 내용 및 결과:</span>
-                  <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  <div className="whitespace-pre-wrap wrap-anywhere rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
                     {doc.postApprovalActionTaken}
                   </div>
                 </div>
@@ -609,7 +609,7 @@ export function ApprovalDocumentView({
               {doc.postApprovalNecessity && (
                 <div className="flex flex-col gap-0.5">
                   <span className="font-bold text-rose-800 text-[11px]">2. 긴급성 및 불가피성 소명 (Why?):</span>
-                  <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  <div className="whitespace-pre-wrap wrap-anywhere rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
                     {doc.postApprovalNecessity}
                   </div>
                 </div>
@@ -619,7 +619,7 @@ export function ApprovalDocumentView({
                   {doc.postApprovalCostDetails && (
                     <div className="flex flex-col gap-0.5">
                       <span className="font-bold text-[#555] text-[11px]">3. 소요 비용 및 집행 내역:</span>
-                      <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                      <div className="whitespace-pre-wrap wrap-anywhere rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
                         {doc.postApprovalCostDetails}
                       </div>
                     </div>
@@ -627,7 +627,7 @@ export function ApprovalDocumentView({
                   {doc.postApprovalFollowup && (
                     <div className="flex flex-col gap-0.5">
                       <span className="font-bold text-[#555] text-[11px]">4. 후속 조치 및 재발 방지 대책:</span>
-                      <div className="whitespace-pre-wrap rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                      <div className="whitespace-pre-wrap wrap-anywhere rounded bg-white p-2 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
                         {doc.postApprovalFollowup}
                       </div>
                     </div>
@@ -637,7 +637,7 @@ export function ApprovalDocumentView({
               {!doc.postApprovalActionTaken && !doc.postApprovalNecessity && doc.postApprovalReason && (
                 <div className="flex flex-col gap-0.5">
                   <span className="font-bold text-[#555] text-[11px]">긴급 사유 및 소명 내역:</span>
-                  <div className="whitespace-pre-wrap rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
+                  <div className="whitespace-pre-wrap wrap-anywhere rounded bg-white p-2.5 border border-rose-500/20 text-[11.5px] leading-relaxed text-[#222]">
                     {doc.postApprovalReason}
                   </div>
                 </div>
@@ -687,7 +687,7 @@ export function ApprovalDocumentView({
                     </div>
                     <div
                       title={isBlurred ? "보안 필드입니다. 열람 권한이 없습니다." : undefined}
-                      className={`min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
+                      className={`min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222] ${isBlurred ? 'blur-sm select-none opacity-70 cursor-help' : ''}`.trim()}
                     >
                       {val || ' '}
                     </div>
@@ -943,7 +943,7 @@ export function ApprovalDocumentView({
 
         {/* 본문 (양식에 정의된 장문 필드가 하나도 없고, 본문 내용이 채워져 있는 경우에만 노출) */}
         {longTextFields.length === 0 && bodyText && bodyText.trim() !== '' && bodyText !== '(본문 미리보기)' && (
-          <div className="mt-3 min-h-[120px] whitespace-pre-wrap border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
+          <div className="mt-3 min-h-[120px] whitespace-pre-wrap wrap-anywhere border border-[#bbb] px-4 py-3 text-[12.5px] leading-[1.9] text-[#222]">
             {bodyText}
           </div>
         )}
