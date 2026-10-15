@@ -34,8 +34,15 @@ export const employeeProfileSchema = z.object({
   hireDate: nullableString,
   /** 주민등록번호 */
   rrn: nullableString,
-  /** 생년월일 */
+  /** 생년월일 (YYYY-MM-DD). `birthLunar`면 음력 날짜 */
   birthDate: nullableString,
+  /**
+   * 생년월일이 음력인가 / 생일 공개 여부 — 독립 컬렉션(birthdaySettings)에 두고 읽을 때 덧씌운다
+   * (근태 대상 여부와 같은 방식). employeeProfiles 원본 문서에는 저장하지 않는다.
+   * 값이 없으면 양력·공개.
+   */
+  birthLunar: z.preprocess((v) => (v == null ? false : v === true || v === 'true'), z.boolean().default(false)),
+  birthdayPublic: z.preprocess((v) => (v == null ? true : !(v === false || v === 'false')), z.boolean().default(true)),
   /** 성별 (남성 / 여성) */
   gender: nullableString,
   /** 자택 주소 */

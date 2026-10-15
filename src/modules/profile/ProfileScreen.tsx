@@ -5,10 +5,11 @@ import { useUploadSeal } from '@/features/user/useUploadSeal';
 import { useUploadAvatar } from '@/features/user/useUploadAvatar';
 import { useQueryClient } from '@tanstack/react-query';
 import SignaturePad from './components/SignaturePad';
+import MyPersonalInfoSection from './components/MyPersonalInfoSection';
 
 /**
  * 개인 프로필 설정 화면 — /profile 라우트.
- * 모든 사용자가 자신의 이메일, 비밀번호, 인감(도장) 및 서명 이미지를 관리할 수 있다.
+ * 모든 사용자가 자신의 이메일, 인사 정보(연락처·주소·생년월일 등), 비밀번호, 인감(도장) 및 서명 이미지를 관리할 수 있다.
  */
 export default function ProfileScreen() {
   const { user, changePassword, updateProfile } = useAuth();
@@ -278,7 +279,7 @@ export default function ProfileScreen() {
 
         {/* 편집 가능: 이메일 */}
         <div className="mb-4">
-          <label className="mb-0.5 block text-[10.5px] font-bold text-ink3">이메일</label>
+          <label className="mb-0.5 block text-[10.5px] font-bold text-ink3">업무 이메일 (로그인 ID)</label>
           <input
             type="email"
             value={email}
@@ -297,6 +298,16 @@ export default function ProfileScreen() {
         >
           {savingInfo ? '저장 중…' : '정보 저장'}
         </button>
+      </section>
+
+      {/* ①-2 인사 정보 (본인 입력) */}
+      <section className="rounded-2xl border border-border bg-panel p-6 shadow-sm">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="h-4 w-1 rounded-sm bg-teal" />
+          <h2 className="text-[13px] font-extrabold text-ink">인사 정보</h2>
+          <span className="text-[10.5px] text-ink3">인명관리에 반영됩니다</span>
+        </div>
+        <MyPersonalInfoSection user={user} />
       </section>
 
       {/* ② 비밀번호 변경 */}

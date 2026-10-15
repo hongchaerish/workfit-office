@@ -7,7 +7,9 @@ import { useDepartments } from '@/features/department/useDepartments';
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import type { EmploymentStatus } from '@/domain/employee/schema';
-import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
+import { GwHead } from '@/modules/gw/_gw';
+import { describeBirthday } from '@/domain/birthday/engine';
+import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import { Button } from '@/shared/ui/Button';
 import {
   useDepartmentMembers,
@@ -20,13 +22,6 @@ import {
   makeDepartmentMemberId,
 } from '@/domain/departmentMember/engine';
 
-interface OrgNode {
-  id: string;
-  name: string;
-  leaf?: boolean;
-  children?: OrgNode[];
-}
-
 export default function EmployeeScreen() {
   const { isAdmin } = usePermission();
   const { data: users = [], isLoading: isUsersLoading } = useUsers();
@@ -38,9 +33,6 @@ export default function EmployeeScreen() {
   const { data: departmentMembers = [] } = useDepartmentMembers();
   const upsertDeptMember = useUpsertDepartmentMember();
   const removeDeptMember = useRemoveDepartmentMember();
-
-  // 대분류 탭: 'list' (임직원 관리) | 'org' (조직도)
-  const [activeTab, setActiveTab] = useState<'list' | 'org'>('list');
 
   // 필터 및 검색 상태
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,9 +49,6 @@ export default function EmployeeScreen() {
   // 겸직 등록 폼 상태
   const [newConcDeptId, setNewConcDeptId] = useState('');
   const [newConcJobTitle, setNewConcJobTitle] = useState('팀원');
-
-  // 조직도 선택 부서 상태
-  const [selectedDept, setSelectedDept] = useState<string>('all');
 
   // 신규 등록 폼 상태 (사용자 관리 연동)
   const [selectedCreateUserId, setSelectedCreateUserId] = useState('');
@@ -122,6 +111,8 @@ export default function EmployeeScreen() {
   const [editEmpIsAttendanceTarget, setEditEmpIsAttendanceTarget] = useState(true);
   const [editEmpRrn, setEditEmpRrn] = useState('');
   const [editEmpBirthDate, setEditEmpBirthDate] = useState('');
+  const [editEmpBirthLunar, setEditEmpBirthLunar] = useState(false);
+  const [editEmpBirthdayPublic, setEditEmpBirthdayPublic] = useState(true);
   const [editEmpGender, setEditEmpGender] = useState('');
   const [editEmpAddress, setEditEmpAddress] = useState('');
   const [editEmpPersonalEmail, setEditEmpPersonalEmail] = useState('');
@@ -132,8 +123,6 @@ export default function EmployeeScreen() {
   const [detailTab, setDetailTab] = useState<'work' | 'personal'>('work');
   const [showRrn, setShowRrn] = useState(false);
 
-  // 조직도 노드 접힘 상태 관리
-  const [collapsedDepts, setCollapsedDepts] = useState<Record<string, boolean>>({});
 
   // DB employeeProfiles 목록을 임직원 인터페이스로 어댑팅 (users 컬렉션과 매핑 및 폴백)
   const employees = useMemo(() => {
@@ -172,6 +161,8 @@ export default function EmployeeScreen() {
         education: p?.education || (u as any).education || '',
         gender: p?.gender || (u as any).gender || '',
         birthDate: p?.birthDate || (u as any).birthDate || '',
+        birthLunar: p?.birthLunar ?? false,
+        birthdayPublic: p?.birthdayPublic ?? true,
       };
     });
   }, [employeeProfiles, users]);
@@ -301,45 +292,6 @@ export default function EmployeeScreen() {
     });
   }, [employees, deptFilter, posFilter, statusFilter, attendanceTargetFilter, searchQuery]);
 
-  // 실시간 부서 트리 생성
-  const orgTree: OrgNode[] = useMemo(() => {
-    const deptMap = new Map<string, OrgNode>();
-    departments.forEach((d) => {
-      deptMap.set(d.id, {
-        id: d.id,
-        name: d.name,
-        leaf: true,
-        children: [],
-      });
-    });
-
-    const roots: OrgNode[] = [];
-    departments.forEach((d) => {
-      const node = deptMap.get(d.id);
-      if (!node) return;
-      if (d.parentId && deptMap.has(d.parentId)) {
-        const parent = deptMap.get(d.parentId)!;
-        parent.leaf = false;
-        parent.children?.push(node);
-      } else {
-        roots.push(node);
-      }
-    });
-
-    return [
-      {
-        id: 'company_root',
-        name: '워크핏 (전사)',
-        leaf: false,
-        children: roots.length > 0 ? roots : [{ id: 'default_dept', name: '본사', leaf: true }],
-      },
-    ];
-  }, [departments]);
-
-  const getActiveDeptEmployees = (deptName: string) => {
-    return employees.filter((e) => e.dept === deptName && e.employmentStatus !== 'RETIRED');
-  };
-
   const parseRrnInfo = (rrnVal: string) => {
     const cleaned = rrnVal.replace(/[^0-9]/g, '');
     if (cleaned.length < 7) return { gender: '', birthDate: '' };
@@ -451,6 +403,8 @@ export default function EmployeeScreen() {
     setEditEmpIsAttendanceTarget(emp.isAttendanceTarget);
     setEditEmpRrn(emp.rrn || '');
     setEditEmpBirthDate(emp.birthDate || '');
+    setEditEmpBirthLunar(emp.birthLunar);
+    setEditEmpBirthdayPublic(emp.birthdayPublic);
     setEditEmpGender(emp.gender || '');
     setEditEmpAddress(emp.address || '');
     setEditEmpPersonalEmail(emp.personalEmail || '');
@@ -496,6 +450,8 @@ export default function EmployeeScreen() {
           hireDate: editEmpHireDate,
           rrn: editEmpRrn.trim(),
           birthDate,
+          birthLunar: editEmpBirthLunar,
+          birthdayPublic: editEmpBirthdayPublic,
           gender,
           address: editEmpAddress.trim(),
           personalEmail: editEmpPersonalEmail.trim(),
@@ -589,15 +545,8 @@ export default function EmployeeScreen() {
           status: 'RETIRED',
         },
       });
-      alert('퇴직 처리가 완료되어 재직 목록 및 조직도 검색에서 제외됩니다.');
+      alert('퇴직 처리가 완료되어 재직 목록에서 제외됩니다.');
     }
-  };
-
-  const toggleDeptCollapse = (deptId: string) => {
-    setCollapsedDepts((prev) => ({
-      ...prev,
-      [deptId]: !prev[deptId],
-    }));
   };
 
   return (
@@ -606,9 +555,9 @@ export default function EmployeeScreen() {
       <GwHead
         icon="👥"
         name="인명관리"
-        desc="임직원의 직급, 직책, 재직 현황 및 조직도 정보를 조회하고 관리합니다."
+        desc="임직원의 직급, 직책, 연락처 및 재직 현황을 조회하고 관리합니다."
         right={
-          isAdmin && activeTab === 'list' ? (
+          isAdmin ? (
             <Button
               onClick={() => {
                 setNewEmpDept(departments[0]?.name || '인사지원팀');
@@ -625,28 +574,9 @@ export default function EmployeeScreen() {
         }
       />
 
-      {/* ── 사이드바 + 메인 분할 레이아웃 ── */}
-      <GwSplit
-        nav={
-          <GwSideNav
-            title="인명관리"
-            desc="임직원 및 조직도를 탐색합니다."
-            items={[
-              { id: 'list', icon: '👥', label: '임직원 관리' },
-              { id: 'org', icon: '🏢', label: '회사 조직도' },
-            ]}
-            activeId={activeTab}
-            onSelect={(id) => {
-              setActiveTab(id as 'list' | 'org');
-              setSelectedUserId(null);
-            }}
-          />
-        }
-      >
         {/* ── 메인 콘텐츠 영역 ── */}
-        <main className="flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-border bg-panel p-6 shadow-sm min-w-0">
-        {/* ==================== A. 임직원 관리 탭 ==================== */}
-        {activeTab === 'list' && (
+        <main className="mt-5 flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-border bg-panel p-6 shadow-sm min-w-0">
+        {/* ==================== A. 임직원 목록 ==================== */}
           <div className="flex flex-1 flex-col gap-4 overflow-hidden">
             {/* 상단 타이틀 및 검색바 */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
@@ -661,7 +591,7 @@ export default function EmployeeScreen() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="이름, 사번, 이메일 검색"
+                    placeholder="이름, 사번, 업무·개인 이메일 검색"
                     className="h-8 w-56 rounded-lg border border-border bg-panel pl-3 pr-8 text-[11px] outline-none focus:border-teal placeholder:text-ink3"
                   />
                   <Search size={13} className="absolute right-2.5 top-2.5 text-ink3 pointer-events-none" />
@@ -804,7 +734,8 @@ export default function EmployeeScreen() {
                     <th className="py-2.5 px-3 min-w-[140px]">부서</th>
                     <th className="py-2.5 px-3 w-24">직급</th>
                     <th className="py-2.5 px-3 w-24">직책</th>
-                    <th className="py-2.5 px-3 min-w-[220px]">이메일</th>
+                    <th className="py-2.5 px-3 min-w-[180px]">업무 이메일</th>
+                    <th className="py-2.5 px-3 min-w-[180px]">개인 이메일</th>
                     <th className="py-2.5 px-3 w-36">연락처</th>
                     <th className="py-2.5 px-3 text-center w-20">재직상태</th>
                     <th className="py-2.5 px-3 text-center w-24">근태관리</th>
@@ -853,22 +784,8 @@ export default function EmployeeScreen() {
                           </td>
                           <td className="py-2 px-3 text-[11.5px] text-ink2 whitespace-nowrap">{e.position}</td>
                           <td className="py-2 px-3 text-[11.5px] text-ink3 whitespace-nowrap">{e.duty}</td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">
-                            {e.email && e.personalEmail && e.email !== e.personalEmail ? (
-                              <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1" title={e.email}>
-                                  <span className="shrink-0 rounded bg-teal-soft/40 px-1 font-sans text-[9px] font-bold text-teal">회사</span>
-                                  <span className="whitespace-nowrap">{e.email}</span>
-                                </div>
-                                <div className="flex items-center gap-1" title={e.personalEmail}>
-                                  <span className="shrink-0 rounded bg-panel-alt px-1 font-sans text-[9px] font-bold text-ink3">개인</span>
-                                  <span className="whitespace-nowrap text-ink3">{e.personalEmail}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              e.email || '-'
-                            )}
-                          </td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-ink2 whitespace-nowrap">{e.email || '-'}</td>
+                          <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.personalEmail || '-'}</td>
                           <td className="py-2 px-3 font-mono text-[11px] text-ink3 whitespace-nowrap">{e.phone || '-'}</td>
                           <td className="py-2 px-3 text-center">
                             <span
@@ -907,7 +824,7 @@ export default function EmployeeScreen() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={10} className="p-12 text-center text-ink3 text-[11.5px]">
+                      <td colSpan={11} className="p-12 text-center text-ink3 text-[11.5px]">
                         {isUsersLoading ? '임직원 목록을 불러오는 중...' : '검색 조건에 일치하는 임직원이 없습니다.'}
                       </td>
                     </tr>
@@ -916,118 +833,8 @@ export default function EmployeeScreen() {
               </table>
             </div>
           </div>
-        )}
 
-        {/* ==================== B. 회사 조직도 탭 ==================== */}
-        {activeTab === 'org' && (
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            <div>
-              <h1 className="text-[13.5px] font-extrabold text-ink">조직도 트리</h1>
-              <p className="mt-0.5 text-[11px] text-ink3">회사 계층별 부서 트리와 소속 재직 직원 명단을 실시간으로 탐색합니다.</p>
-            </div>
-
-            <div className="grid flex-1 grid-cols-1 gap-5 overflow-hidden rounded-xl border border-border bg-panel p-4 md:grid-cols-[240px_1fr]">
-              {/* 좌측 부서 트리 박스 */}
-              <div className="space-y-3 overflow-y-auto border-r border-border pr-4">
-                <h3 className="flex items-center gap-1 text-xs font-extrabold text-ink">
-                  <span>🏢</span>
-                  <span>부서 목록</span>
-                </h3>
-
-                <div className="space-y-1 pl-1 text-[12px] font-bold select-none">
-                  {orgTree.map(function renderNode(node: OrgNode) {
-                    const isCollapsed = collapsedDepts[node.id] || false;
-                    const isLeaf = node.leaf || false;
-                    const children = node.children || [];
-                    const activeMembers = isLeaf ? getActiveDeptEmployees(node.name) : [];
-
-                    return (
-                      <div key={node.id} className="mt-0.5 flex flex-col">
-                        <div
-                          onClick={() => {
-                            if (!isLeaf && children.length > 0) {
-                              toggleDeptCollapse(node.id);
-                            } else {
-                              setSelectedDept(node.name);
-                            }
-                          }}
-                          className={`flex cursor-pointer items-center gap-1.5 rounded-lg py-1.5 px-2 transition-colors ${
-                            isLeaf
-                              ? `hover:bg-teal-soft/10 text-ink ${selectedDept === node.name ? 'bg-teal-soft/15 font-extrabold text-teal' : ''}`
-                              : 'text-ink2 hover:bg-black/5'
-                          }`}
-                        >
-                          {!isLeaf && (
-                            <span className="grid h-3 w-3 place-items-center text-[10px] text-ink3">
-                              {isCollapsed ? '▶' : '▼'}
-                            </span>
-                          )}
-                          <span>{isLeaf ? '📄' : '📁'}</span>
-                          <span>{node.name}</span>
-                          {isLeaf && (
-                            <span className="ml-1 text-[10px] font-extrabold text-teal">
-                              ({activeMembers.length})
-                            </span>
-                          )}
-                        </div>
-
-                        {!isCollapsed && children.length > 0 && (
-                          <div className="my-0.5 ml-2.5 flex flex-col gap-0.5 border-l border-border/60 pl-4.5">
-                            {children.map(renderNode)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 우측 소속 사원 리스트 박스 */}
-              <div className="space-y-4 overflow-y-auto">
-                <h3 className="flex items-center gap-1.5 border-b border-border pb-2.5 text-xs font-extrabold text-ink">
-                  <span>👥</span>
-                  <div className="flex items-center gap-1.5">
-                    <span>부서 재직자 검색 명단 {selectedDept !== 'all' && `(${selectedDept})`}</span>
-                  </div>
-                  {selectedDept !== 'all' && (
-                    <button
-                      onClick={() => setSelectedDept('all')}
-                      className="cursor-pointer border-none bg-transparent p-0 text-[10px] font-bold text-teal hover:underline"
-                    >
-                      전체 보기
-                    </button>
-                  )}
-                </h3>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {employees
-                    .filter((e) => e.employmentStatus !== 'RETIRED' && (selectedDept === 'all' || e.dept === selectedDept))
-                    .map((emp) => (
-                      <div
-                        key={emp.id}
-                        onClick={() => setSelectedUserId(emp.id)}
-                        className="shadow-2xs flex cursor-pointer items-center gap-3.5 rounded-xl border border-border bg-panel p-3.5 transition-all hover:border-teal/30 hover:shadow-xs"
-                      >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-soft text-[12px] font-bold text-teal">
-                          {emp.name[0]}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12px] font-bold text-ink">{emp.name}</div>
-                          <div className="mt-0.5 flex items-center gap-1.5 truncate text-[10px] text-ink3">
-                            <span>{emp.dept}</span>
-                            <span>·</span>
-                            <span>{emp.position}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
-      </GwSplit>
 
       {/* ==================== C. 임직원 상세 모달 패널 ==================== */}
       {selectedUserId && selectedEmp && (
@@ -1227,6 +1034,12 @@ export default function EmployeeScreen() {
                       <div>
                         <span className="block text-[11px] text-ink3">생년월일</span>
                         <span className="mt-1 block font-mono font-semibold text-ink">{selectedEmp.birthDate || '-'}</span>
+                        {selectedEmp.birthDate && (
+                          <span className="mt-0.5 block text-[10.5px] text-ink3">
+                            생일: {describeBirthday(selectedEmp, calendarToday())}
+                            {!selectedEmp.birthdayPublic && ' · 비공개'}
+                          </span>
+                        )}
                       </div>
 
                       <div>
@@ -1906,6 +1719,16 @@ export default function EmployeeScreen() {
                         onChange={(e) => setEditEmpBirthDate(e.target.value)}
                         className="h-9 w-full rounded-lg border border-border bg-panel px-3 text-[12px] outline-none focus:border-teal"
                       />
+                      <div className="flex items-center gap-3 text-[11px] font-semibold text-ink2">
+                        <label className="flex cursor-pointer items-center gap-1">
+                          <input type="checkbox" checked={editEmpBirthLunar} onChange={(e) => setEditEmpBirthLunar(e.target.checked)} className="accent-teal" />
+                          음력
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-1">
+                          <input type="checkbox" checked={editEmpBirthdayPublic} onChange={(e) => setEditEmpBirthdayPublic(e.target.checked)} className="accent-teal" />
+                          생일 공개
+                        </label>
+                      </div>
                     </div>
                   </div>
 
