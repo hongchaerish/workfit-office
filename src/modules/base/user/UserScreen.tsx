@@ -31,7 +31,7 @@ export default function UserScreen() {
   const canUpdate = canAction('S_BASE_USER', 'update');
 
   // 사용여부 필터 기본값 '' (전체) — 미사용(퇴사 등) 계정도 기본 화면에서 함께 확인 가능.
-  const [draft, setDraft] = useState({ dept: '', status: '', q: '' });
+  const [draft, setDraft] = useState({ status: '', q: '' });
   const [applied, setApplied] = useState(draft);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
@@ -43,10 +43,6 @@ export default function UserScreen() {
   const upsert = useUpsertUser();
   const removeUsers = useRemoveUsers();
 
-  const deptOptions: Option[] = [
-    { value: '', label: '전체' },
-    ...[...new Set(all.map((u) => u.dept))].map((d) => ({ value: d, label: d })),
-  ];
 
   const summary = useMemo(
     () => ({
@@ -62,17 +58,6 @@ export default function UserScreen() {
     { key: 'empNo', header: '사번 (ID)', mono: true, sortable: true, width: 110 },
     { key: 'name', header: '이름', sortable: true, width: 100 },
     { key: 'email', header: '이메일', sortable: true },
-    {
-      key: 'dept',
-      header: '소속 부서',
-      sortable: true,
-      width: 140,
-      render: (u) => (
-        <span className={u.dept && u.dept !== '미지정' ? 'text-ink2' : 'text-ink3 italic'}>
-          {u.dept || '미지정'}
-        </span>
-      ),
-    },
     {
       key: 'roles' as any,
       header: '부여된 역할 (권한그룹)',
@@ -136,9 +121,6 @@ export default function UserScreen() {
 
       {/* 필터 */}
       <FilterBar onSearch={() => setApplied(draft)}>
-        <FilterField label="부서">
-          <Select value={draft.dept} onChange={(v) => setDraft({ ...draft, dept: v })} options={deptOptions} width={130} />
-        </FilterField>
         <FilterField label="사용여부">
           <Select value={draft.status} onChange={(v) => setDraft({ ...draft, status: v })} options={STATUS_OPTIONS} width={100} />
         </FilterField>
