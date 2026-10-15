@@ -31,6 +31,7 @@ import {
 import { useWorkPlanConfig } from '@/features/workPlan/useWorkPlanConfig';
 import { resolveWorkPlanScope, canViewWorkPlan } from '@/features/auth/scopeHelper';
 import MobileCommonHeader from './MobileCommonHeader';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
 import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
@@ -583,6 +584,7 @@ export default function MobileTaskScreen() {
                       <div>
                         <div className="flex items-center gap-1">
                           <span className="text-[12.5px] font-black text-ink">{member.name}</span>
+                          <BirthdayMark userId={member.id} />
                           <span className="text-[10.5px] text-ink3">{member.position}</span>
                           {member.jobTitle && (
                             <span className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-semibold text-slate-600">

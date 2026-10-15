@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { birthdaysOn, describeBirthday, isBirthdayOn, nextSolarBirthday, solarBirthdayInYear } from './engine';
+import { birthdaysOn, birthdayUserIds, describeBirthday, isBirthdayOn, nextSolarBirthday, solarBirthdayInYear } from './engine';
 
 test('양력 생일은 그해 같은 날', () => {
   assert.equal(solarBirthdayInYear({ birthDate: '1990-03-05' }, 2026), '2026-03-05');
@@ -54,4 +54,15 @@ test('그날 생일자 중 비공개는 뺀다', () => {
 test('표시 문구', () => {
   assert.equal(describeBirthday({ birthDate: '1990-03-05' }, '2026-10-15'), '양력 3월 5일');
   assert.equal(describeBirthday({ birthDate: '1985-08-15', birthLunar: true }, '2026-10-15'), '음력 8월 15일 (올해 양력 9월 25일)');
+});
+
+test('오늘 생일인 재직자 id — 비공개·생년월일 없음·사용 중이 아닌 계정은 뺀다', () => {
+  const people = [
+    { userId: 'A', birthDate: '1990-10-15' },
+    { userId: 'B', birthDate: '1990-10-15', birthdayPublic: false },
+    { userId: 'C', birthDate: null },
+    { userId: 'D', birthDate: '1988-10-15' },
+    { userId: 'E', birthDate: '1985-09-05', birthLunar: true }, // 음력 9/5 → 2026 양력 10/15
+  ];
+  assert.deepEqual([...birthdayUserIds(people, new Set(['A', 'B', 'C', 'E']), '2026-10-15')].sort(), ['A', 'E']);
 });

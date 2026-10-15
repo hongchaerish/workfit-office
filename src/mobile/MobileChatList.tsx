@@ -12,6 +12,7 @@ import { getRoomDisplayName, fmtTime } from './chatUtils';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { useAllUserPresences, useMyPresence } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { currentApproverIds, getPredecessorsOf } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import MobileUserMenuSheet from './MobileUserMenuSheet';
@@ -199,6 +200,7 @@ export default function MobileChatList() {
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 truncate text-[14px] font-bold text-ink">
                       <span className="truncate">{r.displayName}</span>
+                      {isDirect && <BirthdayMark userId={otherId} />}
                       {isPinned && <Pin size={11} className="inline shrink-0" />}
                       {isDirect && otherPresence && otherPresence.status !== 'OFFLINE' && (
                         <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
