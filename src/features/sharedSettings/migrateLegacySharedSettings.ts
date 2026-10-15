@@ -9,12 +9,8 @@ import {
   parseSubstituteHolidayGrant,
   substituteHolidayBackend,
 } from '@/domain/leave/substituteHolidayStore';
-import { LEGACY_SUCCESSION_STORAGE_KEY, parseSuccession, successionBackend } from '@/data/succession/succession.repo';
 import { LEGACY_ABSENCE_STORAGE_PREFIX, absenceBackend, parseAbsence } from '@/data/absence/absence.repo';
 import { LEGACY_ATTENDANCE_TARGET_STORAGE_KEY, attendanceTargetBackend } from '@/data/employeeProfile/employeeProfile.repo';
-
-/** 예전에 모든 브라우저에 자동으로 깔리던 예시 승계(류지광 → 임시 ID 'U_MORAN') — 실제 설정이 아니라 옮기지 않는다. */
-const isSeedSuccession = (s: { id: string; successorId: string }) => s.id === 'succ_001' && s.successorId === 'U_MORAN';
 
 const parseArray = <T>(raw: string, parse: (x: unknown) => T | null): T[] => {
   try {
@@ -48,12 +44,6 @@ async function run(): Promise<number> {
   );
   total += await migrateLegacyKey(LEGACY_SUBSTITUTE_HOLIDAY_STORAGE_KEY, (raw) =>
     migrateLegacyItems(substituteHolidayBackend, parseArray(raw, parseSubstituteHolidayGrant)),
-  );
-  total += await migrateLegacyKey(LEGACY_SUCCESSION_STORAGE_KEY, (raw) =>
-    migrateLegacyItems(
-      successionBackend,
-      parseArray(raw, parseSuccession).filter((s) => !isSeedSuccession(s)),
-    ),
   );
   total += await migrateLegacyKey(LEGACY_ATTENDANCE_TARGET_STORAGE_KEY, (raw) => {
     let map: Record<string, unknown> = {};

@@ -35,7 +35,6 @@ import { postReadDocIdsFor, unreadPostReadDocIdsFor } from '@/domain/approvalPos
 import {
   activeSteps,
   currentApproverIds,
-  getPredecessorsOf,
   matchesBox,
   byRecent,
   getEffectiveRecipients,
@@ -103,12 +102,10 @@ export default function ApprovalScreen() {
 
   const [box, setBox] = useState<ApprovalBox | '문서함'>(() => boxParam || '대기');
 
-  const preds = useMemo(() => getPredecessorsOf(me), [me]);
-
-  // 후열(공람) 전달 — 본인 + 전임자 앞 전달을 한 번에 읽어 사용자별로 나눠 쓴다.
+  // 후열(공람) 전달 — 본인 앞 전달을 읽는다.
   const { isOperator: isOp, isAdmin: isAdm } = usePermission();
   useLegacyPostReadImport(me, isOp || isAdm);
-  const { data: recvPostReads = [] } = useReceivedPostReads([me, ...preds]);
+  const { data: recvPostReads = [] } = useReceivedPostReads([me]);
   const postReadIdsOf = (uid: string) => postReadDocIdsFor(recvPostReads, uid);
   const myUnreadPostReadIds = useMemo(() => unreadPostReadDocIdsFor(recvPostReads, me), [recvPostReads, me]);
 
@@ -116,9 +113,9 @@ export default function ApprovalScreen() {
     const list = byBox['대기'] ?? [];
     return list.filter((d) => {
       const approvers = currentApproverIds(d);
-      return approvers.includes(me) || approvers.some((id) => preds.includes(id));
+      return approvers.includes(me);
     }).length;
-  }, [byBox, me, preds]);
+  }, [byBox, me]);
 
   const [selId, setSelId] = useState<string | null>(() => params.get('doc'));
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
@@ -241,31 +238,20 @@ export default function ApprovalScreen() {
   const batchRestore = useBatchRestoreFromTrash();
   const batchPermanentDelete = useBatchPermanentlyDelete();
 
-  // 본인 및 전임자(들)의 approval boxes 데이터를 병합하여 단일 결재함 리스트 구성 (권한 승계 완벽 반영)
+  // 본인 결재함 목록
   const list = useMemo(() => {
     if (box === '문서함') return [];
 
     // 1. 본인의 기본 문서 목록
     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-    let combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
-
-    // 2. 전임자들의 문서 목록을 가져와 병합
-    preds.forEach((predId) => {
-      const predUser = org.userById(predId) || users.find((u) => u.id === predId);
-      if (!predUser) return;
-      const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
-      const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
-
-      const predDocs = allDocs.filter((d) => matchesBox(d, predId, box as ApprovalBox, predDeptNameOrId, undefined, postReadIdsOf(predId)));
-      combined = [...combined, ...predDocs];
-    });
+    const combined = allDocs.filter((d) => matchesBox(d, me, box as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
 
     // 3. ID 기준 중복 제거 및 최신 상신순 재정렬
     const uniqueMap = new Map<string, ApprovalDoc>();
     combined.forEach((d) => uniqueMap.set(d.id, d));
     return Array.from(uniqueMap.values()).sort(byRecent);
-  }, [box, allDocs, me, preds, org, userObj, users, recvPostReads]);
+  }, [box, allDocs, me, org, userObj, recvPostReads]);
 
   // 완료함, 결재함 필터링 적용
   const filteredList = useMemo(() => {
@@ -293,11 +279,10 @@ export default function ApprovalScreen() {
       return list;
     }
     if (box === '반려') {
-      const preds = getPredecessorsOf(me);
       const isMyReject = (d: ApprovalDoc) =>
         d.steps.some(
           (s) =>
-            (s.approverId === me || s.delegatedFromId === me || preds.includes(s.approverId)) &&
+            (s.approverId === me || s.delegatedFromId === me) &&
             s.decision === '반려'
         );
       if (rejectFilter === 'rejected') {
@@ -309,17 +294,16 @@ export default function ApprovalScreen() {
       return list;
     }
     if (box === '대기') {
-      const preds = getPredecessorsOf(me);
       if (todoFilter === 'pending') {
         return list.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return approvers.includes(me) || approvers.some(id => preds.includes(id));
+          return approvers.includes(me);
         });
       }
       if (todoFilter === 'progress') {
         return list.filter((d: ApprovalDoc) => {
           const approvers = currentApproverIds(d);
-          return !approvers.includes(me) && !approvers.some(id => preds.includes(id));
+          return !approvers.includes(me);
         });
       }
       return list;
@@ -392,11 +376,11 @@ export default function ApprovalScreen() {
   });
   const position = selDoc ? docPosition(displayedList, selDoc.id) : null;
 
-  /** 내가(또는 전임자로서) 지금 승인할 수 있는 문서 — 일괄 승인 대상 */
+  /** 내가 지금 승인할 수 있는 문서 — 일괄 승인 대상 */
   const isApprovable = (d: ApprovalDoc) => {
     if (box !== '대기' || todoFilter === 'progress') return false;
     const approvers = currentApproverIds(d);
-    return approvers.includes(me) || approvers.some(id => preds.includes(id));
+    return approvers.includes(me);
   };
   /** 체크박스 선택 가능 — 일괄 승인·복원 대상이거나, 읽음 처리할 수 있는 문서 */
   const isDocSelectable = (d: ApprovalDoc) => {
@@ -577,16 +561,8 @@ export default function ApprovalScreen() {
                   } else {
                     const myDeptObj = org.depts.find((d) => d.name === userObj?.dept);
                     const myDeptNameOrId = userObj ? (myDeptObj ? `${userObj.dept}||${myDeptObj.id}` : userObj.dept) : '';
-                    let combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
+                    const combined = allDocs.filter((d) => matchesBox(d, me, b as ApprovalBox, myDeptNameOrId, undefined, postReadIdsOf(me)));
 
-                    preds.forEach((predId) => {
-                      const predUser = org.userById(predId) || users.find((u) => u.id === predId);
-                      if (!predUser) return;
-                      const predDeptObj = org.depts.find((d) => d.name === predUser.dept);
-                      const predDeptNameOrId = predDeptObj ? `${predUser.dept}||${predDeptObj.id}` : predUser.dept;
-                      const predDocs = allDocs.filter((d) => matchesBox(d, predId, b as ApprovalBox, predDeptNameOrId, undefined, postReadIdsOf(predId)));
-                      combined = [...combined, ...predDocs];
-                    });
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
                     if (b === '상신') {

@@ -317,13 +317,6 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
-    // 사용자관리 > 결재 권한 승계(전임자 → 후임자, 전임자당 1건)
-    id: 'approvalSuccessions',
-    name: '결재 권한 승계',
-    attributes: [S('predecessorId', 64, true), S('successorId', 64, true), S('effectiveDate', 40)],
-    indexes: [],
-  },
-  {
     // 휴가관리 > 연차 수동 가감(포상·공제·이월 등)
     id: 'leaveAdjustments',
     name: '연차 수동 조정',
