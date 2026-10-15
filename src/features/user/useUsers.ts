@@ -16,6 +16,17 @@ export function useUsers(filter?: UserFilter) {
 }
 
 /** 등록/수정 통합 — id 있으면 수정, 없으면 신규 채번. */
+/** 새 계정에 자동으로 넣을 다음 사번(YY+순번). 창을 열 때마다 새로 계산한다. */
+export function useSuggestedEmpNo(enabled: boolean) {
+  return useQuery({
+    queryKey: [KEY, 'suggestedEmpNo'],
+    queryFn: () => userRepo.suggestEmpNo(),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useUpsertUser() {
   const qc = useQueryClient();
   return useMutation({
