@@ -38,6 +38,11 @@ import CalendarEventModal from './CalendarEventModal';
 import MonthCalendar from './MonthCalendar';
 import { CheckCircle2, ListTodo, ExternalLink } from 'lucide-react';
 import { WorkPlanInlineText } from '@/modules/gw/task/components/WorkPlanInlineText';
+import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
+import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
+import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
+import type { OutsideWork } from '@/domain/outsideWork/schema';
 
 const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -249,8 +254,12 @@ function LocalCalendarScreen() {
   const teamQuery = useTeamCalendarEvents(teamViewer, teamOwners, range, isTeam && actor !== null);
   // 전자결재 승인 건(휴가·외근·출장) 캘린더 자동 연동
   const approvalsQuery = useAllApprovals();
-  const scheduleEvents = useMemo<CalendarEvent[]>(() => {
+  // 결재 없이 직접 등록한 외근·출장도 같은 모양으로 투영한다(전사 공개)
+  const outsideWorksQuery = useOutsideWorks(range);
+  // outsideViewByEventId: 투영 일정 id → 외근·출장 상세. 외근·출장 칩을 누르면 일정 창 대신 상세를 연다.
+  const { scheduleEvents, outsideViewByEventId } = useMemo(() => {
     const list: CalendarEvent[] = [];
+    const outsideViewByEventId = new Map<string, OutsideScheduleView>();
     const schedules = extractApprovedSchedules(approvalsQuery.data ?? []);
     for (const s of schedules) {
       // 퇴사 처리된 직원의 일정은 캘린더에 노출되지 않도록 필터링
@@ -283,6 +292,8 @@ function LocalCalendarScreen() {
 
         const isAllDay = !s.startTime || !s.endTime || s.startTime >= s.endTime;
 
+        const outsideView = fromApprovalSchedule(s);
+        if (outsideView) outsideViewByEventId.set(`CAL-APPR-${s.docId}-${dStr}`, outsideView);
         list.push({
           id: `CAL-APPR-${s.docId}-${dStr}`,
           ownerUserId: s.drafterId,
@@ -306,8 +317,44 @@ function LocalCalendarScreen() {
         curr.setDate(curr.getDate() + 1);
       }
     }
-    return list;
-  }, [approvalsQuery.data, activeUserIdSet, userMap]);
+
+    for (const w of outsideWorksQuery.data ?? []) {
+      if (!activeUserIdSet.has(w.ownerUserId)) continue;
+      const ownerUser = userMap.get(w.ownerUserId);
+      const ownerWithPos = [ownerUser?.name ?? '', ownerUser?.position ?? ''].filter(Boolean).join(' ');
+      const view = fromOutsideWork(w, (id) => userMap.get(id)?.name);
+      const tag = w.category === 'TRIP' ? '[출장]' : '[외근]';
+      let curr = new Date(w.startDate + 'T00:00:00');
+      const last = new Date(w.endDate + 'T00:00:00');
+      while (curr <= last) {
+        const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+        const id = `CAL-SELF-${w.id}-${dStr}`;
+        outsideViewByEventId.set(id, view);
+        list.push({
+          id,
+          ownerUserId: w.ownerUserId,
+          title: `${tag} ${ownerWithPos} (${w.destination})`,
+          date: dStr,
+          allDay: w.allDay,
+          startTime: w.allDay ? null : w.startTime,
+          endTime: w.allDay ? null : w.endTime,
+          memo: w.purpose,
+          visibility: 'COMPANY',
+          eventType: 'OUTSIDE',
+          attendeeUserIds: [],
+          deptId: null,
+          projectId: null,
+          reminded: true,
+          createdAt: w.createdAt,
+          updatedAt: w.updatedAt,
+        });
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
+    return { scheduleEvents: list, outsideViewByEventId };
+  }, [approvalsQuery.data, outsideWorksQuery.data, activeUserIdSet, userMap]);
+  const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
+  const [outsideEdit, setOutsideEdit] = useState<OutsideWork | null>(null);
 
   const events = eventsQuery.data ?? [];
   /** 지금 탭이 그리는 일정. 달력 격자·날짜 모달이 같은 원천을 쓴다. (회의·미팅 및 전자결재 승인 건 중심 공인 일정만 노출, 퇴사자 일정 원천 배제) */
@@ -404,6 +451,11 @@ function LocalCalendarScreen() {
     initialAttendees?: string[];
     companyEventOnly?: boolean;
   }) => {
+    const outside = target.event ? outsideViewByEventId.get(target.event.id) : undefined;
+    if (outside) {
+      setOutsideDetail(outside);
+      return;
+    }
     setModalTarget(target);
   };
 
@@ -738,6 +790,26 @@ function LocalCalendarScreen() {
         </div>
       </div>
       </div>
+
+      {outsideDetail && (
+        <OutsideWorkDetailModal
+          view={outsideDetail}
+          viewer={{ userId: actor.id, active: actor.status === '사용', dept: actor.dept }}
+          users={users}
+          onClose={() => setOutsideDetail(null)}
+          onEdit={(view) => view.self && setOutsideEdit(view.self)}
+        />
+      )}
+      {outsideEdit && (
+        <OutsideWorkFormModal
+          key={outsideEdit.id}
+          actor={{ userId: actor.id, active: actor.status === '사용' }}
+          initialDate={outsideEdit.startDate}
+          work={outsideEdit}
+          users={users}
+          onClose={() => setOutsideEdit(null)}
+        />
+      )}
 
       {modalTarget && (
         <CalendarEventModal
