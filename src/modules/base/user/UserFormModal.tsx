@@ -6,7 +6,8 @@ import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
-import { USER_STATUS, userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import { userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import { ACCOUNT_EDITABLE_STATUSES } from '@/domain/user/accountStatus';
 
 export type { UserFormValues };
 
@@ -57,13 +58,15 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
     );
   }, [open, initial, reset]);
 
+  const retired = initial?.status === '미사용';
+
   const submit = handleSubmit((values: UserFormValues) => {
     // 인사정보(부서, 직급, 직책)는 임직원 관리에서 발령하므로 기존 값 보존
     const finalPayload: UserFormValues = {
       empNo: values.empNo,
       name: values.name,
       email: values.email,
-      status: values.status,
+      status: retired ? '미사용' : values.status,
       password: values.password,
       dept: initial?.dept || values.dept || '미지정',
       position: initial?.position || values.position || '사원',
@@ -101,11 +104,16 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             <TextField {...register('email')} invalid={!!errors.email} placeholder="user@workfit.co.kr" />
           </Field>
           <Field label="계정 상태" required error={errors.status?.message}>
-            <SelectField
-              {...register('status')}
-              invalid={!!errors.status}
-              options={USER_STATUS.map((s) => ({ value: s, label: s }))}
-            />
+            {/* 사용·잠금만 고른다. 미사용(퇴직)은 인명관리 퇴직 처리로만 들어가고 여기서 되돌리지 못한다 */}
+            {retired ? (
+              <TextField value="미사용 (퇴직)" readOnly disabled />
+            ) : (
+              <SelectField
+                {...register('status')}
+                invalid={!!errors.status}
+                options={ACCOUNT_EDITABLE_STATUSES.map((s) => ({ value: s, label: s }))}
+              />
+            )}
           </Field>
         </div>
 
@@ -118,10 +126,6 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
             placeholder={initial ? '변경 시에만 입력 (비우면 기존 유지)' : `비우면 기본값 ${DEFAULT_USER_PASSWORD}`}
           />
         </Field>
-
-        <div className="rounded-lg border border-border bg-panel-alt/40 p-3 text-[11px] text-ink3">
-          💡 <strong>안내</strong>: 소속 부서, 직급, 직책 등 인사 정보는 <strong>[그룹웨어 &gt; 임직원 관리]</strong> 화면에서 정식 인사 발령할 수 있습니다.
-        </div>
       </form>
     </Modal>
   );

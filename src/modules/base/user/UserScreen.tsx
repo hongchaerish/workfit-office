@@ -100,7 +100,10 @@ export default function UserScreen() {
   ];
 
   const handleSubmit = (values: UserFormValues, id?: string) => {
-    upsert.mutate({ values, id });
+    upsert.mutate({ values, id }, {
+      // 저장 규칙(예: 미사용은 인명관리 퇴직 처리로만)에 걸리면 이유를 알린다
+      onError: (e) => alert(`계정을 저장하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`),
+    });
   };
   const handleDelete = () => {
     if (selected.length === 0) return;
