@@ -16,36 +16,19 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import {
-  useBoardPosts,
-  useCountBoardView,
-  useCreateBoardPost,
-  useDeleteBoardPost,
-  useUpdateBoardPost,
-} from '@/features/board/useBoardPosts';
-import { isPostAuthor, numberPosts, postDateLabel, postDateStamp, sortPostsForList } from '@/domain/board/rules';
+import { useBoardPosts } from '@/features/board/useBoardPosts';
+import { attachmentSizeLabel, useBoardActions, type BoardAttachment } from '@/features/board/useBoardActions';
+import { canModifyPost, numberPosts, postDateLabel, sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
-import { fileStorage } from '@/shared/lib/storage';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
 import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 import { Modal } from '@/shared/ui/Modal';
 
-type Attachment = NonNullable<Post['attachedFiles']>[number];
-
-const sizeLabel = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 const failMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? `${fallback} (${error.message})` : fallback;
 
-/** 첨부 업로드 — 저장소 경로를 함께 남겨 글 수정·삭제 때 파일도 지울 수 있게 한다. */
-async function uploadAttachments(files: File[]): Promise<Attachment[]> {
-  return Promise.all(files.map(async (file) => {
-    const path = `chat/board/${crypto.randomUUID()}_${file.name}`;
-    const url = await fileStorage.put(path, file, { contentType: file.type, filename: file.name });
-    return { name: file.name, size: sizeLabel(file.size), url, path };
-  }));
-}
 
 const BOARDS = BOARDS_SEED;
 
@@ -77,28 +60,25 @@ export default function BoardScreen() {
 
   const postsQuery = useBoardPosts();
   const posts = useMemo(() => postsQuery.data ?? [], [postsQuery.data]);
-  const createPost = useCreateBoardPost();
-  const updatePost = useUpdateBoardPost();
-  const deletePost = useDeleteBoardPost();
-  const countView = useCountBoardView();
+  const actions = useBoardActions();
+  const saving = actions.saving;
 
   const [activeBoard, setActiveBoard] = useState<string>(boardParam || 'notice');
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write' | 'edit'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(postIdParam);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Post | null>(null);
 
   // 기존 첨부파일 목록 (수정 시 사용)
-  const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<BoardAttachment[]>([]);
 
   // 선택된 실제 파일 객체 목록 상태
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   // UI 표시용 첨부파일 목록 파생
   const writeAttachments = useMemo(
-    () => selectedFiles.map((f) => ({ name: f.name, size: sizeLabel(f.size) })),
+    () => selectedFiles.map((f) => ({ name: f.name, size: attachmentSizeLabel(f.size) })),
     [selectedFiles],
   );
 
@@ -165,18 +145,7 @@ export default function BoardScreen() {
   }, [posts, activeBoard, searchQuery]);
 
   const handlePostClick = (post: Post) => {
-    const sessionKey = `read_post_${post.id}`;
-    let alreadyRead = false;
-    try {
-      alreadyRead = sessionStorage.getItem(sessionKey) === 'true';
-      if (!alreadyRead) sessionStorage.setItem(sessionKey, 'true');
-    } catch {
-      /* 저장소를 못 쓰면 매번 센다 */
-    }
-    if (!alreadyRead) {
-      countView.mutate(post, { onError: (err) => console.error('Failed to update views:', err) });
-    }
-
+    actions.countView(post);
     setSelectedPostId(String(post.id));
     changeView('detail');
   };
@@ -199,49 +168,25 @@ export default function BoardScreen() {
       setError('제목과 내용을 모두 입력해주세요.');
       return;
     }
-
-    setSaving(true);
     setError('');
     try {
-      const attachedFilesData = await uploadAttachments(selectedFiles);
-      const created: Post = {
-        id: Date.now().toString(),
-        boardId: newPost.boardId,
-        title: newPost.title,
-        content: newPost.content,
-        author: `${user.name} ${user.position}`,
-        authorId: user.id,
-        date: postDateStamp(),
-        views: 0,
-        isPinned: newPost.isPinned,
-        hasAttachment: attachedFilesData.length > 0,
-        attachedFiles: attachedFilesData.length > 0 ? attachedFilesData : undefined,
-      };
-
-      await createPost.mutateAsync(created);
+      const created = await actions.create(user, newPost, selectedFiles);
+      if (!created) return;
       setViewMode('list');
-      setNewPost({
-        title: '',
-        content: '',
-        boardId: activeBoard,
-        isPinned: false,
-      });
+      setNewPost({ title: '', content: '', boardId: activeBoard, isPinned: false });
       setSelectedFiles([]);
     } catch (err) {
       console.error('Failed to save post:', err);
       setError(failMessage(err, '게시글 저장에 실패했습니다. 다시 시도해 주세요.'));
-    } finally {
-      setSaving(false);
     }
   };
 
   const confirmDeletePost = async () => {
     const target = pendingDelete;
     if (!target) return;
-    setSaving(true);
     setError('');
     try {
-      await deletePost.mutateAsync(target);
+      await actions.remove(target);
       setPendingDelete(null);
       setViewMode('list');
       setSelectedPostId(null);
@@ -249,8 +194,6 @@ export default function BoardScreen() {
       console.error('Failed to delete post:', err);
       setPendingDelete(null);
       setError(failMessage(err, '게시글 삭제에 실패했습니다.'));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -273,31 +216,15 @@ export default function BoardScreen() {
       setError('제목과 내용을 모두 입력해주세요.');
       return;
     }
-
-    setSaving(true);
     setError('');
     try {
-      const newAttachments = await uploadAttachments(selectedFiles);
-      const updatedAttachments = [...existingAttachments, ...newAttachments];
-
-      const updated: Post = {
-        ...selectedPost,
-        title: newPost.title,
-        content: newPost.content,
-        boardId: newPost.boardId,
-        isPinned: newPost.isPinned,
-        hasAttachment: updatedAttachments.length > 0,
-        attachedFiles: updatedAttachments.length > 0 ? updatedAttachments : undefined,
-      };
-
-      await updatePost.mutateAsync({ post: updated, previous: selectedPost });
+      const updated = await actions.update(selectedPost, newPost, existingAttachments, selectedFiles);
+      if (!updated) return;
       setViewMode('detail');
       setSelectedFiles([]);
     } catch (err) {
       console.error('Failed to update post:', err);
       setError(failMessage(err, '게시글 수정에 실패했습니다. 다시 시도해 주세요.'));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -332,7 +259,8 @@ export default function BoardScreen() {
     }
   };
 
-  const isMine = selectedPost ? isPostAuthor(selectedPost, user) : false;
+  const mayUpdate = selectedPost ? canModifyPost(selectedPost, user, canUpdate) : false;
+  const mayDelete = selectedPost ? canModifyPost(selectedPost, user, canDelete) : false;
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
@@ -493,9 +421,9 @@ export default function BoardScreen() {
               >
                 <ArrowLeft size={14} /> <span>목록으로</span>
               </button>
-              {isMine ? (
+              {mayUpdate || mayDelete ? (
                 <div className="flex gap-1.5">
-                  {canUpdate && (
+                  {mayUpdate && (
                     <button
                       type="button"
                       onClick={() => handleStartEdit(selectedPost)}
@@ -504,7 +432,7 @@ export default function BoardScreen() {
                       <Pencil size={12} /> 수정
                     </button>
                   )}
-                  {canDelete && (
+                  {mayDelete && (
                     <button
                       type="button"
                       onClick={() => setPendingDelete(selectedPost)}

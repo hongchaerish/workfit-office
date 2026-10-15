@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Post } from './schema';
-import { isPostAuthor, numberPosts, postDateLabel, postDateStamp } from './rules';
+import { canModifyPost, isPostAuthor, numberPosts, postDateLabel, postDateStamp } from './rules';
 
 const post = (over: Partial<Post>): Post => ({
   id: 'P1', boardId: 'notice', title: 't', content: 'c', author: '모 란 대리', date: '2026-08-18',
@@ -44,4 +44,12 @@ test('목록 번호는 고정 글을 빼고 작성 순서로, 검색과 무관�
   assert.equal(numbers.get('c'), 2);
   assert.equal(numbers.has('b'), false);
   assert.equal(numbers.has('d'), false);
+});
+
+test('수정·삭제는 작성자 본인이면서 해당 권한이 있을 때만', () => {
+  const mine = post({ authorId: 'U007' });
+  assert.equal(canModifyPost(mine, me, true), true);
+  assert.equal(canModifyPost(mine, me, false), false);
+  assert.equal(canModifyPost(post({ authorId: 'U099' }), me, true), false);
+  assert.equal(canModifyPost(mine, null, true), false);
 });

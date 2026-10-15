@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Search,
   Pin,
@@ -12,19 +12,19 @@ import {
   User,
   PenSquare,
   Download,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
-import { boardRepo } from '@/data/board/board.repo';
-import { DocumentExistsError } from '@/data/_backend/crudBackend';
 import type { Post } from '@/domain/board/schema';
-import { postDateLabel, postDateStamp, sortPostsForList } from '@/domain/board/rules';
+import { canModifyPost, postDateLabel, sortPostsForList } from '@/domain/board/rules';
+import { useBoardPosts } from '@/features/board/useBoardPosts';
+import { attachmentSizeLabel, useBoardActions, type BoardAttachment } from '@/features/board/useBoardActions';
 import { ErrorNotice } from '@/shared/ui/ErrorNotice';
 import { usePermission } from '@/features/auth/usePermission';
 import { downloadFile } from '@/shared/lib/download';
-import { fileStorage } from '@/shared/lib/storage';
 import MobileCommonHeader from './MobileCommonHeader';
 
 type BoardCategory = 'ALL' | 'notice' | 'event' | 'rule' | 'archive';
-type PostAttachment = NonNullable<Post['attachedFiles']>[number];
 type SelectedFile = { id: string; file: File };
 
 const CATEGORIES: { id: BoardCategory; label: string; icon: string }[] = [
@@ -38,47 +38,64 @@ const CATEGORIES: { id: BoardCategory; label: string; icon: string }[] = [
 export default function MobileBoardScreen() {
   const { canAction, user } = usePermission();
   const canCreate = canAction('S_GW_BOARD', 'create');
+  const canUpdate = canAction('S_GW_BOARD', 'update');
+  const canDelete = canAction('S_GW_BOARD', 'delete');
 
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // PC와 같은 조회·쓰기 경로 — 한쪽에서 쓴 글이 다른 쪽 화면·첫 화면 공지에 바로 맞춰진다.
+  const postsQuery = useBoardPosts();
+  const posts = useMemo(() => postsQuery.data ?? [], [postsQuery.data]);
+  const isLoading = postsQuery.isLoading;
   // 불러오기 실패를 '게시글이 없습니다'로 보이지 않게 따로 둔다.
-  const [loadError, setLoadError] = useState('');
+  const loadError = postsQuery.isError
+    ? `게시글을 불러오지 못했습니다.${postsQuery.error instanceof Error && postsQuery.error.message ? ` (${postsQuery.error.message})` : ''}`
+    : '';
+  const actions = useBoardActions();
+  const isSubmitting = actions.saving;
+
   const [formError, setFormError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<BoardCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const selectedPost = useMemo(() => posts.find((p) => String(p.id) === selectedPostId) ?? null, [posts, selectedPostId]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [detailError, setDetailError] = useState('');
 
-  // 글쓰기 모달 상태
+  // 글쓰기·수정 창 상태 (editing 이 있으면 수정)
   const [isWriteOpen, setIsWriteOpen] = useState(false);
+  const [editing, setEditing] = useState<Post | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<Exclude<BoardCategory, 'ALL'>>('notice');
   const [newContent, setNewContent] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newPinned, setNewPinned] = useState(false);
+  const [keptFiles, setKeptFiles] = useState<BoardAttachment[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
-  const submittingRef = useRef(false);
-  const uploadedFilesRef = useRef(new Map<string, PostAttachment>());
-  const pendingPostIdRef = useRef<string | null>(null);
 
-  const loadPosts = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError('');
-    try {
-      const list = await boardRepo.list();
-      setPosts(list);
-    } catch (err) {
-      console.error('Failed to load board posts:', err);
-      setLoadError(`게시글을 불러오지 못했습니다.${err instanceof Error && err.message ? ` (${err.message})` : ''}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const openWrite = (post: Post | null) => {
+    setEditing(post);
+    setNewTitle(post?.title ?? '');
+    setNewContent(post?.content ?? '');
+    setNewCategory((post?.boardId as Exclude<BoardCategory, 'ALL'>) ?? (selectedCategory === 'ALL' ? 'notice' : selectedCategory));
+    setNewPinned(Boolean(post?.isPinned));
+    setKeptFiles(post?.attachedFiles ?? []);
+    setSelectedFiles([]);
+    setFormError('');
+    setIsWriteOpen(true);
+  };
 
-  useEffect(() => {
-    loadPosts();
-  }, [loadPosts]);
+  const closeWrite = () => {
+    setIsWriteOpen(false);
+    setFormError('');
+  };
+
+  const openPost = (post: Post) => {
+    actions.countView(post);
+    setConfirmDelete(false);
+    setDetailError('');
+    setSelectedPostId(String(post.id));
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (submittingRef.current) return;
+    if (isSubmitting) return;
     const files = Array.from(e.currentTarget.files ?? []);
     setSelectedFiles((previous) => [
       ...previous,
@@ -87,11 +104,11 @@ export default function MobileBoardScreen() {
     e.currentTarget.value = '';
   };
 
-  const handleCreatePost = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submittingRef.current) return;
-    if (!canCreate || !user) {
-      setFormError('게시글 작성 권한이 없습니다.');
+    if (isSubmitting) return;
+    if (!user || (editing ? !canUpdate : !canCreate)) {
+      setFormError(editing ? '게시글 수정 권한이 없습니다.' : '게시글 작성 권한이 없습니다.');
       return;
     }
     if (!newTitle.trim() || !newContent.trim()) {
@@ -99,65 +116,31 @@ export default function MobileBoardScreen() {
       return;
     }
     setFormError('');
-    submittingRef.current = true;
-    setIsSubmitting(true);
-    pendingPostIdRef.current ??= `POST_${Date.now()}`;
+    const form = { boardId: newCategory, title: newTitle, content: newContent, isPinned: newPinned };
+    const files = selectedFiles.map((item) => item.file);
     try {
-      const attachedFiles: PostAttachment[] = [];
-      for (const selected of selectedFiles) {
-        let attachment = uploadedFilesRef.current.get(selected.id);
-        if (!attachment) {
-          // Unique per selected file, so uploads never reuse an existing board file path.
-          const path = `chat/board/${selected.id}_${selected.file.name}`;
-          const url = await fileStorage.put(path, selected.file, {
-            contentType: selected.file.type,
-            filename: selected.file.name,
-          });
-          if (!url.trim()) throw new Error('첨부파일 주소를 받지 못했습니다.');
-          attachment = {
-            name: selected.file.name,
-            size: (selected.file.size / (1024 * 1024)).toFixed(1) + ' MB',
-            url,
-            path,
-          };
-          // Keep completed uploads if a later upload or post save fails.
-          uploadedFilesRef.current.set(selected.id, attachment);
-        }
-        attachedFiles.push(attachment);
-      }
-      const newPost: Post = {
-        id: pendingPostIdRef.current,
-        boardId: newCategory,
-        title: newTitle.trim(),
-        content: newContent.trim(),
-        // PC와 같은 형식 — 표시는 '이름 직급', 본인 판별은 authorId.
-        author: [user.name, user.position].filter(Boolean).join(' ') || '작성자',
-        authorId: user.id,
-        date: postDateStamp(),
-        isPinned: false,
-        views: 0,
-        hasAttachment: attachedFiles.length > 0,
-        attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
-      };
-      try {
-        await boardRepo.create(newPost);
-      } catch (err) {
-        // 앞선 시도가 실제로는 저장됐는데 응답만 실패한 경우 — 같은 ID로 다시 누르면 여기로 온다.
-        if (!(err instanceof DocumentExistsError)) throw err;
-      }
-      setNewTitle('');
-      setNewContent('');
-      setSelectedFiles([]);
-      uploadedFilesRef.current.clear();
-      pendingPostIdRef.current = null;
+      const saved = editing
+        ? await actions.update(editing, form, keptFiles, files)
+        : await actions.create(user, form, files);
+      if (!saved) return;
       setIsWriteOpen(false);
-      await loadPosts();
+      setEditing(null);
+      setSelectedFiles([]);
     } catch (err) {
-      console.error('게시글 등록 실패:', err);
-      setFormError(`게시글 등록에 실패했습니다. ${err instanceof Error ? err.message : '다시 시도해 주세요.'}`);
-    } finally {
-      submittingRef.current = false;
-      setIsSubmitting(false);
+      console.error('게시글 저장 실패:', err);
+      setFormError(`게시글 ${editing ? '수정' : '등록'}에 실패했습니다. ${err instanceof Error ? err.message : '다시 시도해 주세요.'}`);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedPost) return;
+    setDetailError('');
+    try {
+      await actions.remove(selectedPost);
+      setSelectedPostId(null);
+      setConfirmDelete(false);
+    } catch (err) {
+      setDetailError(`게시글 삭제에 실패했습니다. ${err instanceof Error ? err.message : ''}`);
     }
   };
 
@@ -244,7 +227,7 @@ export default function MobileBoardScreen() {
         ) : loadError ? (
           <div className="flex flex-col items-center gap-2 py-10">
             <ErrorNotice message={loadError} />
-            <button type="button" onClick={loadPosts} className="rounded-xl border border-border bg-white px-4 py-2 text-[12px] font-bold text-ink2">다시 불러오기</button>
+            <button type="button" onClick={() => postsQuery.refetch()} className="rounded-xl border border-border bg-white px-4 py-2 text-[12px] font-bold text-ink2">다시 불러오기</button>
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="py-16 text-center text-ink3 border border-dashed border-border/80 rounded-2xl bg-white/60">
@@ -258,7 +241,7 @@ export default function MobileBoardScreen() {
             return (
               <div
                 key={post.id}
-                onClick={() => setSelectedPost(post)}
+                onClick={() => openPost(post)}
                 className={`rounded-2xl border p-3.5 shadow-2xs transition-all cursor-pointer active:scale-98 space-y-1.5 ${
                   post.isPinned
                     ? 'border-rose-500/30 bg-rose-50/20 hover:border-rose-500/50'
@@ -317,7 +300,7 @@ export default function MobileBoardScreen() {
       {canCreate && (
         <button
           type="button"
-          onClick={() => setIsWriteOpen(true)}
+          onClick={() => openWrite(null)}
           className="fixed bottom-6 right-5 z-40 flex items-center gap-1.5 rounded-full bg-teal px-4 py-3 text-[12.5px] font-bold text-white shadow-lg active:scale-95 transition-transform hover:opacity-95"
           title="새 글 작성"
         >
@@ -327,16 +310,17 @@ export default function MobileBoardScreen() {
       )}
 
       {/* 5. 새 글 작성 모달 */}
+      {/* 상세 화면에서 [수정]으로 열 때 상세 위에 떠야 해서 한 단계 위에 둔다 */}
       {isWriteOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white animate-in fade-in slide-in-from-bottom duration-200">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-in fade-in slide-in-from-bottom duration-200">
           <header className="flex items-center justify-between border-b border-border px-3.5 py-3 shrink-0 bg-[#101830] text-white">
             <div className="flex items-center gap-1.5">
               <PenSquare size={15} className="text-teal-soft" />
-              <span className="text-[13px] font-bold">새 게시글 작성</span>
+              <span className="text-[13px] font-bold">{editing ? '게시글 수정' : '새 게시글 작성'}</span>
             </div>
             <button
               type="button"
-              onClick={() => setIsWriteOpen(false)}
+              onClick={closeWrite}
               disabled={isSubmitting}
               className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white"
             >
@@ -344,7 +328,7 @@ export default function MobileBoardScreen() {
             </button>
           </header>
 
-          <form onSubmit={handleCreatePost} className="flex-1 flex flex-col overflow-hidden bg-panel">
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden bg-panel">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* 분류 선택 */}
               <div className="space-y-1.5">
@@ -414,12 +398,31 @@ export default function MobileBoardScreen() {
                   disabled={isSubmitting}
                   className="block w-full text-[12px] text-ink2 file:mr-3 file:rounded-lg file:border file:border-border file:bg-white file:px-3 file:py-2 file:text-[12px] file:font-bold file:text-teal"
                 />
+                {keptFiles.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {keptFiles.map((file, idx) => (
+                      <li key={`kept-${idx}`} className="flex items-center gap-2 rounded-lg border border-border/60 bg-panel-alt/60 p-2 text-[12px]">
+                        <span className="min-w-0 flex-1 break-all text-ink">{file.name}</span>
+                        <span className="shrink-0 text-[10px] text-ink3">{file.size}</span>
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => setKeptFiles((previous) => previous.filter((_, i) => i !== idx))}
+                          aria-label={`${file.name} 첨부 빼기`}
+                          className="shrink-0 rounded-lg px-2 py-2 text-[11px] font-bold text-rose-500 disabled:opacity-50"
+                        >
+                          빼기
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {selectedFiles.length > 0 && (
                   <ul className="space-y-1.5">
                     {selectedFiles.map((selected) => (
                       <li key={selected.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white p-2 text-[12px]">
                         <span className="min-w-0 flex-1 break-all text-ink">{selected.file.name}</span>
-                        <span className="shrink-0 text-[10px] text-ink3">{(selected.file.size / (1024 * 1024)).toFixed(1)} MB</span>
+                        <span className="shrink-0 text-[10px] text-ink3">{attachmentSizeLabel(selected.file.size)}</span>
                         <button
                           type="button"
                           disabled={isSubmitting}
@@ -434,6 +437,13 @@ export default function MobileBoardScreen() {
                   </ul>
                 )}
               </div>
+
+              {/* 중요 공지 — PC와 같은 기능(목록 맨 위 고정) */}
+              <label className="flex items-center gap-2 text-[12px] font-semibold text-ink2">
+                <input type="checkbox" checked={newPinned} disabled={isSubmitting} onChange={(e) => setNewPinned(e.target.checked)} className="h-4 w-4" />
+                <Pin size={13} className="text-rose-500" />
+                중요 공지로 설정 (목록 맨 위 고정)
+              </label>
             </div>
 
             {formError && <div className="px-3 pb-2"><ErrorNotice message={formError} /></div>}
@@ -441,7 +451,7 @@ export default function MobileBoardScreen() {
             <div className="border-t border-border bg-white p-3 shrink-0 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => { setIsWriteOpen(false); setFormError(''); }}
+                onClick={closeWrite}
                 disabled={isSubmitting}
                 className="flex-1 rounded-xl border border-border py-2.5 text-[12px] font-bold text-ink2 hover:bg-panel"
               >
@@ -452,7 +462,7 @@ export default function MobileBoardScreen() {
                 disabled={isSubmitting}
                 className="flex-2 rounded-xl bg-teal py-2.5 text-[12px] font-bold text-white shadow-xs hover:opacity-90 disabled:opacity-50"
               >
-                {isSubmitting ? '등록 중…' : '게시글 등록'}
+                {isSubmitting ? '저장 중…' : editing ? '수정 저장' : '게시글 등록'}
               </button>
             </div>
           </form>
@@ -469,7 +479,7 @@ export default function MobileBoardScreen() {
             </div>
             <button
               type="button"
-              onClick={() => setSelectedPost(null)}
+              onClick={() => setSelectedPostId(null)}
               className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white transition-colors cursor-pointer"
             >
               <X size={18} />
@@ -497,7 +507,7 @@ export default function MobileBoardScreen() {
 
                 <div className="flex items-center justify-between text-[11px] text-ink3 pt-1">
                   <span>작성자: {selectedPost.author}</span>
-                  <span>{postDateLabel(selectedPost.date)}</span>
+                  <span>{postDateLabel(selectedPost.date)} · 조회 {selectedPost.views ?? 0}</span>
                 </div>
               </div>
 
@@ -538,6 +548,35 @@ export default function MobileBoardScreen() {
                 </div>
               )}
             </div>
+
+            {/* 본인 글 수정·삭제 — PC와 같은 규칙(작성자 본인 + 권한그룹 수정·삭제 권한) */}
+            {(canModifyPost(selectedPost, user, canUpdate) || canModifyPost(selectedPost, user, canDelete)) && (
+              <div className="space-y-2">
+                {detailError && <ErrorNotice message={detailError} />}
+                {confirmDelete ? (
+                  <div className="rounded-2xl border border-rose-500/30 bg-white p-3 space-y-2">
+                    <p className="text-[12px] text-ink2">이 글을 삭제할까요? 첨부파일도 함께 지워지며 되돌릴 수 없습니다.</p>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={isSubmitting} onClick={() => setConfirmDelete(false)} className="flex-1 rounded-xl border border-border py-2.5 text-[12px] font-bold text-ink2 disabled:opacity-50">취소</button>
+                      <button type="button" disabled={isSubmitting} onClick={() => void handleDelete()} className="flex-1 rounded-xl bg-rose-500 py-2.5 text-[12px] font-bold text-white disabled:opacity-50">{isSubmitting ? '삭제 중…' : '삭제'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {canModifyPost(selectedPost, user, canUpdate) && (
+                      <button type="button" onClick={() => openWrite(selectedPost)} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-white py-2.5 text-[12px] font-bold text-ink2">
+                        <Pencil size={13} /> 수정
+                      </button>
+                    )}
+                    {canModifyPost(selectedPost, user, canDelete) && (
+                      <button type="button" onClick={() => setConfirmDelete(true)} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-rose-500/40 bg-white py-2.5 text-[12px] font-bold text-rose-500">
+                        <Trash2 size={13} /> 삭제
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
