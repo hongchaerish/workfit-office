@@ -55,7 +55,7 @@ export default function UserScreen() {
   );
 
   const columns: Column<User>[] = [
-    { key: 'empNo', header: '사번 (ID)', mono: true, sortable: true, width: 110 },
+    { key: 'empNo', header: '사번', mono: true, sortable: true, width: 110 },
     { key: 'name', header: '이름', sortable: true, width: 100 },
     { key: 'email', header: '이메일', sortable: true },
     {

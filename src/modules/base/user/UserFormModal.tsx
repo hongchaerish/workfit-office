@@ -8,6 +8,7 @@ import { SelectField } from '@/shared/ui/form/SelectField';
 import { ActionButton } from '@/shared/ui/ActionBar';
 import { userFormSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { ACCOUNT_EDITABLE_STATUSES } from '@/domain/user/accountStatus';
+import { useSuggestedEmpNo } from '@/features/user/useUsers';
 
 export type { UserFormValues };
 
@@ -34,6 +35,8 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
     register,
     handleSubmit,
     reset,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema) as any,
@@ -57,6 +60,12 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
         : EMPTY,
     );
   }, [open, initial, reset]);
+
+  // 새 계정이면 다음 사번(올해 연도 끝 두 자리 + 순번)을 자동으로 채운다. 필요하면 고칠 수 있다.
+  const suggested = useSuggestedEmpNo(open && !initial);
+  useEffect(() => {
+    if (open && !initial && suggested.data && !getValues('empNo')) setValue('empNo', suggested.data, { shouldValidate: true });
+  }, [open, initial, suggested.data, getValues, setValue]);
 
   const retired = initial?.status === '미사용';
 
@@ -91,8 +100,8 @@ export default function UserFormModal({ open, initial, onClose, onSubmit }: User
     >
       <form onSubmit={submit} className="space-y-3.5">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="사번 (ID)" required error={errors.empNo?.message}>
-            <TextField {...register('empNo')} invalid={!!errors.empNo} placeholder="A00000" />
+          <Field label="사번" required error={errors.empNo?.message}>
+            <TextField {...register('empNo')} invalid={!!errors.empNo} placeholder={suggested.data ?? '예: 2613'} />
           </Field>
           <Field label="이름" required error={errors.name?.message}>
             <TextField {...register('name')} invalid={!!errors.name} placeholder="홍길동" />

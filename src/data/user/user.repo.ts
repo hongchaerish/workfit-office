@@ -52,6 +52,7 @@ function nextId(rows: User[]): string {
 }
 
 import { assertAccountStatusEdit } from '@/domain/user/accountStatus';
+import { isDuplicateEmpNo, nextEmpNo } from '@/domain/user/empNo';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
 
@@ -100,10 +101,17 @@ export const userRepo = {
     return all.find((u) => u.id === id) ?? null;
   },
 
+  /** 새 계정에 넣을 다음 사번 — 올해 연도 끝 두 자리 + 순번(테스트 계정 포함 전체에서 계산). */
+  async suggestEmpNo(): Promise<string> {
+    return nextEmpNo((await this.listIncludingTestAccounts()).map((u) => u.empNo));
+  },
+
   /** 신규 등록 — id 채번 후 저장. */
   async create(values: UserFormValues): Promise<User> {
     assertAccountStatusEdit(undefined, values.status);
     const all = await this.listIncludingTestAccounts();
+    // 사번은 로그인에도 쓰여 겹치면 안 된다
+    if (isDuplicateEmpNo(all, values.empNo)) throw new Error(`이미 등록된 사번입니다: ${values.empNo.trim()}`);
     // 초기 비밀번호: 입력값 우선, 비우면 공통 기본값(mes1234) 부여 → 등록 즉시 로그인 가능.
     const plainPassword = values.password?.trim() || DEFAULT_USER_PASSWORD;
     const password = await hashPassword(plainPassword);
@@ -114,7 +122,9 @@ export const userRepo = {
 
   /** 기존 사용자 수정 — lastLogin 등 시스템 필드 보존. 비밀번호는 입력 시에만 변경. */
   async update(id: string, values: UserFormValues): Promise<void> {
-    const existing = (await this.listIncludingTestAccounts()).find((u) => u.id === id);
+    const all = await this.listIncludingTestAccounts();
+    const existing = all.find((u) => u.id === id);
+    if (isDuplicateEmpNo(all, values.empNo, id)) throw new Error(`이미 등록된 사번입니다: ${values.empNo.trim()}`);
     // 미사용(퇴직)은 인명관리 퇴직 처리로만 — 사용자 관리 저장으로 들어가거나 빠져나오지 못하게
     assertAccountStatusEdit(existing?.status, values.status);
     // 비밀번호를 비워두면 기존 비밀번호 보존, 입력하면 해당 값으로 변경.

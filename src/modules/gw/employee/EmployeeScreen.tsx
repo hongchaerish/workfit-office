@@ -944,7 +944,7 @@ export default function EmployeeScreen() {
                       </div>
 
                       <div>
-                        <span className="block text-[11px] text-ink3">사번 (ID)</span>
+                        <span className="block text-[11px] text-ink3">사번</span>
                         <span className="mt-1 block font-mono font-semibold text-ink">{selectedEmp.employeeNo}</span>
                       </div>
 
