@@ -42,6 +42,12 @@ export function useUpdateOutsideWork() {
   );
 }
 
+export function useLinkOutsideWork() {
+  return useOutsideWorkMutation<{ actor: OutsideWorkActor; id: string; approvalDocId: string }, OutsideWork>(
+    ({ actor, id, approvalDocId }) => outsideWorkRepo.link(actor, id, approvalDocId),
+  );
+}
+
 export function useRemoveOutsideWork() {
   return useOutsideWorkMutation<{ actor: OutsideWorkActor; id: string }, OutsideWork>(
     ({ actor, id }) => outsideWorkRepo.remove(actor, id),

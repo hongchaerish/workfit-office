@@ -110,7 +110,7 @@ test('직접 등록 외근·출장도 결재 외근과 같이 기간 전체 날�
     {
       id: 'OW-20260920-0001', ownerUserId: 'U010', category: 'TRIP', subType: '국내출장',
       startDate: '2026-09-20', endDate: '2026-09-21', allDay: true, startTime: null, endTime: null,
-      destination: '부산', purpose: '', companionUserIds: [], transportation: '', contact: '', memo: '',
+      destination: '부산', purpose: '', companionUserIds: [], transportation: '', contact: '', memo: '', linkedApprovalDocId: null,
       createdAt: now, updatedAt: now,
     },
   ]);

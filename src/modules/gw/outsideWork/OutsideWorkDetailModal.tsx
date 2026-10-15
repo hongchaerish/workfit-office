@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Car, CheckCircle2, FileText, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
+import { Calendar, Car, CheckCircle2, FileText, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import { OUTSIDE_WORK_CATEGORY_LABELS } from '@/domain/outsideWork/schema';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
-import { useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
+import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 
@@ -47,7 +47,9 @@ function Row({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }: OutsideWorkDetailModalProps) {
   const nav = useNavigate();
   const remove = useRemoveOutsideWork();
+  const link = useLinkOutsideWork();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [error, setError] = useState('');
 
   const owner = users.find((u) => u.id === view.ownerUserId);
@@ -60,6 +62,23 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }:
   const period = view.startDate === view.endDate ? dateWithDay(view.startDate) : `${dateWithDay(view.startDate)} ~ ${dateWithDay(view.endDate)}`;
   const time = view.startTime && view.endTime ? `${view.startTime} ~ ${view.endTime}` : '종일';
   const mapUrl = view.destination ? `https://map.naver.com/p/search/${encodeURIComponent(view.destination)}` : '';
+
+  // [결재 건과 연결] 후보 — 기간이 겹치는 내 결재 완료 외근·출장
+  const mySchedules = useOutsideSchedulesOf(viewer.userId, users.find((u) => u.id === viewer.userId)?.name ?? '');
+  const linkCandidates = canEdit
+    ? mySchedules.filter((v) => v.source === 'APPROVAL' && v.approval && v.startDate <= view.endDate && v.endDate >= view.startDate)
+    : [];
+
+  const doLink = async (approvalDocId: string) => {
+    if (!view.self) return;
+    setError('');
+    try {
+      await link.mutateAsync({ actor: viewer, id: view.self.id, approvalDocId });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '연결하지 못했습니다.');
+    }
+  };
 
   const doRemove = async () => {
     if (!view.self) return;
@@ -99,6 +118,13 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }:
           )}
           {canEdit && !confirmDelete && (
             <>
+              <Button
+                onClick={() => setLinking((v) => !v)}
+                disabled={linkCandidates.length === 0}
+                title={linkCandidates.length === 0 ? '기간이 겹치는 결재 완료 외근·출장이 없습니다' : '같은 일정의 결재 문서와 연결하면 이 등록은 숨겨지고 결재 건만 보입니다'}
+              >
+                <Link2 size={13} /> 결재 건과 연결
+              </Button>
               <Button variant="danger" onClick={() => setConfirmDelete(true)}>삭제</Button>
               <Button variant="primary" onClick={() => { onClose(); onEdit?.(view); }}>수정</Button>
             </>
@@ -154,6 +180,23 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }:
           </Row>
         )}
       </div>
+      {linking && canEdit && (
+        <div className="mt-3 space-y-1.5 rounded-lg border border-border bg-panel-alt/40 p-2.5">
+          <p className="text-[11px] text-ink2">연결할 결재 문서를 고르세요. 연결하면 이 등록은 업무계획·캘린더·근태에서 빠지고 결재 건만 보입니다.</p>
+          {linkCandidates.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              disabled={link.isPending}
+              onClick={() => void doLink(c.approval!.docId)}
+              className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-panel px-2.5 py-1.5 text-left text-[11.5px] hover:border-teal disabled:opacity-50"
+            >
+              <span className="min-w-0 truncate font-semibold text-ink">{c.approval!.docTitle}</span>
+              <span className="shrink-0 text-[10.5px] text-ink3">{c.startDate.slice(5)}~{c.endDate.slice(5)} · {c.approval!.docNo}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {error && <p className="mt-2 text-[11px] font-semibold text-danger">{error}</p>}
     </Modal>
   );

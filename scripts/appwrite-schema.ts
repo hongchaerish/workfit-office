@@ -801,6 +801,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('transportation', 50),
       S('contact', 50),
       S('memo', 2000),
+      // 같은 일정의 결재 문서와 연결하면 그 id — 연결된 등록은 목록에서 빠진다
+      S('linkedApprovalDocId', 64),
       S('createdAt', 40),
       S('updatedAt', 40),
     ],

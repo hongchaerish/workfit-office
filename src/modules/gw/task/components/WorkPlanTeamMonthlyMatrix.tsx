@@ -302,23 +302,32 @@ export function WorkPlanTeamMonthlyMatrix({
     // 직접 등록 외근·출장 — 결재 건과 똑같은 모양(결재 완료 건만 칩 끝에 옅은 체크)
     const nameById = new Map(members.map((m) => [m.id, m.name]));
     for (const w of outsideWorksQuery.data ?? []) {
-      if (!map.has(w.ownerUserId)) map.set(w.ownerUserId, new Map());
-      const userDateMap = map.get(w.ownerUserId)!;
       const view = fromOutsideWork(w, (id) => nameById.get(id));
       const chip = scheduleChip({ category: w.category, subType: w.subType });
       const label = `[${chip.short}] ${chip.label} (${w.destination})`;
-      for (const d of allDays) {
-        if (d.dateStr < w.startDate || d.dateStr > w.endDate) continue;
-        if (!userDateMap.has(d.dateStr)) userDateMap.set(d.dateStr, []);
-        userDateMap.get(d.dateStr)!.push({
-          id: `self-${w.id}-${d.dateStr}`,
-          title: label,
-          type: w.category,
-          label,
-          badgeClass: STATUS_TONES[chip.kind].badge,
-          timeStr: w.startTime && w.endTime ? `${w.startTime}~${w.endTime}` : undefined,
-          outside: view,
-        });
+      // 등록한 사람 칸 + 동행자 칸(동행자는 '동행 · 등록자' 표시, 근태에는 반영하지 않는다)
+      const rows = [
+        { userId: w.ownerUserId, label },
+        ...w.companionUserIds
+          .filter((id) => id !== w.ownerUserId)
+          .map((id) => ({ userId: id, label: `[동행] ${chip.label} · ${nameById.get(w.ownerUserId) ?? ''} (${w.destination})` })),
+      ];
+      for (const row of rows) {
+        if (!map.has(row.userId)) map.set(row.userId, new Map());
+        const userDateMap = map.get(row.userId)!;
+        for (const d of allDays) {
+          if (d.dateStr < w.startDate || d.dateStr > w.endDate) continue;
+          if (!userDateMap.has(d.dateStr)) userDateMap.set(d.dateStr, []);
+          userDateMap.get(d.dateStr)!.push({
+            id: `self-${w.id}-${row.userId}-${d.dateStr}`,
+            title: row.label,
+            type: w.category,
+            label: row.label,
+            badgeClass: STATUS_TONES[chip.kind].badge,
+            timeStr: w.startTime && w.endTime ? `${w.startTime}~${w.endTime}` : undefined,
+            outside: view,
+          });
+        }
       }
     }
 
