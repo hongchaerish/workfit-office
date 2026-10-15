@@ -14,7 +14,7 @@ export const USER_PRESENCE_STATUSES = ['ONLINE', 'OFFLINE', 'OUTSIDE', 'MEETING'
 export type UserPresenceStatus = (typeof USER_PRESENCE_STATUSES)[number];
 
 /**
- * 사용자가 프로필에서 직접 고를 수 있는 상태. 외근·출장·회의중·휴가는 전자결재·캘린더로만 정해진다.
+ * 사용자가 프로필에서 직접 고를 수 있는 상태. 외근·출장·회의중·휴가는 전자결재·외근 등록·캘린더로만 정해진다.
  */
 export const MANUAL_PRESENCE_STATUSES: readonly UserPresenceStatus[] = ['ONLINE', 'AWAY', 'FOCUS', 'OFFLINE'];
 
