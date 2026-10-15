@@ -229,12 +229,12 @@ export function OutsideWorkFormModal({ actor, initialDate, work, users, existing
         {overlapping.length > 0 && (
           <p className="rounded-md border border-amber/30 bg-amber-soft/30 px-3 py-2 text-[11px] font-semibold text-amber">
             이 기간에 이미 외근·출장이 있습니다:{' '}
-            {overlapping.map((v) => `${v.subType}${v.destination ? ` (${v.destination})` : ''}${v.source === 'APPROVAL' ? ' · 결재 완료' : ''}`).join(', ')}
+            {overlapping.map((v) => `${v.subType}${v.destination ? ` (${v.destination})` : ''}`).join(', ')}
           </p>
         )}
 
         <p className="rounded-md bg-panel-alt/60 px-3 py-2 text-[10.5px] leading-relaxed text-ink3">
-          결재 없이 바로 등록됩니다. 전 직원에게 공개되며, 근태(출퇴근 판정)와 근무 상태에 외근·출장으로 반영됩니다.
+          바로 등록됩니다. 전 직원에게 공개되며, 근태(출퇴근 판정)와 근무 상태에 외근·출장으로 반영됩니다.
         </p>
 
         {error && <p className="text-[11px] font-semibold text-danger">{error}</p>}

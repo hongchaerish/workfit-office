@@ -83,7 +83,7 @@ export function outsideWorkToDayInfo(w: OutsideWork): ApprovedLeaveInfo {
   return {
     leaveType: w.subType,
     category: w.category,
-    docTitle: `[직접 등록] ${OUTSIDE_WORK_CATEGORY_LABELS[w.category]} ${w.destination}`,
+    docTitle: `${OUTSIDE_WORK_CATEGORY_LABELS[w.category]} ${w.destination}`,
     docId: w.id,
   };
 }

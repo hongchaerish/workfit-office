@@ -293,7 +293,7 @@ export function WorkPlanTeamMonthlyMatrix({
             id: `appr-${s.docId}-${dStr}`,
             title: s.docTitle,
             type: s.category,
-            label: s.category === 'LEAVE' ? label : `✓ ${label}`,
+            label,
             badgeClass,
             timeStr: s.startTime && s.endTime ? `${s.startTime}~${s.endTime}` : undefined,
             outside: fromApprovalSchedule(s) ?? undefined,
@@ -302,7 +302,7 @@ export function WorkPlanTeamMonthlyMatrix({
       }
     }
 
-    // 직접 등록 외근·출장 — 결재 건과 같은 색, 점선 테두리로 구분
+    // 직접 등록 외근·출장 — 결재 건과 똑같은 모양(결재 완료 건만 칩 끝에 옅은 체크)
     const nameById = new Map(members.map((m) => [m.id, m.name]));
     for (const w of outsideWorksQuery.data ?? []) {
       if (!map.has(w.ownerUserId)) map.set(w.ownerUserId, new Map());
@@ -318,7 +318,7 @@ export function WorkPlanTeamMonthlyMatrix({
           title: label,
           type: w.category,
           label,
-          badgeClass: `${STATUS_TONES[chip.kind].badge} border-dashed`,
+          badgeClass: STATUS_TONES[chip.kind].badge,
           timeStr: w.startTime && w.endTime ? `${w.startTime}~${w.endTime}` : undefined,
           outside: view,
         });
@@ -804,7 +804,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                       const hint = pItem.event
                                         ? ' — 눌러서 회의 보기'
                                         : pItem.outside
-                                        ? pItem.outside.source === 'APPROVAL' ? ' · 결재 완료 — 눌러서 상세 보기' : ' · 직접 등록 — 눌러서 상세 보기'
+                                        ? ' — 눌러서 상세 보기'
                                         : '';
                                       return (
                                       <div
@@ -819,6 +819,9 @@ export function WorkPlanTeamMonthlyMatrix({
                                         title={`${pItem.label} (${pItem.timeStr || '종일'})${hint}`}
                                       >
                                         <span className="truncate">{pItem.label}</span>
+                                        {pItem.outside?.source === 'APPROVAL' && (
+                                          <Check size={8} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
+                                        )}
                                         {pItem.timeStr && (
                                           <span className="text-[8px] opacity-80 shrink-0 font-normal">
                                             {pItem.timeStr}

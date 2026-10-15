@@ -72,15 +72,12 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit }:
     }
   };
 
+  // 결재 완료 건만 제목 옆에 작고 옅은 표시 — 직접 등록 건과 거의 같아 보이게 한다
   const sourceBadge = view.source === 'APPROVAL' ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-teal-soft/50 px-2 py-0.5 text-[10px] font-bold text-teal">
-      <CheckCircle2 size={11} /> 결재 완료
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-ink3">
+      <CheckCircle2 size={10} /> 결재 완료
     </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-ink3/50 px-2 py-0.5 text-[10px] font-bold text-ink2">
-      직접 등록
-    </span>
-  );
+  ) : null;
 
   return (
     <Modal
