@@ -12,18 +12,40 @@ import {
   FileText,
   PenLine,
   ArrowLeft,
-  Lightbulb,
 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
-import { boardRepo } from '@/data/board/board.repo';
-import { useBoardPosts } from '@/features/board/useBoardPosts';
+import {
+  useBoardPosts,
+  useCountBoardView,
+  useCreateBoardPost,
+  useDeleteBoardPost,
+  useUpdateBoardPost,
+} from '@/features/board/useBoardPosts';
+import { isPostAuthor, numberPosts, postDateLabel, postDateStamp, sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import type { Post } from '@/domain/board/schema';
 import { fileStorage } from '@/shared/lib/storage';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
+import { ErrorNotice } from '@/shared/ui/ErrorNotice';
+import { Modal } from '@/shared/ui/Modal';
+
+type Attachment = NonNullable<Post['attachedFiles']>[number];
+
+const sizeLabel = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+const failMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? `${fallback} (${error.message})` : fallback;
+
+/** 첨부 업로드 — 저장소 경로를 함께 남겨 글 수정·삭제 때 파일도 지울 수 있게 한다. */
+async function uploadAttachments(files: File[]): Promise<Attachment[]> {
+  return Promise.all(files.map(async (file) => {
+    const path = `chat/board/${crypto.randomUUID()}_${file.name}`;
+    const url = await fileStorage.put(path, file, { contentType: file.type, filename: file.name });
+    return { name: file.name, size: sizeLabel(file.size), url, path };
+  }));
+}
 
 const BOARDS = BOARDS_SEED;
 
@@ -43,7 +65,6 @@ function getBoardIcon(boardId: string, size = 16, className = '') {
 }
 
 export default function BoardScreen() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const boardParam = searchParams.get('board');
   const postIdParam = searchParams.get('postId');
@@ -53,27 +74,33 @@ export default function BoardScreen() {
   const canCreate = canAction('S_GW_BOARD', 'create');
   const canDelete = canAction('S_GW_BOARD', 'delete');
   const canUpdate = canAction('S_GW_BOARD', 'update');
-  
-  const { data: postsData = [], isLoading } = useBoardPosts();
-  const [posts, setPosts] = useState<Post[]>([]);
+
+  const postsQuery = useBoardPosts();
+  const posts = useMemo(() => postsQuery.data ?? [], [postsQuery.data]);
+  const createPost = useCreateBoardPost();
+  const updatePost = useUpdateBoardPost();
+  const deletePost = useDeleteBoardPost();
+  const countView = useCountBoardView();
+
   const [activeBoard, setActiveBoard] = useState<string>(boardParam || 'notice');
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write' | 'edit'>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(postIdParam);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<Post | null>(null);
 
   // 기존 첨부파일 목록 (수정 시 사용)
-  const [existingAttachments, setExistingAttachments] = useState<{ name: string; size: string; url?: string }[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
 
   // 선택된 실제 파일 객체 목록 상태
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   // UI 표시용 첨부파일 목록 파생
-  const writeAttachments = useMemo(() => {
-    return selectedFiles.map((f) => ({
-      name: f.name,
-      size: (f.size / (1024 * 1024)).toFixed(1) + ' MB',
-    }));
-  }, [selectedFiles]);
+  const writeAttachments = useMemo(
+    () => selectedFiles.map((f) => ({ name: f.name, size: sizeLabel(f.size) })),
+    [selectedFiles],
+  );
 
   // 폼 상태 (글쓰기용)
   const [newPost, setNewPost] = useState({
@@ -82,11 +109,6 @@ export default function BoardScreen() {
     boardId: 'notice',
     isPinned: false,
   });
-
-  // TanStack Query 데이터 동기화
-  useEffect(() => {
-    setPosts(postsData);
-  }, [postsData]);
 
   // URL 파라미터 변경 감지 (도크 공지사항 클릭 등으로 진입 시)
   useEffect(() => {
@@ -106,10 +128,15 @@ export default function BoardScreen() {
     }
   }, [postIdParam, posts]);
 
+  const changeView = (mode: typeof viewMode) => {
+    setError('');
+    setViewMode(mode);
+  };
+
   const handleBackToList = () => {
     setSearchParams({ board: activeBoard });
     setSelectedPostId(null);
-    setViewMode('list');
+    changeView('list');
   };
 
   const activeBoardMeta = useMemo(() => {
@@ -119,6 +146,9 @@ export default function BoardScreen() {
   const selectedPost = useMemo(() => {
     return posts.find((p) => String(p.id) === String(selectedPostId)) || null;
   }, [posts, selectedPostId]);
+
+  // 번호는 검색과 무관하게 게시판 전체의 작성 순서로 매긴다.
+  const postNumbers = useMemo(() => numberPosts(posts, activeBoard), [posts, activeBoard]);
 
   const filteredPosts = useMemo(() => {
     let list = posts.filter((p) => p.boardId === activeBoard);
@@ -131,34 +161,24 @@ export default function BoardScreen() {
           p.author.toLowerCase().includes(q)
       );
     }
-    // 고정글(isPinned) -> 최신순 정렬
-    return [...list].sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+    return sortPostsForList(list);
   }, [posts, activeBoard, searchQuery]);
 
-  const handlePostClick = async (post: Post) => {
+  const handlePostClick = (post: Post) => {
     const sessionKey = `read_post_${post.id}`;
-    const alreadyRead = sessionStorage.getItem(sessionKey) === 'true';
-
+    let alreadyRead = false;
+    try {
+      alreadyRead = sessionStorage.getItem(sessionKey) === 'true';
+      if (!alreadyRead) sessionStorage.setItem(sessionKey, 'true');
+    } catch {
+      /* 저장소를 못 쓰면 매번 센다 */
+    }
     if (!alreadyRead) {
-      sessionStorage.setItem(sessionKey, 'true');
-      const updatedPost: Post = { ...post, views: post.views + 1 };
-      try {
-        // 백엔드 조회수 반영
-        await boardRepo.save(updatedPost);
-        setPosts((prev) =>
-          prev.map((p) => (p.id === post.id ? updatedPost : p))
-        );
-      } catch (error) {
-        console.error('Failed to update views in backend:', error);
-      }
+      countView.mutate(post, { onError: (err) => console.error('Failed to update views:', err) });
     }
 
     setSelectedPostId(String(post.id));
-    setViewMode('detail');
+    changeView('detail');
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,49 +190,35 @@ export default function BoardScreen() {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!user) {
-      alert('로그인이 필요한 서비스입니다.');
+      setError('로그인이 필요한 서비스입니다.');
       return;
     }
     if (!newPost.title.trim() || !newPost.content.trim()) {
-      alert('제목과 내용을 모두 입력해주세요.');
+      setError('제목과 내용을 모두 입력해주세요.');
       return;
     }
 
+    setSaving(true);
+    setError('');
     try {
-      let attachedFilesData: { name: string; size: string; url?: string }[] = [];
-      if (selectedFiles.length > 0) {
-        attachedFilesData = await Promise.all(
-          selectedFiles.map(async (file) => {
-            const safePath = `chat/board/${Date.now()}_${file.name}`;
-            const url = await fileStorage.put(safePath, file, {
-              contentType: file.type,
-              filename: file.name,
-            });
-            return {
-              name: file.name,
-              size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-              url,
-            };
-          })
-        );
-      }
-
+      const attachedFilesData = await uploadAttachments(selectedFiles);
       const created: Post = {
         id: Date.now().toString(),
         boardId: newPost.boardId,
         title: newPost.title,
         content: newPost.content,
         author: `${user.name} ${user.position}`,
-        date: new Date().toISOString().split('T')[0],
+        authorId: user.id,
+        date: postDateStamp(),
         views: 0,
         isPinned: newPost.isPinned,
         hasAttachment: attachedFilesData.length > 0,
         attachedFiles: attachedFilesData.length > 0 ? attachedFilesData : undefined,
       };
 
-      await boardRepo.save(created);
-      setPosts((prev) => [created, ...prev]);
+      await createPost.mutateAsync(created);
       setViewMode('list');
       setNewPost({
         title: '',
@@ -221,22 +227,30 @@ export default function BoardScreen() {
         isPinned: false,
       });
       setSelectedFiles([]);
-    } catch (error) {
-      console.error('Failed to save post:', error);
-      alert('게시글 저장에 실패했습니다. 다시 시도해 주세요.');
+    } catch (err) {
+      console.error('Failed to save post:', err);
+      setError(failMessage(err, '게시글 저장에 실패했습니다. 다시 시도해 주세요.'));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeletePost = async (postId: string) => {
-    if (!confirm('정말 이 게시글을 삭제하시겠습니까?')) return;
+  const confirmDeletePost = async () => {
+    const target = pendingDelete;
+    if (!target) return;
+    setSaving(true);
+    setError('');
     try {
-      await boardRepo.remove(postId);
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      await deletePost.mutateAsync(target);
+      setPendingDelete(null);
       setViewMode('list');
       setSelectedPostId(null);
-    } catch (error) {
-      console.error('Failed to delete post:', error);
-      alert('게시글 삭제에 실패했습니다.');
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+      setPendingDelete(null);
+      setError(failMessage(err, '게시글 삭제에 실패했습니다.'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -249,36 +263,21 @@ export default function BoardScreen() {
     });
     setExistingAttachments(post.attachedFiles ?? []);
     setSelectedFiles([]);
-    setViewMode('edit');
+    changeView('edit');
   };
 
   const handleUpdatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPost) return;
+    if (!selectedPost || saving) return;
     if (!newPost.title.trim() || !newPost.content.trim()) {
-      alert('제목과 내용을 모두 입력해주세요.');
+      setError('제목과 내용을 모두 입력해주세요.');
       return;
     }
 
+    setSaving(true);
+    setError('');
     try {
-      let newAttachments: { name: string; size: string; url?: string }[] = [];
-      if (selectedFiles.length > 0) {
-        newAttachments = await Promise.all(
-          selectedFiles.map(async (file) => {
-            const safePath = `chat/board/${Date.now()}_${file.name}`;
-            const url = await fileStorage.put(safePath, file, {
-              contentType: file.type,
-              filename: file.name,
-            });
-            return {
-              name: file.name,
-              size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-              url,
-            };
-          })
-        );
-      }
-
+      const newAttachments = await uploadAttachments(selectedFiles);
       const updatedAttachments = [...existingAttachments, ...newAttachments];
 
       const updated: Post = {
@@ -291,28 +290,20 @@ export default function BoardScreen() {
         attachedFiles: updatedAttachments.length > 0 ? updatedAttachments : undefined,
       };
 
-      await boardRepo.save(updated);
-      setPosts((prev) => prev.map((p) => (p.id === selectedPost.id ? updated : p)));
+      await updatePost.mutateAsync({ post: updated, previous: selectedPost });
       setViewMode('detail');
       setSelectedFiles([]);
-    } catch (error) {
-      console.error('Failed to update post:', error);
-      alert('게시글 수정에 실패했습니다. 다시 시도해 주세요.');
+    } catch (err) {
+      console.error('Failed to update post:', err);
+      setError(failMessage(err, '게시글 수정에 실패했습니다. 다시 시도해 주세요.'));
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleFileDownload = async (fileName: string, fileUrl?: string) => {
     if (!fileUrl) {
-      const content = `Mock file download: ${fileName}\nDownloaded from WorkFit Board.`;
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      setError(`'${fileName}' 파일 주소가 없어 내려받을 수 없습니다.`);
       return;
     }
 
@@ -321,7 +312,7 @@ export default function BoardScreen() {
       if (!response.ok) throw new Error('Network response was not ok');
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
-      
+
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = fileName;
@@ -329,8 +320,8 @@ export default function BoardScreen() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error('File download failed, falling back to direct link:', error);
+    } catch (err) {
+      console.error('File download failed, falling back to direct link:', err);
       const link = document.createElement('a');
       link.href = fileUrl;
       link.target = '_blank';
@@ -340,6 +331,8 @@ export default function BoardScreen() {
       document.body.removeChild(link);
     }
   };
+
+  const isMine = selectedPost ? isPostAuthor(selectedPost, user) : false;
 
   return (
     <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
@@ -352,7 +345,8 @@ export default function BoardScreen() {
             <Button
               onClick={() => {
                 setNewPost({ ...newPost, boardId: activeBoard });
-                setViewMode('write');
+                setSelectedFiles([]);
+                changeView('write');
               }}
               variant="primary"
             >
@@ -379,13 +373,14 @@ export default function BoardScreen() {
             onSelect={(id) => {
               setActiveBoard(id);
               setSearchQuery('');
-              setViewMode('list');
+              changeView('list');
             }}
           />
         }
       >
         {/* ── 우측 메인 컨텐츠 영역 ── */}
         <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-6 shadow-sm overflow-hidden min-w-0">
+        {error && <ErrorNotice message={error} />}
         
         {/* 1) 목록 뷰 */}
         {viewMode === 'list' && (
@@ -424,14 +419,23 @@ export default function BoardScreen() {
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? (
+                  {postsQuery.isLoading ? (
                     <tr>
                       <td colSpan={5} className="p-10 text-center text-ink3 animate-pulse">
                         데이터를 불러오는 중입니다...
                       </td>
                     </tr>
+                  ) : postsQuery.isError ? (
+                    <tr>
+                      <td colSpan={5} className="p-8">
+                        <div className="mx-auto flex max-w-md flex-col items-center gap-2">
+                          <ErrorNotice message={failMessage(postsQuery.error, '게시글을 불러오지 못했습니다.')} />
+                          <Button onClick={() => postsQuery.refetch()} size="sm">다시 불러오기</Button>
+                        </div>
+                      </td>
+                    </tr>
                   ) : filteredPosts.length > 0 ? (
-                    filteredPosts.map((p, idx) => (
+                    filteredPosts.map((p) => (
                       <tr
                         key={p.id}
                         onClick={() => handlePostClick(p)}
@@ -445,7 +449,7 @@ export default function BoardScreen() {
                               <Pin size={14} className="text-teal inline-block" />
                             </span>
                           ) : (
-                            <span className="text-ink3">{filteredPosts.length - idx}</span>
+                            <span className="text-ink3">{postNumbers.get(String(p.id))}</span>
                           )}
                         </td>
                         <td className="p-3 font-semibold text-ink flex items-center gap-1.5 min-w-0">
@@ -462,7 +466,7 @@ export default function BoardScreen() {
                           )}
                         </td>
                         <td className="p-3 text-ink2 truncate">{p.author}</td>
-                        <td className="p-3 text-ink3">{p.date}</td>
+                        <td className="p-3 text-ink3">{postDateLabel(p.date)}</td>
                         <td className="p-3 text-center text-ink3">{p.views}</td>
                       </tr>
                     ))
@@ -489,7 +493,7 @@ export default function BoardScreen() {
               >
                 <ArrowLeft size={14} /> <span>목록으로</span>
               </button>
-              {user && selectedPost.author === `${user.name} ${user.position}` ? (
+              {isMine ? (
                 <div className="flex gap-1.5">
                   {canUpdate && (
                     <button
@@ -503,7 +507,7 @@ export default function BoardScreen() {
                   {canDelete && (
                     <button
                       type="button"
-                      onClick={() => handleDeletePost(selectedPost.id)}
+                      onClick={() => setPendingDelete(selectedPost)}
                       className="rounded-lg bg-panel-alt border border-border px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-border/60 transition-colors flex items-center gap-1"
                     >
                       <Trash2 size={12} /> 삭제
@@ -525,7 +529,7 @@ export default function BoardScreen() {
                   <div className="flex items-center gap-3">
                     <span>작성자: <strong className="text-ink2">{selectedPost.author}</strong></span>
                     <span className="text-border">|</span>
-                    <span>등록일: {selectedPost.date}</span>
+                    <span>등록일: {postDateLabel(selectedPost.date)}</span>
                   </div>
                   <span>조회수: {selectedPost.views}</span>
                 </div>
@@ -535,23 +539,6 @@ export default function BoardScreen() {
               <div className="whitespace-pre-wrap leading-relaxed text-[13px] py-2 border-b border-border/60 pb-5 text-ink">
                 {selectedPost.content}
               </div>
-
-              {/* 연계 문서 바로가기 링크 */}
-              {selectedPost.id === '1' && (
-                <div className="rounded-lg border border-teal/20 bg-teal-soft/10 p-3.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Lightbulb size={15} className="text-teal shrink-0" />
-                    <span className="text-[11.5px] font-semibold text-ink2">개정된 최신 규정집 본문은 문서관리에서 즉시 확인 가능합니다.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/gw/document?docId=1')}
-                    className="text-[11px] font-bold text-white bg-teal px-3.5 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    [취업규칙 확인]
-                  </button>
-                </div>
-              )}
 
               {/* 첨부파일 영역 */}
               {selectedPost.hasAttachment && selectedPost.attachedFiles && (
@@ -582,7 +569,7 @@ export default function BoardScreen() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <button
                 type="button"
-                onClick={() => setViewMode(viewMode === 'edit' ? 'detail' : 'list')}
+                onClick={() => changeView(viewMode === 'edit' ? 'detail' : 'list')}
                 className="flex items-center gap-1 text-ink2 hover:text-ink font-semibold"
               >
                 <ArrowLeft size={14} /> <span>{viewMode === 'edit' ? '수정 취소' : '작성 취소'}</span>
@@ -670,7 +657,7 @@ export default function BoardScreen() {
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
                   <div className="text-[12px] text-ink2 font-semibold">+ 파일을 드래그하거나 클릭하여 추가하세요</div>
-                  <div className="text-[10px] text-ink3 mt-1">파일 용량 무제한 (모의 업로드)</div>
+                  <div className="text-[10px] text-ink3 mt-1">파일당 최대 20MB</div>
                 </div>
                 {writeAttachments.length > 0 && (
                   <ul className="mt-2 space-y-1">
@@ -711,22 +698,39 @@ export default function BoardScreen() {
             <div className="border-t border-border pt-3.5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setViewMode(viewMode === 'edit' ? 'detail' : 'list')}
-                className="rounded-lg border border-border-hi bg-panel px-4 py-2 font-bold text-ink2 hover:bg-panel-alt"
+                disabled={saving}
+                onClick={() => changeView(viewMode === 'edit' ? 'detail' : 'list')}
+                className="rounded-lg border border-border-hi bg-panel px-4 py-2 font-bold text-ink2 hover:bg-panel-alt disabled:opacity-50"
               >
                 취소
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-teal px-5 py-2 font-bold text-white hover:opacity-90"
+                disabled={saving}
+                className="rounded-lg bg-teal px-5 py-2 font-bold text-white hover:opacity-90 disabled:opacity-50"
               >
-                {viewMode === 'edit' ? '저장' : '등록'}
+                {saving ? '저장 중…' : viewMode === 'edit' ? '저장' : '등록'}
               </button>
             </div>
           </form>
         )}
       </main>
       </GwSplit>
+
+      <Modal
+        open={pendingDelete !== null}
+        onClose={() => { if (!saving) setPendingDelete(null); }}
+        title="게시글 삭제"
+        width={400}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button disabled={saving} onClick={() => setPendingDelete(null)}>취소</Button>
+            <Button disabled={saving} onClick={confirmDeletePost} variant="dangerSolid">{saving ? '삭제 중…' : '삭제'}</Button>
+          </div>
+        }
+      >
+        <p className="text-[12px] text-ink2">'{pendingDelete?.title}' 글을 삭제할까요? 첨부파일도 함께 지워지며 되돌릴 수 없습니다.</p>
+      </Modal>
     </div>
   );
 }

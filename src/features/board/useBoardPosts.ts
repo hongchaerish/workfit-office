@@ -11,22 +11,29 @@ export function useBoardPosts() {
   });
 }
 
-export function useSaveBoardPost() {
+function useBoardMutation<TInput>(mutationFn: (input: TInput) => Promise<void>) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (post: Post) => boardRepo.save(post),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: BOARD_POSTS_QUERY_KEY });
-    },
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: BOARD_POSTS_QUERY_KEY }),
   });
 }
 
-export function useDeleteBoardPost() {
+export const useCreateBoardPost = () => useBoardMutation((post: Post) => boardRepo.create(post));
+
+export const useUpdateBoardPost = () =>
+  useBoardMutation(({ post, previous }: { post: Post; previous: Post }) => boardRepo.update(post, previous));
+
+export const useDeleteBoardPost = () => useBoardMutation((post: Post) => boardRepo.remove(post));
+
+/** 조회수 — 목록을 다시 불러오지 않고 캐시의 해당 글만 고친다. */
+export function useCountBoardView() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => boardRepo.remove(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: BOARD_POSTS_QUERY_KEY });
+    mutationFn: (post: Post) => boardRepo.setViews(String(post.id), post.views + 1),
+    onSuccess: (_, post) => {
+      queryClient.setQueryData<Post[]>(BOARD_POSTS_QUERY_KEY, (rows) =>
+        rows?.map((row) => (row.id === post.id ? { ...row, views: post.views + 1 } : row)));
     },
   });
 }
