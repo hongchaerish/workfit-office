@@ -82,7 +82,6 @@ interface WorkPlanTeamMonthlyMatrixProps {
   editingContent?: string;
   onEditingContentChange?: (val: string | ((prev: string) => string)) => void;
   onSaveEditing?: () => void;
-  onCancelEditing?: () => void;
   onOpenEditor: (date: string, plan?: WorkPlan, targetUser?: User) => void;
   onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
   onOpenConfig?: () => void;
@@ -108,7 +107,6 @@ export function WorkPlanTeamMonthlyMatrix({
   editingContent = '',
   onEditingContentChange,
   onSaveEditing,
-  onCancelEditing,
   onOpenEditor,
   onOpenCompanySchedule,
   onOpenConfig,
@@ -848,7 +846,6 @@ export function WorkPlanTeamMonthlyMatrix({
                                     onChange={(val) => onEditingContentChange?.(val)}
                                     onBlur={() => onSaveEditing?.()}
                                     onSave={() => onSaveEditing?.()}
-                                    onCancel={() => onCancelEditing?.()}
                                     onEditorReady={onEditorReady}
                                   />
                                 ) : parsed.length > 0 ? (

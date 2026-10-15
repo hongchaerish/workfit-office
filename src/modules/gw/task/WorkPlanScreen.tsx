@@ -396,7 +396,6 @@ export default function WorkPlanScreen() {
             setIsSavingPlan(false);
           }
         }}
-        onCancelEditing={() => setEditingTarget(null)}
         onOpenEditor={(date, plan, member) => {
           setEditingTarget({ date, plan, targetUser: member });
           // 체크 메타(__c__)는 편집기에서 - [x] 표기로 풀어 보여 준다

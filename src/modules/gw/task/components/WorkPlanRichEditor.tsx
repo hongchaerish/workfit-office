@@ -134,20 +134,18 @@ export function WorkPlanRichEditor({
   onChange,
   onBlur,
   onSave,
-  onCancel,
   onEditorReady,
 }: {
   value: string;
   onChange: (val: string) => void;
   onBlur: () => void;
   onSave: () => void;
-  onCancel: () => void;
   /** 상단 리본이 서식 명령을 내릴 수 있게 편집기 인스턴스를 넘긴다. 언마운트 시 null. */
   onEditorReady?: (editor: Editor | null) => void;
 }) {
   // 편집기 콜백은 생성 시점에 한 번 묶이므로 최신 함수를 ref로 읽는다.
-  const handlers = useRef({ onChange, onBlur, onSave, onCancel });
-  handlers.current = { onChange, onBlur, onSave, onCancel };
+  const handlers = useRef({ onChange, onBlur, onSave });
+  handlers.current = { onChange, onBlur, onSave };
   /** 편집기가 마지막으로 내보낸 텍스트 — 리본(템플릿 삽입 등)이 바꾼 값만 편집기로 되돌려 넣는다. */
   const lastEmitted = useRef(value);
   /** 키(Enter·Ctrl+Enter·Esc)로 저장한 직후 이어지는 blur가 같은 저장을 한 번 더 부르지 않게 막는다. */

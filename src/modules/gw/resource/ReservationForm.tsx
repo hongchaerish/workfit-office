@@ -22,7 +22,7 @@ interface ReservationFormProps {
 export default function ReservationForm({ actor, resources, departments, initialResourceId, initialDate, onSuccess, onCancel }: ReservationFormProps) {
   const availableResources = useMemo(() => resources.filter((resource) => resource.status === 'ACTIVE'), [resources]);
   const initialResource = availableResources.find((resource) => resource.id === initialResourceId) ?? availableResources[0];
-  const initialWindow = initialResource ? defaultReservationWindow(initialResource, initialDate) : { date: '', start: '09:00', end: '10:00' };
+  const initialWindow = initialResource ? defaultReservationWindow(initialDate) : { date: '', start: '09:00', end: '10:00' };
   const [resourceId, setResourceId] = useState(initialResource?.id ?? '');
   const [date, setDate] = useState(initialWindow.date);
   const [start, setStart] = useState(initialWindow.start);
@@ -41,7 +41,7 @@ export default function ReservationForm({ actor, resources, departments, initial
     setResourceId(nextId);
     const next = availableResources.find((item) => item.id === nextId);
     if (!next) return;
-    const window = defaultReservationWindow(next, date || initialDate);
+    const window = defaultReservationWindow(date || initialDate);
     setDate(window.date);
     setStart(window.start);
     setEnd(window.end);
