@@ -51,6 +51,7 @@ function nextId(rows: User[]): string {
   return `U${String(max + 1).padStart(3, '0')}`;
 }
 
+import { assertAccountStatusEdit } from '@/domain/user/accountStatus';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
 
@@ -101,6 +102,7 @@ export const userRepo = {
 
   /** 신규 등록 — id 채번 후 저장. */
   async create(values: UserFormValues): Promise<User> {
+    assertAccountStatusEdit(undefined, values.status);
     const all = await this.listIncludingTestAccounts();
     // 초기 비밀번호: 입력값 우선, 비우면 공통 기본값(mes1234) 부여 → 등록 즉시 로그인 가능.
     const plainPassword = values.password?.trim() || DEFAULT_USER_PASSWORD;
@@ -113,6 +115,8 @@ export const userRepo = {
   /** 기존 사용자 수정 — lastLogin 등 시스템 필드 보존. 비밀번호는 입력 시에만 변경. */
   async update(id: string, values: UserFormValues): Promise<void> {
     const existing = (await this.listIncludingTestAccounts()).find((u) => u.id === id);
+    // 미사용(퇴직)은 인명관리 퇴직 처리로만 — 사용자 관리 저장으로 들어가거나 빠져나오지 못하게
+    assertAccountStatusEdit(existing?.status, values.status);
     // 비밀번호를 비워두면 기존 비밀번호 보존, 입력하면 해당 값으로 변경.
     let password = existing?.password || '';
     if (values.password?.trim()) {
