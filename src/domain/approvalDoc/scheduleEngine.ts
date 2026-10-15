@@ -1,5 +1,4 @@
 import type { ApprovalDoc } from './schema';
-import type { UserPresenceStatus } from '@/domain/userPresence/schema';
 import { calculateLeaveDays } from '@/domain/leave/policy';
 
 /**
@@ -192,32 +191,3 @@ export function isDateInSchedule(dateStr: string, schedule: StandardScheduleInfo
   return schedule.startDate <= dateStr && dateStr <= schedule.endDate;
 }
 
-/**
- * 특정 사용자의 당일(targetDate) 승인된 스케줄을 바탕으로 실시간 상태(UserPresenceStatus)를 자동 도출하는 순수 함수.
- * - 휴가 중: 'LEAVE'
- * - 외근/출장 중: 'OUTSIDE'
- * - 해당 없음: null (온라인/오프라인 등 기본 상태 유지)
- */
-export function derivePresenceFromSchedules(
-  userId: string,
-  targetDate: string,
-  approvedSchedules: StandardScheduleInfo[],
-): UserPresenceStatus | null {
-  const userSchedules = approvedSchedules.filter(
-    (s) => s.drafterId === userId && isDateInSchedule(targetDate, s),
-  );
-
-  if (userSchedules.length === 0) return null;
-
-  // 1순위: 휴가
-  if (userSchedules.some((s) => s.category === 'LEAVE')) {
-    return 'LEAVE';
-  }
-
-  // 2순위: 외근 또는 출장
-  if (userSchedules.some((s) => s.category === 'OUTSIDE' || s.category === 'TRIP')) {
-    return 'OUTSIDE';
-  }
-
-  return null;
-}

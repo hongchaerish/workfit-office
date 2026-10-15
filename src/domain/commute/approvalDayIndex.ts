@@ -5,7 +5,7 @@ import type { ApprovedLeaveInfo } from './engine';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { outsideWorkToDayInfo } from '@/domain/outsideWork/view';
 
-/** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 목록. 같은 날 여러 건을 모두 담는다. */
+/** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 + 직접 등록 외근·출장 목록. 같은 날 여러 건을 모두 담는다. */
 export type ApprovalDayMap = Map<string, ApprovedLeaveInfo[]>;
 
 export interface ApprovalDayIndex {

@@ -31,7 +31,8 @@ import { Users, X, ShieldAlert, Sparkles, UserPlus } from 'lucide-react';
 
 /**
  * 캘린더에서 직접 등록 가능한 일정 유형.
- * 외근·출장(OUTSIDE), 휴가·부재(VACATION)는 전자결재 승인을 통해서만 공인·등록되므로 등록 목록에서 제거합니다.
+ * 외근·출장(OUTSIDE)은 전자결재 승인 또는 업무계획의 [외근·출장 등록](outsideWorks)으로,
+ * 휴가·부재(VACATION)는 전자결재 승인으로만 등록되므로 여기 등록 목록에서는 뺍니다.
  */
 const CREATABLE_EVENT_TYPES: CalendarEventType[] = ['GENERAL', 'MEETING', 'COMPANY_EVENT'];
 

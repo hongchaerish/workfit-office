@@ -26,7 +26,7 @@ export interface PresenceMeeting {
 
 export interface PresenceInputs {
   stored: StoredPresence | null;
-  /** 날짜 → 그날 승인된 휴가·외근·출장 (approvalDayIndex.lookup 결과) */
+  /** 날짜 → 그날 승인된 휴가·외근·출장 + 직접 등록 외근·출장 (approvalDayIndex.lookup 결과) */
   approvalDays: Map<string, ApprovedLeaveInfo[]>;
   /** 이 사람이 주최·참석하는 회의 */
   meetings: PresenceMeeting[];
@@ -102,7 +102,7 @@ function autoStatusAt(inputs: PresenceInputs, date: string, minutes: number): Au
  * 20분 넘게 없으면 자리비움, 창을 닫았으면 오프라인.
  * 직접 정한 상태와 자동 상태가 겹치면 **더 최근 것이 이긴다** — 외근일에 복귀해 업무중으로
  * 바꾸면 업무중, 아침에 집중근무로 해 둔 뒤 회의가 시작되면 회의중.
- * 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인뿐이다(외근·회의·휴가는 결재·캘린더로만).
+ * 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인뿐이다(외근·회의·휴가는 결재·외근 등록·캘린더로만).
  * 직접 정한 업무중은 "자리에 있음"이라는 뜻이라 접속 여부를 따르고, 자리비움·집중근무는 창이
  * 열려 있을 때만 보인다(창을 닫으면 오프라인). 직접 정한 오프라인은 창이 열려 있어도 유지된다.
  */

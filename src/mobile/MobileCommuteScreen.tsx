@@ -269,7 +269,7 @@ export default function MobileCommuteScreen() {
             >
               🎯 집중 근무
             </button>
-            {/* 외근·회의·휴가는 전자결재·캘린더로만 정해진다 — 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인 */}
+            {/* 외근·회의·휴가는 전자결재·외근 등록·캘린더로만 정해진다 — 직접 고를 수 있는 건 업무중·자리비움·집중근무·오프라인 */}
             <button
               type="button"
               onClick={() => handleQuickStatus('AWAY', '')}
