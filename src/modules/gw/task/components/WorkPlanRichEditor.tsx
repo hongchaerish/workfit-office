@@ -12,7 +12,9 @@ import { contentToEditorDoc, editorDocToContent } from '@/domain/workPlan/richTe
  *
  * 값(value)은 저장 형식 그대로의 **줄 단위 텍스트**다. 편집기 문서와의 변환은
  * `domain/workPlan/richText`가 맡는다. 줄 하나가 문단 하나라 여러 줄 서식(제목·인용 등)과
- * 줄 안 줄바꿈(Shift+Enter)은 끈다 — 텍스트로 되돌릴 방법이 없어서다.
+ * 줄 안 줄바꿈(hardBreak)은 끈다 — 텍스트로 되돌릴 방법이 없어서다.
+ *
+ * 키(2026-10-15 결정): Enter·Ctrl+Enter·Esc = 저장하고 닫기, Shift+Enter = 새 줄.
  */
 
 /**
@@ -33,8 +35,9 @@ const WorkPlanTaskItem = TaskItem.extend({
     };
     return {
       ...this.parent?.(),
-      // 빈 할 일에서 Enter → 목록을 끝내고 일반 줄로. 내용이 있으면 다음 할 일을 이어 만든다.
-      Enter: () => {
+      // 빈 할 일에서 Shift+Enter → 목록을 끝내고 일반 줄로. 내용이 있으면 다음 할 일을 이어 만든다.
+      // (Enter는 저장이라 새 줄은 Shift+Enter다)
+      'Shift-Enter': () => {
         if (cursorAtItemStart() && this.editor.state.selection.$from.parent.content.size === 0) {
           return this.editor.commands.liftListItem(this.name);
         }
@@ -79,6 +82,28 @@ const BackspaceIntoTaskAbove = Extension.create({
     };
   },
 });
+
+/**
+ * 저장·새 줄 키. Enter는 저장(편집기 바깥 콜백), 할 일 밖의 Shift+Enter는 새 줄(문단 나누기).
+ * 기본 Enter 처리(문단 나누기)보다 먼저 돌아야 해서 우선순위를 높인다. 할 일 안의 Shift+Enter는
+ * 할 일 확장(다음 할 일 만들기·목록 끝내기)에 넘긴다.
+ * 편집기 단축키로 걸어 두면 한글 조합 중에 누른 Enter는 저장으로 받지 않는다(메신저 입력창과 같은 방식).
+ */
+function submitKeys(save: () => void) {
+  return Extension.create({
+    name: 'workPlanSubmitKeys',
+    priority: 1000,
+    addKeyboardShortcuts() {
+      return {
+        Enter: () => {
+          save();
+          return true;
+        },
+        'Shift-Enter': ({ editor }) => (editor.isActive('taskItem') ? false : editor.commands.splitBlock()),
+      };
+    },
+  });
+}
 
 const EXTENSIONS = [
   StarterKit.configure({
@@ -125,11 +150,18 @@ export function WorkPlanRichEditor({
   handlers.current = { onChange, onBlur, onSave, onCancel };
   /** 편집기가 마지막으로 내보낸 텍스트 — 리본(템플릿 삽입 등)이 바꾼 값만 편집기로 되돌려 넣는다. */
   const lastEmitted = useRef(value);
-  /** Ctrl+Enter로 저장한 직후 이어지는 blur가 같은 저장을 한 번 더 부르지 않게 막는다. */
+  /** 키(Enter·Ctrl+Enter·Esc)로 저장한 직후 이어지는 blur가 같은 저장을 한 번 더 부르지 않게 막는다. */
   const savedByKey = useRef(false);
 
+  const saveByKey = () => {
+    savedByKey.current = true;
+    handlers.current.onSave();
+    // 저장이 실패해(충돌 등) 칸이 열린 채로 남으면, 그 뒤 칸 밖 클릭 자동 저장은 다시 되게 풀어 둔다.
+    window.setTimeout(() => { savedByKey.current = false; }, 1000);
+  };
+
   const editor = useEditor({
-    extensions: EXTENSIONS,
+    extensions: [...EXTENSIONS, submitKeys(saveByKey)],
     content: contentToEditorDoc(value),
     autofocus: 'end',
     editorProps: {
@@ -137,15 +169,11 @@ export function WorkPlanRichEditor({
         class: 'workplan-rich-editor w-full min-h-[65px] rounded border border-blue-400/50 p-0 text-[10px] leading-relaxed text-ink outline-none focus:border-blue-400',
       },
       handleKeyDown: (_view, event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        // Ctrl+Enter·Esc도 저장하고 닫는다(Enter와 같음)
+        if (((event.ctrlKey || event.metaKey) && event.key === 'Enter') || event.key === 'Escape') {
+          if (event.isComposing) return false;
           event.preventDefault();
-          savedByKey.current = true;
-          handlers.current.onSave();
-          return true;
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          handlers.current.onCancel();
+          saveByKey();
           return true;
         }
         return false;
