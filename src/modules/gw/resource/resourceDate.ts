@@ -1,4 +1,3 @@
-import type { Resource } from '@/domain/resource/schema';
 import { RESOURCE_UTC_OFFSET, resourceDateKey, resourceTimeParts } from '@/domain/reservation/time';
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -54,7 +53,7 @@ export function dateRangeIso(date: string): { from: string; to: string } {
  * 예약 창을 열 때의 기본 시간대 — 오늘이면 지금부터 15분 뒤 이후의 첫 30분 단위, 다른 날이면 09:00부터
  * 1시간. 예약 시간 판정에는 단위·운영시간 제한이 없고, 이 값은 처음 보여 줄 제안일 뿐이다.
  */
-export function defaultReservationWindow(_resource: Resource, preferredDate?: string): { date: string; start: string; end: string } {
+export function defaultReservationWindow(preferredDate?: string): { date: string; start: string; end: string } {
   const now = new Date();
   let date = preferredDate && preferredDate >= toDateInput(now) ? preferredDate : toDateInput(now);
   const nowParts = resourceTimeParts(now);

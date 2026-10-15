@@ -11,8 +11,6 @@ export type ReservationErrorCode =
   | 'ADVANCE_LIMIT'
   | 'CROSS_DAY'
   | 'SLOT_MISMATCH'
-  | 'OUTSIDE_HOURS'
-  | 'DURATION'
   | 'CAPACITY'
   | 'QUANTITY'
   | 'CONFLICT'

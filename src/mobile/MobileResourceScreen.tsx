@@ -108,15 +108,10 @@ export default function MobileResourceScreen() {
     setFormResourceId(resource?.id ?? '');
     setFormError('');
     if (!resource) return;
-    const window = defaultReservationWindow(resource, selectedDateStr);
-    if (window.date === selectedDateStr) {
-      setFormStart(window.start);
-      setFormEnd(window.end);
-    } else {
-      // 선택한 날이 곧 끝나 기본 시간대가 다음 날로 넘어가면 그 시각만 가져온다.
-      setFormStart(window.start);
-      setFormEnd(window.end);
-    }
+    // 선택한 날이 곧 끝나 기본 시간대가 다음 날로 넘어가도 시각만 가져온다(날짜는 선택한 날 그대로).
+    const window = defaultReservationWindow(selectedDateStr);
+    setFormStart(window.start);
+    setFormEnd(window.end);
   };
 
   const openForm = (resource: Resource | undefined) => {

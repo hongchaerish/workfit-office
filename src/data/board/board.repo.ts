@@ -39,10 +39,6 @@ export const boardRepo = {
     return backend.loadAll();
   },
 
-  async get(id: string): Promise<Post | null> {
-    return (await backend.loadAll()).find((p) => String(p.id) === id) ?? null;
-  },
-
   /** 새 글. 같은 ID가 있으면 덮지 않고 실패한다(다시 누르기·중복 저장 방지). */
   async create(item: Post): Promise<void> {
     await backend.insert(postSchema.parse(item));
