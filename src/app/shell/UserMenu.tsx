@@ -3,7 +3,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { MANUAL_PRESENCE_STATUSES, USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
-import { User as UserIcon, Settings, Globe, MessageSquare } from 'lucide-react';
+import { User as UserIcon, Settings, MessageSquare } from 'lucide-react';
 
 interface UserMenuProps {
   onClose: () => void;
@@ -164,10 +164,10 @@ export function UserMenu({ onClose }: UserMenuProps) {
           </div>
         </div>
 
-        <div className="border-b border-border py-1.5">
+        <div className="py-1.5">
           <Item
             icon={<UserIcon size={14} />}
-            label="내 계정 관리"
+            label="내 프로필"
             sub="프로필 사진 및 개인정보 설정"
             onClick={goProfile}
           />
@@ -180,19 +180,6 @@ export function UserMenu({ onClose }: UserMenuProps) {
               navigate('/settings');
             }}
           />
-          <Item icon={<Globe size={14} />} label="언어 / 지역" sub="한국어 (Korea)" />
-        </div>
-
-        <div className="py-2">
-          <div className="px-[18px] pb-1 pt-0.5 text-[10px] font-extrabold tracking-wide text-ink3">접속 환경</div>
-          <button onClick={onClose} className="flex w-full items-center gap-3 px-[18px] py-1.5 text-left transition-colors hover:bg-panel-alt">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[7px] bg-blue-soft text-[12px] font-extrabold text-blue">M1</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-semibold text-ink">[WorkFit] M-line · Fab1</span>
-              <span className="mt-px block text-[10px] text-ink3">현재 접속 라인</span>
-            </span>
-            <span className="text-[10px] font-semibold text-ink3">변경 ▾</span>
-          </button>
         </div>
 
         </div>
