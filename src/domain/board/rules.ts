@@ -53,3 +53,8 @@ export function sortPostsForList(posts: Post[]): Post[] {
     return byWritten(b, a);
   });
 }
+
+/** 글 수정·삭제 가능 — 작성자 본인이면서 권한그룹의 게시판 수정(또는 삭제) 권한이 있을 때. */
+export function canModifyPost(post: Post, actor: PostActor | null | undefined, hasPermission: boolean): boolean {
+  return hasPermission && isPostAuthor(post, actor);
+}
