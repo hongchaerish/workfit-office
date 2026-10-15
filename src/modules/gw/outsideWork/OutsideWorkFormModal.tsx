@@ -8,9 +8,8 @@ import {
   type OutsideWorkCategory,
   type OutsideWorkDraft,
 } from '@/domain/outsideWork/schema';
-import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
-import { useCreateOutsideWork, useUpdateOutsideWork } from '@/features/outsideWork/useOutsideWorks';
+import { useCreateOutsideWork, useOutsideSchedulesOf, useUpdateOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { MemberPicker } from '@/modules/gw/task/MemberPicker';
@@ -25,8 +24,6 @@ interface OutsideWorkFormModalProps {
   /** 수정이면 원본 */
   work?: OutsideWork;
   users: User[];
-  /** 같은 사람의 이미 잡힌 외근·출장 — 기간이 겹치면 경고만 한다(등록은 막지 않음) */
-  existing?: OutsideScheduleView[];
   onClose: () => void;
   onSaved?: (saved: OutsideWork) => void;
 }
@@ -40,7 +37,9 @@ const textareaClass =
  * 외근·출장 직접 등록·수정 — 결재 없이 본인이 올린다.
  * 저장하면 업무계획·캘린더에 보이고 근태·재실 상태에도 외근·출장으로 반영된다.
  */
-export function OutsideWorkFormModal({ actor, initialDate, work, users, existing = [], onClose, onSaved }: OutsideWorkFormModalProps) {
+export function OutsideWorkFormModal({ actor, initialDate, work, users, onClose, onSaved }: OutsideWorkFormModalProps) {
+  // 같은 사람의 이미 잡힌 외근·출장(결재 완료 + 직접 등록) — 기간이 겹치면 경고만 한다(등록은 막지 않음)
+  const existing = useOutsideSchedulesOf(actor.userId, users.find((u) => u.id === actor.userId)?.name ?? '');
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const create = useCreateOutsideWork();
   const update = useUpdateOutsideWork();

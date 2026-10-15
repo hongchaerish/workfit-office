@@ -1,4 +1,8 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAllApprovals } from '@/features/gw/useApprovals';
+import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import { outsideWorkRepo, type OutsideWorkActor, type OutsideWorkFilter } from '@/data/outsideWork/outsideWork.repo';
 import type { OutsideWork, OutsideWorkDraft } from '@/domain/outsideWork/schema';
 
@@ -42,4 +46,22 @@ export function useRemoveOutsideWork() {
   return useOutsideWorkMutation<{ actor: OutsideWorkActor; id: string }, OutsideWork>(
     ({ actor, id }) => outsideWorkRepo.remove(actor, id),
   );
+}
+
+/**
+ * 한 사람의 외근·출장 전체(결재 완료 + 직접 등록) — 등록 창의 '같은 기간' 경고용.
+ * 결재 기안자 id가 계정 이관 등으로 다르면 이름으로 잇는다(업무계획·근태와 같은 규칙).
+ */
+export function useOutsideSchedulesOf(userId: string, userName: string): OutsideScheduleView[] {
+  const approvalsQuery = useAllApprovals();
+  const worksQuery = useOutsideWorks();
+  return useMemo(() => {
+    const norm = (v?: string | null) => (v ?? '').replace(/\s+/g, '');
+    const approved = extractApprovedSchedules(approvalsQuery.data ?? [])
+      .filter((s) => s.drafterId === userId || norm(s.drafterName) === norm(userName))
+      .map(fromApprovalSchedule)
+      .filter((v): v is OutsideScheduleView => v !== null);
+    const self = (worksQuery.data ?? []).filter((w) => w.ownerUserId === userId).map((w) => fromOutsideWork(w));
+    return [...approved, ...self];
+  }, [approvalsQuery.data, worksQuery.data, userId, userName]);
 }

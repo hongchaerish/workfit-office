@@ -7,6 +7,7 @@ import type { Editor } from '@tiptap/react';
 import {
   Sparkles,
   Users,
+  Car,
   Trash2,
   ChevronDown,
   X,
@@ -30,6 +31,8 @@ export interface WorkPlanOfficeRibbonToolbarProps {
   onDelete?: () => Promise<void>;
   /** [회의 등록] — 캘린더에 회의 1건 + 참석자로 등록(업무계획 본문에는 쓰지 않음) */
   onAddMeeting?: () => void;
+  /** [외근·출장 등록] — 편집 중인 칸의 날짜를 시작일로 결재 없이 바로 등록(본인 칸에서만) */
+  onAddOutside?: () => void;
 }
 
 export function WorkPlanOfficeRibbonToolbar({
@@ -44,6 +47,7 @@ export function WorkPlanOfficeRibbonToolbar({
   onSave,
   onDelete,
   onAddMeeting,
+  onAddOutside,
 }: WorkPlanOfficeRibbonToolbarProps) {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
 
@@ -115,6 +119,19 @@ export function WorkPlanOfficeRibbonToolbar({
             >
               <Users size={12} />
               <span>회의 등록</span>
+            </button>
+          )}
+
+          {/* 외근·출장 등록 — 이 칸의 날짜부터. 근태·근무 상태에도 반영된다 */}
+          {onAddOutside && (
+            <button
+              type="button"
+              onClick={onAddOutside}
+              title="이 날짜부터 외근·출장을 결재 없이 바로 등록합니다. 근태·근무 상태에도 반영됩니다."
+              className="flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition-all hover:bg-blue-500/20 cursor-pointer shadow-2xs dark:text-blue-300"
+            >
+              <Car size={12} />
+              <span>외근·출장 등록</span>
             </button>
           )}
 
