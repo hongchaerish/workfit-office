@@ -309,6 +309,14 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    // 인명관리·프로필 설정 > 생일 설정. 문서 id = userId. employeeProfiles 원본에 필드를 늘리지 않고
+    // 읽을 때 덧씌운다(근태 대상 여부와 같은 방식). 값이 없으면 양력·공개.
+    id: 'birthdaySettings',
+    name: '생일 설정',
+    attributes: [S('userId', 64, true), BOOL('birthLunar'), BOOL('birthdayPublic'), S('updatedAt', 40)],
+    indexes: [],
+  },
+  {
     // 사용자관리 > 결재 권한 승계(전임자 → 후임자, 전임자당 1건)
     id: 'approvalSuccessions',
     name: '결재 권한 승계',
