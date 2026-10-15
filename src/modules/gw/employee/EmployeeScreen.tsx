@@ -3,6 +3,8 @@ import { Search, Plus, X, AlertTriangle } from 'lucide-react';
 import { usePermission } from '@/features/auth/usePermission';
 import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles, useUpsertEmployeeProfile } from '@/features/employeeProfile/useEmployeeProfiles';
+import type { User } from '@/domain/user/schema';
+import RetireModal from './RetireModal';
 import { useDepartments } from '@/features/department/useDepartments';
 import { usePositions } from '@/features/position/usePositions';
 import { useJobTitles } from '@/features/jobTitle/useJobTitles';
@@ -43,6 +45,8 @@ export default function EmployeeScreen() {
 
   // 상세 보기 및 편집 대상
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  // 퇴직 처리 대상 — 사용자 관리에서 하던 퇴사 절차를 여기서 한다(2026-10-15)
+  const [retiring, setRetiring] = useState<User | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -337,6 +341,8 @@ export default function EmployeeScreen() {
     try {
       await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
+        // 업무 이메일은 계정(users)에 있다 — 바꿨을 때만 넘긴다
+        email: newEmpEmail.trim() && newEmpEmail.trim() !== targetUser.email ? newEmpEmail.trim() : undefined,
         values: {
           userId: targetUser.id,
           empNo: targetUser.empNo,
@@ -437,6 +443,8 @@ export default function EmployeeScreen() {
     try {
       await upsertEmployeeProfile.mutateAsync({
         id: targetUser.id,
+        // 업무 이메일은 계정(users)에 있다 — 바꿨을 때만 넘긴다(전에는 입력칸만 있고 저장되지 않았다)
+        email: editEmpEmail.trim() && editEmpEmail.trim() !== targetUser.email ? editEmpEmail.trim() : undefined,
         values: {
           userId: targetUser.id,
           empNo: targetUser.empNo,
@@ -533,20 +541,10 @@ export default function EmployeeScreen() {
     }
   };
 
-  // 4. 퇴직 처리
-  const handleRetireEmployee = async (id: string) => {
-    if (confirm('임직원 정보 보안 지침에 따라 계정을 퇴직(미사용) 상태로 즉시 변경 처리합니다. 진행하시겠습니까?')) {
-      const targetUser = users.find((u) => u.id === id);
-      if (!targetUser) return;
-
-      await upsertEmployeeProfile.mutateAsync({
-        id: targetUser.id,
-        values: {
-          status: 'RETIRED',
-        },
-      });
-      alert('퇴직 처리가 완료되어 재직 목록에서 제외됩니다.');
-    }
+  // 4. 퇴직 처리 — 계정 비활성화·퇴사일·상급자 재연결·푸시 토큰 제거 + 재직 상태 '퇴직'(RetireModal)
+  const handleRetireEmployee = (id: string) => {
+    const targetUser = users.find((u) => u.id === id);
+    if (targetUser) setRetiring(targetUser);
   };
 
   return (
@@ -1517,7 +1515,7 @@ export default function EmployeeScreen() {
                       >
                         <option value="ACTIVE">재직</option>
                         <option value="LEAVE">휴직</option>
-                        <option value="RETIRED">퇴직</option>
+                        {/* 퇴직은 [퇴직 처리](계정 비활성화·상급자 재연결 포함)로만 한다 */}
                       </select>
                     </div>
 
@@ -1812,6 +1810,12 @@ export default function EmployeeScreen() {
           </div>
         </div>
       )}
+      <RetireModal
+        open={retiring !== null}
+        user={retiring}
+        onClose={() => setRetiring(null)}
+        onDone={(message) => alert(message)}
+      />
     </div>
   );
 }
