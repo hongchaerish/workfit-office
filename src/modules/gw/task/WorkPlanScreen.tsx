@@ -26,6 +26,10 @@ import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
+import { OutsideWorkFormModal } from '@/modules/gw/outsideWork/OutsideWorkFormModal';
+import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
+import type { OutsideScheduleView } from '@/domain/outsideWork/view';
+import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
@@ -79,6 +83,9 @@ export default function WorkPlanScreen() {
   const savingCellRef = useRef(false);
   /** 회의 등록·상세 창 — 회의는 캘린더 일정 1건 + 참석자(업무계획 본문에 쓰지 않는다). */
   const [meetingModal, setMeetingModal] = useState<{ date: string; event?: CalendarEvent } | null>(null);
+  /** 외근·출장 상세(결재 완료·직접 등록 공용)와 직접 등록·수정 창 */
+  const [outsideDetail, setOutsideDetail] = useState<OutsideScheduleView | null>(null);
+  const [outsideForm, setOutsideForm] = useState<{ date: string; work?: OutsideWork; existing: OutsideScheduleView[] } | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -400,6 +407,8 @@ export default function WorkPlanScreen() {
         onToggleItem={handleToggleItem}
         onEditorReady={setCellEditor}
         onOpenMeeting={(event) => setMeetingModal({ date: event.date, event })}
+        onOpenOutside={setOutsideDetail}
+        onAddOutside={actor.status === '사용' ? (date, existing) => setOutsideForm({ date, existing }) : undefined}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={(
           <>
@@ -552,6 +561,29 @@ export default function WorkPlanScreen() {
             setMeetingModal(null);
             setNotice('회의를 삭제했습니다.');
           }}
+        />
+      )}
+
+      {outsideDetail && (
+        <OutsideWorkDetailModal
+          view={outsideDetail}
+          viewer={{ userId: actor.id, active: actor.status === '사용', dept: actor.dept }}
+          users={users}
+          onClose={() => setOutsideDetail(null)}
+          onEdit={(view) => view.self && setOutsideForm({ date: view.startDate, work: view.self, existing: [] })}
+        />
+      )}
+
+      {outsideForm && (
+        <OutsideWorkFormModal
+          key={outsideForm.work?.id ?? `new-${outsideForm.date}`}
+          actor={{ userId: actor.id, active: actor.status === '사용' }}
+          initialDate={outsideForm.date}
+          work={outsideForm.work}
+          users={users}
+          existing={outsideForm.existing}
+          onClose={() => setOutsideForm(null)}
+          onSaved={() => setNotice('외근·출장을 저장했습니다. 업무계획·캘린더와 근태·근무 상태에 반영됩니다.')}
         />
       )}
 

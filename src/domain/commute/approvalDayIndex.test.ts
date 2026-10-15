@@ -103,3 +103,20 @@ test('반려된 휴일근무 신청은 연결하지 않는다', () => {
   ]);
   assert.equal(index.lookup({ id: 'U010' }).size, 0);
 });
+
+test('직접 등록 외근·출장도 결재 외근과 같이 기간 전체 날짜에 연결된다', () => {
+  const now = new Date().toISOString();
+  const index = buildApprovalDayIndex([], [
+    {
+      id: 'OW-20260920-0001', ownerUserId: 'U010', category: 'TRIP', subType: '국내출장',
+      startDate: '2026-09-20', endDate: '2026-09-21', allDay: true, startTime: null, endTime: null,
+      destination: '부산', purpose: '', companionUserIds: [], transportation: '', contact: '', memo: '',
+      createdAt: now, updatedAt: now,
+    },
+  ]);
+  const days = index.lookup({ id: 'U010' });
+  assert.deepEqual([...days.keys()].sort(), ['2026-09-20', '2026-09-21']);
+  assert.equal(days.get('2026-09-20')?.[0].category, 'TRIP');
+  assert.equal(days.get('2026-09-20')?.[0].leaveType, '국내출장');
+  assert.equal(index.lookup({ id: 'U011' }).size, 0);
+});

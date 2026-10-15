@@ -17,6 +17,7 @@ import CalendarEventModal from '@/modules/gw/calendar/CalendarEventModal';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useUsers } from '@/features/user/useUsers';
 import { extractApprovedSchedules } from '@/domain/approvalDoc/scheduleEngine';
+import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { scheduleChip } from '@/domain/commute/statusDisplay';
 import { buildCalendarMonth, calendarToday, moveCalendarMonth, isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -72,6 +73,9 @@ export default function MobileCalendarScreen() {
 
   const approvalsQuery = useAllApprovals();
   const allApprovalDocs = approvalsQuery.data ?? [];
+
+  // 결재 없이 직접 등록한 외근·출장 (전사 공개)
+  const outsideWorksQuery = useOutsideWorks();
 
   const approvedSchedules = useMemo(() => {
     return extractApprovedSchedules(allApprovalDocs);
@@ -129,8 +133,47 @@ export default function MobileCalendarScreen() {
         curr.setDate(curr.getDate() + 1);
       }
     }
+
+    for (const w of outsideWorksQuery.data ?? []) {
+      if (!activeUserIdSet.has(w.ownerUserId)) continue;
+      const ownerUser = userMap.get(w.ownerUserId);
+      const ownerWithPos = [ownerUser?.name ?? '', ownerUser?.position ?? ''].filter(Boolean).join(' ');
+      const prefix = w.category === 'TRIP' ? '[출장]' : '[외근]';
+      const companions = w.companionUserIds.map((id) => userMap.get(id)?.name ?? id).join(', ');
+      const memo = [
+        `장소: ${w.destination}`,
+        w.purpose && `목적: ${w.purpose}`,
+        companions && `동행: ${companions}`,
+        w.transportation && `교통수단: ${w.transportation}`,
+        w.memo,
+      ].filter(Boolean).join('\n');
+      let curr = new Date(w.startDate + 'T00:00:00');
+      const last = new Date(w.endDate + 'T00:00:00');
+      while (curr <= last) {
+        const dStr = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+        list.push({
+          id: `CAL-SELF-${w.id}-${dStr}`,
+          ownerUserId: w.ownerUserId,
+          title: `${prefix} ${w.subType} (${w.destination}) - ${ownerWithPos}`,
+          date: dStr,
+          allDay: w.allDay,
+          startTime: w.allDay ? null : w.startTime,
+          endTime: w.allDay ? null : w.endTime,
+          memo,
+          visibility: 'COMPANY',
+          eventType: 'OUTSIDE',
+          attendeeUserIds: [],
+          deptId: null,
+          projectId: null,
+          reminded: true,
+          createdAt: w.createdAt,
+          updatedAt: w.updatedAt,
+        });
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
     return list;
-  }, [approvedSchedules, activeUserIdSet, userMap]);
+  }, [approvedSchedules, outsideWorksQuery.data, activeUserIdSet, userMap]);
 
   const allEvents = useMemo(() => {
     return [...baseEvents, ...approvalSyntheticEvents]

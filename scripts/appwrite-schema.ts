@@ -778,6 +778,39 @@ const COLLECTIONS: CollectionDef[] = [
     ],
   },
   {
+    id: 'outsideWorks',
+    name: '외근·출장 직접 등록',
+    /*
+      결재 없이 본인이 올리는 외근·출장. 결재 완료 외근·출장과 같은 효력으로 업무계획·캘린더·
+      근태·재실 상태에 반영된다. 전사 공개라 공유 범위 필드가 없고, 고치는 건 본인만(repo가
+      ownerUserId로 막는다). 결재 문서(approvalDocs)와는 별개 컬렉션 — 결재 문서는 건드리지 않는다.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('ownerUserId', 64, true),
+      S('category', 16, true),
+      S('subType', 20, true),
+      S('startDate', 40, true),
+      S('endDate', 40, true),
+      BOOL('allDay'),
+      S('startTime', 8),
+      S('endTime', 8),
+      S('destination', 200, true),
+      S('purpose', 500),
+      SA('companionUserIds', 64),
+      S('transportation', 50),
+      S('contact', 50),
+      S('memo', 2000),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+    ],
+    indexes: [
+      IX('owOwner', ['ownerUserId']),
+      IX('owStart', ['startDate']),
+      IX('owEnd', ['endDate']),
+    ],
+  },
+  {
     id: 'resources',
     name: '예약 자원',
     attributes: [

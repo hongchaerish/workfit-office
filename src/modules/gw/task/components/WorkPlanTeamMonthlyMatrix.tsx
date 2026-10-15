@@ -16,6 +16,8 @@ import { useCalendarEvents } from '@/features/calendar/useCalendarEvents';
 import { isOfficialCalendarEvent } from '@/domain/calendarEvent/engine';
 import type { CalendarEvent } from '@/domain/calendarEvent/schema';
 import { isWorkPlanDerivedEvent } from '@/domain/workPlan/workPlanCalendarBridge';
+import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
+import { fromApprovalSchedule, fromOutsideWork, type OutsideScheduleView } from '@/domain/outsideWork/view';
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,6 +26,7 @@ import {
   Calendar as CalendarIcon,
   Settings,
   LocateFixed,
+  Car,
 } from 'lucide-react';
 
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -87,6 +90,10 @@ interface WorkPlanTeamMonthlyMatrixProps {
   onEditorReady?: (editor: Editor | null) => void;
   /** 회의 칩 클릭 → 회의 상세(주최자는 수정, 참석자는 참석 취소, 그 밖의 사람은 합류) */
   onOpenMeeting?: (event: CalendarEvent) => void;
+  /** 외근·출장 칩 클릭 → 상세(결재 완료·직접 등록 공용) */
+  onOpenOutside?: (view: OutsideScheduleView) => void;
+  /** 외근·출장 직접 등록 — 그 날짜로 등록 창을 연다. 같은 사람의 그 무렵 외근·출장을 함께 넘긴다. */
+  onAddOutside?: (date: string, existing: OutsideScheduleView[]) => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
   /** 상단 고정 바 바로 아래에 붙일 편집 리본 */
@@ -109,6 +116,8 @@ export function WorkPlanTeamMonthlyMatrix({
   onToggleItem,
   onEditorReady,
   onOpenMeeting,
+  onOpenOutside,
+  onAddOutside,
   editingToolbar,
   filters,
 }: WorkPlanTeamMonthlyMatrixProps) {
@@ -234,6 +243,8 @@ export function WorkPlanTeamMonthlyMatrix({
     [actor.id, actor.status, deptId],
   );
   const calendarEventsQuery = useCalendarEvents(calendarActor, { from: monthStartDate, to: monthEndDate });
+  // 결재 없이 직접 등록한 외근·출장 (전사 공개)
+  const outsideWorksQuery = useOutsideWorks({ from: monthStartDate, to: monthEndDate });
 
   // (userId -> (date -> ProjectedScheduleItem[]))
   const projectedSchedulesMap = useMemo(() => {
@@ -250,6 +261,8 @@ export function WorkPlanTeamMonthlyMatrix({
           timeStr?: string;
           /** 캘린더 회의 칩이면 원본 일정 */
           event?: CalendarEvent;
+          /** 외근·출장 칩이면 상세 표시 모델 */
+          outside?: OutsideScheduleView;
         }>
       >
     >();
@@ -283,8 +296,32 @@ export function WorkPlanTeamMonthlyMatrix({
             label,
             badgeClass,
             timeStr: s.startTime && s.endTime ? `${s.startTime}~${s.endTime}` : undefined,
+            outside: fromApprovalSchedule(s) ?? undefined,
           });
         }
+      }
+    }
+
+    // 직접 등록 외근·출장 — 결재 건과 똑같은 모양(결재 완료 건만 칩 끝에 옅은 체크)
+    const nameById = new Map(members.map((m) => [m.id, m.name]));
+    for (const w of outsideWorksQuery.data ?? []) {
+      if (!map.has(w.ownerUserId)) map.set(w.ownerUserId, new Map());
+      const userDateMap = map.get(w.ownerUserId)!;
+      const view = fromOutsideWork(w, (id) => nameById.get(id));
+      const chip = scheduleChip({ category: w.category, subType: w.subType });
+      const label = `[${chip.short}] ${chip.label} (${w.destination})`;
+      for (const d of allDays) {
+        if (d.dateStr < w.startDate || d.dateStr > w.endDate) continue;
+        if (!userDateMap.has(d.dateStr)) userDateMap.set(d.dateStr, []);
+        userDateMap.get(d.dateStr)!.push({
+          id: `self-${w.id}-${d.dateStr}`,
+          title: label,
+          type: w.category,
+          label,
+          badgeClass: STATUS_TONES[chip.kind].badge,
+          timeStr: w.startTime && w.endTime ? `${w.startTime}~${w.endTime}` : undefined,
+          outside: view,
+        });
       }
     }
 
@@ -327,7 +364,16 @@ export function WorkPlanTeamMonthlyMatrix({
     }
 
     return map;
-  }, [approvalsQuery.data, calendarEventsQuery.data, allDays, members]);
+  }, [approvalsQuery.data, calendarEventsQuery.data, outsideWorksQuery.data, allDays, members]);
+
+  /** 한 사람의 이번 화면 범위 외근·출장(중복 없이) — 등록 창의 기간 겹침 경고용 */
+  const outsideViewsOf = (userId: string): OutsideScheduleView[] => {
+    const seen = new Map<string, OutsideScheduleView>();
+    for (const items of projectedSchedulesMap.get(userId)?.values() ?? []) {
+      for (const item of items) if (item.outside) seen.set(item.outside.key, item.outside);
+    }
+    return [...seen.values()];
+  };
 
   // 이번 주차로 부드럽게 스크롤 — 내 행이 있으면 내 입력칸, 없으면 주차 머리행
   const scrollToCurrentWeek = () => {
@@ -514,6 +560,17 @@ export function WorkPlanTeamMonthlyMatrix({
         {/* 필터·검색 및 액션 버튼 */}
         <div className="flex flex-wrap items-center gap-1.5">
           {filters}
+          {onAddOutside && (
+            <button
+              type="button"
+              onClick={() => onAddOutside(todayStr, outsideViewsOf(actor.id))}
+              title="결재 없이 외근·출장을 바로 등록합니다 (근태·근무 상태에 반영)"
+              className="flex items-center gap-1 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[11.5px] font-bold text-blue-700 dark:text-blue-400 hover:bg-blue-500/15 transition-colors shadow-2xs cursor-pointer"
+            >
+              <Car size={12} />
+              <span>외근·출장 등록</span>
+            </button>
+          )}
           {onOpenConfig && (
             <button
               type="button"
@@ -719,32 +776,60 @@ export function WorkPlanTeamMonthlyMatrix({
                                     onOpenEditor(dayStr, plan, member);
                                   }
                                 }}
-                                className={`p-2 align-top ${cellBorderClass} transition-colors min-h-[85px] relative cursor-pointer ${cellBgClass} ${
+                                className={`group/day p-2 align-top ${cellBorderClass} transition-colors min-h-[85px] relative cursor-pointer ${cellBgClass} ${
                                   !d.inCurrentMonth ? 'opacity-50' : ''
                                 }`}
                               >
+                                {/* 내 칸: 마우스를 올리면 그 날짜로 외근·출장 등록 */}
+                                {isMe && onAddOutside && !isEditingThisCell && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // 칸 편집이 열리지 않게
+                                      onAddOutside(dayStr, outsideViewsOf(member.id));
+                                    }}
+                                    title="이 날짜로 외근·출장 등록"
+                                    aria-label="이 날짜로 외근·출장 등록"
+                                    className="absolute right-1 top-1 z-10 hidden items-center gap-0.5 rounded border border-blue-500/30 bg-panel px-1 py-0.5 text-[8.5px] font-bold text-blue-700 shadow-2xs hover:bg-blue-500/10 group-hover/day:flex dark:text-blue-400"
+                                  >
+                                    <Car size={10} />
+                                    <Plus size={9} />
+                                  </button>
+                                )}
                                 {/* 1) 결재 일정 및 회의 투영 칩 */}
                                 {projectedItems.length > 0 && (
                                   <div className="space-y-1 mb-1.5 pb-1 border-b border-border/40">
-                                    {projectedItems.map((pItem) => (
+                                    {projectedItems.map((pItem) => {
+                                      const clickable = Boolean(pItem.event || pItem.outside);
+                                      const hint = pItem.event
+                                        ? ' — 눌러서 회의 보기'
+                                        : pItem.outside
+                                        ? ' — 눌러서 상세 보기'
+                                        : '';
+                                      return (
                                       <div
                                         key={pItem.id}
-                                        role={pItem.event ? 'button' : undefined}
-                                        onClick={pItem.event ? (e) => {
+                                        role={clickable ? 'button' : undefined}
+                                        onClick={clickable ? (e) => {
                                           e.stopPropagation(); // 칸 편집이 열리지 않게
-                                          onOpenMeeting?.(pItem.event!);
+                                          if (pItem.event) onOpenMeeting?.(pItem.event);
+                                          else if (pItem.outside) onOpenOutside?.(pItem.outside);
                                         } : undefined}
-                                        className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold border shadow-2xs ${pItem.badgeClass} ${pItem.event ? 'cursor-pointer hover:brightness-95' : ''}`}
-                                        title={pItem.event ? `${pItem.label} (${pItem.timeStr || '종일'}) — 눌러서 회의 보기` : `${pItem.label} (${pItem.timeStr || '종일'})`}
+                                        className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold border shadow-2xs ${pItem.badgeClass} ${clickable ? 'cursor-pointer hover:brightness-95' : ''}`}
+                                        title={`${pItem.label} (${pItem.timeStr || '종일'})${hint}`}
                                       >
                                         <span className="truncate">{pItem.label}</span>
+                                        {pItem.outside?.source === 'APPROVAL' && (
+                                          <Check size={8} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
+                                        )}
                                         {pItem.timeStr && (
                                           <span className="text-[8px] opacity-80 shrink-0 font-normal">
                                             {pItem.timeStr}
                                           </span>
                                         )}
                                       </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
 
