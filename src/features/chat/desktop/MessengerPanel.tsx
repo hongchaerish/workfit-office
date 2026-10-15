@@ -20,6 +20,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useOrgTree, type OrgNode } from '@/features/gw/useOrgTree';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import type { ChatRoom } from '@/domain/chatRoom/schema';
 import { MAX_ATTACHMENT_BYTES, type ChatMessage, type Attachment } from '@/domain/chatMessage/schema';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
@@ -276,6 +277,7 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
                   <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="truncate text-[12.5px] font-bold text-ink">{display}</span>
+                      {isDirect && <BirthdayMark userId={otherId} />}
                       {isDirect && otherPresence && otherPresence.status !== 'OFFLINE' && (
                         <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
                       )}
@@ -735,6 +737,7 @@ function MessengerThread({
             <div className="min-w-0 flex-1 ml-0.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="truncate text-[12.5px] font-bold text-ink">{displayName}</span>
+                {isDirect && <BirthdayMark userId={otherId} />}
                 {isDirect && otherPresence && (
                   <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
                 )}
@@ -832,6 +835,7 @@ function MessengerThread({
                       <PresenceDot presence={p} size="sm" />
                     </div>
                     <span className="font-semibold text-ink truncate">{m.name}</span>
+                    <BirthdayMark userId={m.id} />
                     <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
                     <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
                   </div>
@@ -1902,6 +1906,7 @@ function OrgTreeNode({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[12px] font-medium text-ink">{u.name}</span>
+                    <BirthdayMark userId={u.id} />
                     <span className="text-[10px] text-ink3">{u.position}</span>
                     {p && p.status !== 'OFFLINE' && (
                       <PresenceBadge presence={p} showMessage={false} size="xs" />

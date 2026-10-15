@@ -29,6 +29,7 @@ import { MobileMemberPicker } from './MobileMemberPicker';
 import { statusColor } from './MobileApprovalList';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot, PresenceBadge } from '@/features/userPresence/PresenceIndicator';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 
 /** 사용자 ID에 따른 다채로운 파스텔톤 아바타 스타일 매핑. */
@@ -339,6 +340,7 @@ export default function MobileChatThread() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
                 <div className="truncate text-[14.5px] font-bold text-white">{displayName}</div>
+                {isDirect && <BirthdayMark userId={otherId} />}
                 {isDirect && otherPresence && (
                   <PresenceBadge presence={otherPresence} showMessage={false} size="xs" />
                 )}

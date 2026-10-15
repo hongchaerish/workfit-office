@@ -93,3 +93,15 @@ export function describeBirthday(person: BirthdayPerson, today: string): string 
   const solar = solarBirthdayInYear(person, Number(today.slice(0, 4)));
   return solar ? `${base} (올해 양력 ${Number(solar.slice(5, 7))}월 ${Number(solar.slice(8, 10))}일)` : base;
 }
+
+/**
+ * 오늘 생일인 사용자 id — 이름 옆 🎂 표시용(메신저·업무계획).
+ * `birthdaysOn` 규칙(공개한 사람만, 음력 환산)에 더해 사용 중인 계정만 남긴다.
+ */
+export function birthdayUserIds<T extends BirthdayPerson & { userId: string; birthdayPublic?: boolean }>(
+  people: readonly T[],
+  activeUserIds: ReadonlySet<string>,
+  date: string,
+): Set<string> {
+  return new Set(birthdaysOn(people.filter((p) => activeUserIds.has(p.userId)), date).map((p) => p.userId));
+}

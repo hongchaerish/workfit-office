@@ -13,6 +13,7 @@ import { useUsers } from '@/features/user/useUsers';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useAllUserPresences } from '@/features/userPresence/useUserPresence';
 import { PresenceDot } from '@/features/userPresence/PresenceIndicator';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useChatRooms, useCreateRoom } from '@/features/chat/useChatRooms';
 import MobileCommonHeader from './MobileCommonHeader';
 
@@ -204,6 +205,7 @@ export default function MobileContactScreen() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <h4 className="text-[13.5px] font-bold text-ink truncate">{u.name}</h4>
+                        <BirthdayMark userId={u.id} />
                         {u.position && (
                           <span className="text-[11px] font-semibold text-ink3">
                             {u.position}

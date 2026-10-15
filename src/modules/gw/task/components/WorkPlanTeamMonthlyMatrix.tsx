@@ -32,6 +32,7 @@ import {
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { WorkPlanInlineText } from './WorkPlanInlineText';
+import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { WorkPlanRichEditor } from './WorkPlanRichEditor';
 import type { Editor } from '@tiptap/react';
 
@@ -723,6 +724,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                     ? '위원장'
                                     : member.name}
                                 </span>
+                                <BirthdayMark userId={member.id} />
                                 {isMe && (
                                   <span className="rounded bg-teal-soft/50 px-1 py-0.2 text-[8px] font-bold text-teal">
                                     나
