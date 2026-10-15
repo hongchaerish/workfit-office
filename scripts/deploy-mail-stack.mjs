@@ -58,13 +58,15 @@ const PROD = process.argv.includes('--prod');
 const MAIL_KEY = PROD ? env('MAIL_CREDENTIALS_KEY_PROD') : env('MAIL_CREDENTIALS_KEY');
 const TOKEN_SECRET = PROD ? env('AUTH_TOKEN_SECRET_PROD') : env('WIDDY_TOKEN_SECRET');
 
-const missing = Object.entries({ ENDPOINT, PROJECT, API_KEY, MAIL_KEY, TOKEN_SECRET })
+// --skip-vars·--status 는 변수를 올리지 않으므로 키·시크릿 없이도 돈다.
+const NO_VARS = SKIP_VARS || process.argv.includes('--status');
+const missing = Object.entries(NO_VARS ? { ENDPOINT, PROJECT, API_KEY } : { ENDPOINT, PROJECT, API_KEY, MAIL_KEY, TOKEN_SECRET })
   .filter(([, v]) => !v).map(([k]) => k);
 if (missing.length) {
   console.error(`✗ 필수 설정 누락: ${missing.join(', ')}`);
   process.exit(1);
 }
-if (Buffer.from(MAIL_KEY, 'base64url').length !== 32) {
+if (!NO_VARS && Buffer.from(MAIL_KEY, 'base64url').length !== 32) {
   console.error('✗ MAIL_CREDENTIALS_KEY 는 base64url 인코딩된 32바이트여야 합니다.');
   process.exit(1);
 }
