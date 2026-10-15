@@ -79,15 +79,15 @@ export default function ReservationRescheduleDialog({ reservation, resource, onC
           </label>
           <label>
             <span className={labelClass}>시작</span>
-            <input type="time" required step={resource.slotMinutes * 60} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
+            <input type="time" required step={60} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
           </label>
           <label>
             <span className={labelClass}>종료</span>
-            <input type="time" required step={resource.slotMinutes * 60} value={end} onChange={(event) => setEnd(event.target.value)} className={inputClass} />
+            <input type="time" required step={60} value={end} onChange={(event) => setEnd(event.target.value)} className={inputClass} />
           </label>
         </div>
 
-        <div className="text-[10px] text-ink3">{resource.slotMinutes}분 단위 · 운영 {resource.availableFrom}~{resource.availableTo} · 최대 {resource.maxDurationMinutes}분</div>
+        <div className="text-[10px] text-ink3">다른 예약과 겹치지 않으면 원하는 시간으로 바꿀 수 있습니다</div>
 
         {plan && resource.approvalMode === 'APPROVAL' && (
           <div className={`rounded-lg px-3 py-2.5 text-[10.5px] font-semibold ${plan.keepsApproval ? 'bg-teal-soft/25 text-teal' : 'bg-amber-soft/30 text-amber'}`}>

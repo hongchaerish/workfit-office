@@ -33,7 +33,7 @@ function draftFrom(resource?: Resource): ResourceDraft {
     code: '', name: '', typeCode: 'ROOM', bookingMode: 'TIME_SLOT', location: '', description: '', capacity: 8,
     totalQuantity: 1, unitCode: 'EA', managerUserId: null, ownerDeptId: null, approvalMode: 'INSTANT',
     slotMinutes: 30, minDurationMinutes: 30, maxDurationMinutes: 480, bufferBeforeMinutes: 0,
-    bufferAfterMinutes: 0, maxAdvanceDays: 60, cancelDeadlineMinutes: 30, availableFrom: '08:00',
+    bufferAfterMinutes: 0, maxAdvanceDays: 60, cancelDeadlineMinutes: 15, availableFrom: '08:00',
     availableTo: '20:00', status: 'ACTIVE', imageUrl: null, notes: '',
   };
 }
@@ -122,11 +122,7 @@ function ResourceEditor({ actor, canManage, resource, users, departments, onClos
       <div>
         <div className="mb-3 text-[11px] font-extrabold text-ink">예약 정책</div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <label><span className={labelClass}>슬롯(분)</span><input type="number" min={10} required value={draft.slotMinutes} onChange={(event) => set('slotMinutes', Number(event.target.value))} className={inputClass} /></label>
-          <label><span className={labelClass}>최소 이용(분)</span><input type="number" min={10} required value={draft.minDurationMinutes} onChange={(event) => set('minDurationMinutes', Number(event.target.value))} className={inputClass} /></label>
-          <label><span className={labelClass}>최대 이용(분)</span><input type="number" min={10} required value={draft.maxDurationMinutes} onChange={(event) => set('maxDurationMinutes', Number(event.target.value))} className={inputClass} /></label>
-          <label><span className={labelClass}>운영 시작</span><input type="time" required value={draft.availableFrom} onChange={(event) => set('availableFrom', event.target.value)} className={inputClass} /></label>
-          <label><span className={labelClass}>운영 종료</span><input type="time" required value={draft.availableTo} onChange={(event) => set('availableTo', event.target.value)} className={inputClass} /></label>
+          {/* 시간 단위·이용시간·운영시간은 예약 판정에 쓰지 않는다(2026-10-15) — 입력을 두지 않는다. */}
           <label><span className={labelClass}>예약 가능(일)</span><input type="number" min={0} required value={draft.maxAdvanceDays} onChange={(event) => set('maxAdvanceDays', Number(event.target.value))} className={inputClass} /></label>
           <label><span className={labelClass}>취소 마감(분)</span><input type="number" min={0} required value={draft.cancelDeadlineMinutes} onChange={(event) => set('cancelDeadlineMinutes', Number(event.target.value))} className={inputClass} /></label>
           <label><span className={labelClass}>앞 버퍼(분)</span><input type="number" min={0} required value={draft.bufferBeforeMinutes} onChange={(event) => set('bufferBeforeMinutes', Number(event.target.value))} className={inputClass} /></label>

@@ -50,26 +50,24 @@ export function dateRangeIso(date: string): { from: string; to: string } {
   };
 }
 
-export function defaultReservationWindow(resource: Resource, preferredDate?: string): { date: string; start: string; end: string } {
+/**
+ * 예약 창을 열 때의 기본 시간대 — 오늘이면 지금부터 15분 뒤 이후의 첫 30분 단위, 다른 날이면 09:00부터
+ * 1시간. 예약 시간 판정에는 단위·운영시간 제한이 없고, 이 값은 처음 보여 줄 제안일 뿐이다.
+ */
+export function defaultReservationWindow(_resource: Resource, preferredDate?: string): { date: string; start: string; end: string } {
   const now = new Date();
   let date = preferredDate && preferredDate >= toDateInput(now) ? preferredDate : toDateInput(now);
   const nowParts = resourceTimeParts(now);
-  const [openHour, openMinute] = resource.availableFrom.split(':').map(Number);
-  const [closeHour, closeMinute] = resource.availableTo.split(':').map(Number);
-  const step = resource.slotMinutes;
-  let startMinutes = openHour * 60 + openMinute;
-
+  const length = 60;
+  let startMinutes = 9 * 60;
   if (date === toDateInput(now)) {
-    const minutesSinceOpen = Math.max(0, nowParts.hour * 60 + nowParts.minute + 15 - startMinutes);
-    startMinutes += Math.ceil(minutesSinceOpen / step) * step;
+    startMinutes = Math.ceil((nowParts.hour * 60 + nowParts.minute + 15) / 30) * 30;
   }
-  const closeMinutes = closeHour * 60 + closeMinute;
-  if (startMinutes + step > closeMinutes) {
+  if (startMinutes + length > 24 * 60 - 1) {
     date = addDays(date, 1);
-    startMinutes = openHour * 60 + openMinute;
+    startMinutes = 9 * 60;
   }
-  const minimumWindow = Math.ceil(Math.max(step, resource.minDurationMinutes) / step) * step;
-  const endMinutes = Math.min(closeMinutes, startMinutes + minimumWindow);
+  const endMinutes = startMinutes + length;
   return {
     date,
     start: `${pad(Math.floor(startMinutes / 60))}:${pad(startMinutes % 60)}`,
