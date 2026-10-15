@@ -7,6 +7,7 @@ import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { calendarEventRepo } from '@/data/calendarEvent/calendarEvent.repo';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { buildApprovalDayIndex } from '@/domain/commute/approvalDayIndex';
+import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { AWAY_AFTER_MS, resolvePresence, type PresenceMeeting, type StoredPresence } from '@/domain/userPresence/resolve';
 import { startActivityTracking } from './activityTracker';
 import {
@@ -175,9 +176,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     };
   }, [myId, user?.status]);
 
-  // 자동 상태 근거: 승인 결재·오늘 회의·근무시간 정책
+  // 자동 상태 근거: 승인 결재·직접 등록 외근·출장·오늘 회의·근무시간 정책 (근태와 같은 인덱스)
   const approvalsQuery = useAllApprovals();
-  const approvalIndex = useMemo(() => buildApprovalDayIndex(approvalsQuery.data ?? []), [approvalsQuery.data]);
+  const { data: outsideWorks } = useOutsideWorks();
+  const approvalIndex = useMemo(
+    () => buildApprovalDayIndex(approvalsQuery.data ?? [], outsideWorks ?? []),
+    [approvalsQuery.data, outsideWorks],
+  );
   const { data: users = [] } = useUsers();
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const today = kstToday();

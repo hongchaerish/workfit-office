@@ -6,6 +6,7 @@ import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import type { CommuteRecord, CommuteStatus } from '@/domain/commute/schema';
 import { evaluateCommuteRecord } from '@/domain/commute/engine';
 import { buildApprovalDayIndex, type ApprovalDayMap } from '@/domain/commute/approvalDayIndex';
+import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 
 export type CommuteRawRecord = {
   empId: number;
@@ -17,16 +18,20 @@ export type CommuteRawRecord = {
 
 /**
  * 근태 판정 공용 진입점 — 데스크톱·PWA 모든 근태 화면이 이것만 쓴다.
- * 정책(DB)·공휴일·승인 결재(휴가·외근·출장)를 모아 evaluateCommuteRecord 로 다시 판정하며,
+ * 정책(DB)·공휴일·승인 결재(휴가·외근·출장)·직접 등록 외근·출장을 모아 evaluateCommuteRecord 로 다시 판정하며,
  * CAPS가 적재 시 추정한 status 는 판정에 쓰지 않는다.
  */
 export function useCommuteEvaluation() {
   const { policy = DEFAULT_COMMUTE_POLICY } = useCommutePolicy();
   const { data: holidays = [] } = useHolidays();
   const approvalsQuery = useAllApprovals();
+  const outsideWorksQuery = useOutsideWorks();
 
   const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.date, h.name])), [holidays]);
-  const approvalIndex = useMemo(() => buildApprovalDayIndex(approvalsQuery.data ?? []), [approvalsQuery.data]);
+  const approvalIndex = useMemo(
+    () => buildApprovalDayIndex(approvalsQuery.data ?? [], outsideWorksQuery.data ?? []),
+    [approvalsQuery.data, outsideWorksQuery.data],
+  );
 
   /** 사람(사용자 id·이름)의 날짜별 승인 일정 — 한 사람에 대해 한 번 구해 여러 날짜 판정에 재사용 */
   const approvalDaysOf = useCallback(
@@ -45,7 +50,7 @@ export function useCommuteEvaluation() {
     holidays,
     holidayMap,
     approvals: approvalsQuery.data,
-    isApprovalsLoading: approvalsQuery.isLoading,
+    isApprovalsLoading: approvalsQuery.isLoading || outsideWorksQuery.isLoading,
     approvalDaysOf,
     evaluate,
   };

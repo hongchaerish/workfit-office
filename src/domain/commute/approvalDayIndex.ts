@@ -2,6 +2,8 @@ import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { extractScheduleInfo, type StandardScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
 import { isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@/domain/leave/policy';
 import type { ApprovedLeaveInfo } from './engine';
+import type { OutsideWork } from '@/domain/outsideWork/schema';
+import { outsideWorkToDayInfo } from '@/domain/outsideWork/view';
 
 /** 날짜(YYYY-MM-DD) → 그날 승인된 휴가·외근·출장·휴일근무 목록. 같은 날 여러 건을 모두 담는다. */
 export type ApprovalDayMap = Map<string, ApprovedLeaveInfo[]>;
@@ -66,8 +68,11 @@ function holidayWorkRange(doc: ApprovalDoc): { start: string; end: string } | nu
 /**
  * 승인 완료된 결재(휴가·외근·출장·휴일근무)를 근태 판정용 인덱스로 만든다 — 웹·PWA 공용 단일 경로.
  * 기안자 id와 이름(공백 무시) 양쪽으로 색인해 계정 id가 달라도 이름으로 이어 붙인다.
+ *
+ * `outsideWorks`(결재 없이 직접 등록한 외근·출장)도 결재 완료 외근·출장과 같은 효력으로 넣는다.
+ * 근태 판정과 재실 상태가 모두 이 인덱스를 보므로 한 곳에서 넣으면 둘 다 반영된다.
  */
-export function buildApprovalDayIndex(docs: ApprovalDoc[]): ApprovalDayIndex {
+export function buildApprovalDayIndex(docs: ApprovalDoc[], outsideWorks: readonly OutsideWork[] = []): ApprovalDayIndex {
   const byKey = new Map<string, ApprovalDayMap>();
   const add = (key: string, date: string, info: ApprovedLeaveInfo) => {
     if (!key) return;
@@ -99,6 +104,11 @@ export function buildApprovalDayIndex(docs: ApprovalDoc[]): ApprovalDayIndex {
       if (doc.drafterId !== s.drafterId) add(`id:${doc.drafterId}`, date, info);
       if (name) add(`name:${name}`, date, info);
     });
+  }
+
+  for (const w of outsideWorks) {
+    const info = outsideWorkToDayInfo(w);
+    eachDate(w.startDate, w.endDate, (date) => add(`id:${w.ownerUserId}`, date, info));
   }
 
   return {
