@@ -95,11 +95,11 @@ export default function ReservationForm({ actor, resources, departments, initial
         <div className="grid grid-cols-2 gap-2">
           <label>
             <span className={labelClass}>시작</span>
-            <input type="time" required step={resource.slotMinutes * 60} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
+            <input type="time" required step={60} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
           </label>
           <label>
             <span className={labelClass}>종료</span>
-            <input type="time" required step={resource.slotMinutes * 60} value={end} onChange={(event) => setEnd(event.target.value)} className={inputClass} />
+            <input type="time" required step={60} value={end} onChange={(event) => setEnd(event.target.value)} className={inputClass} />
           </label>
         </div>
         {resource.bookingMode === 'QUANTITY' && (
@@ -126,9 +126,7 @@ export default function ReservationForm({ actor, resources, departments, initial
 
       <div className="rounded-lg border border-teal/20 bg-teal-soft/25 p-3 text-[10.5px] leading-relaxed text-ink2">
         <strong className="text-teal">{resource.approvalMode === 'INSTANT' ? '즉시 확정' : '담당자 승인 필요'}</strong>
-        <span className="mx-1.5 text-border-hi">·</span>{resource.slotMinutes}분 단위
-        <span className="mx-1.5 text-border-hi">·</span>운영 {resource.availableFrom}~{resource.availableTo}
-        <span className="mx-1.5 text-border-hi">·</span>최대 {resource.maxDurationMinutes}분
+        <span className="mx-1.5 text-border-hi">·</span>다른 예약과 겹치지 않으면 원하는 시간에 예약할 수 있습니다
       </div>
 
       {error && <div className="rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}

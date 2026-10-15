@@ -103,7 +103,7 @@ export default function MobileResourceScreen() {
     }
   };
 
-  // 자원을 고르면 그 자원의 운영시간·슬롯 단위에 맞는 기본 시간대로 맞춘다.
+  // 자원을 고르면 기본 시간대(다음 30분 단위부터 1시간)로 맞춘다.
   const selectFormResource = (resource: Resource | undefined) => {
     setFormResourceId(resource?.id ?? '');
     setFormError('');
@@ -113,9 +113,9 @@ export default function MobileResourceScreen() {
       setFormStart(window.start);
       setFormEnd(window.end);
     } else {
-      // 선택한 날의 운영시간이 이미 끝났으면 운영 시작 시각을 기본값으로 둔다.
-      setFormStart(resource.availableFrom);
-      setFormEnd(defaultReservationWindow(resource, window.date).end);
+      // 선택한 날이 곧 끝나 기본 시간대가 다음 날로 넘어가면 그 시각만 가져온다.
+      setFormStart(window.start);
+      setFormEnd(window.end);
     }
   };
 
@@ -349,7 +349,7 @@ export default function MobileResourceScreen() {
                   <label className="text-[11px] font-bold text-ink3 block mb-1">시작 시각</label>
                   <input
                     type="time"
-                    step={(formResource?.slotMinutes ?? 30) * 60}
+                    step={60}
                     value={formStart}
                     onChange={(e) => setFormStart(e.target.value)}
                     className="h-9 w-full rounded-xl border border-border bg-panel px-2.5 text-[12px] text-ink outline-none focus:border-teal"
@@ -359,7 +359,7 @@ export default function MobileResourceScreen() {
                   <label className="text-[11px] font-bold text-ink3 block mb-1">종료 시각</label>
                   <input
                     type="time"
-                    step={(formResource?.slotMinutes ?? 30) * 60}
+                    step={60}
                     value={formEnd}
                     onChange={(e) => setFormEnd(e.target.value)}
                     className="h-9 w-full rounded-xl border border-border bg-panel px-2.5 text-[12px] text-ink outline-none focus:border-teal"
@@ -369,7 +369,7 @@ export default function MobileResourceScreen() {
 
               {formResource && (
                 <p className="text-[10.5px] text-ink3">
-                  {formResource.approvalMode === 'INSTANT' ? '즉시 확정' : '담당자 승인 필요'} · {formResource.slotMinutes}분 단위 · 운영 {formResource.availableFrom}~{formResource.availableTo}
+                  {formResource.approvalMode === 'INSTANT' ? '즉시 확정' : '담당자 승인 필요'} · 다른 예약과 겹치지 않으면 원하는 시간에 예약할 수 있습니다
                 </p>
               )}
 

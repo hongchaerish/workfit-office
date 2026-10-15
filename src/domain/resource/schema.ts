@@ -6,10 +6,6 @@ export const RESOURCE_APPROVAL_MODES = ['INSTANT', 'APPROVAL'] as const;
 export const RESOURCE_STATUSES = ['ACTIVE', 'MAINTENANCE', 'INACTIVE'] as const;
 
 const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시간은 HH:mm 형식이어야 합니다.');
-const minutesOfDay = (value: string) => {
-  const [hours, minutes] = value.split(':').map(Number);
-  return hours * 60 + minutes;
-};
 
 export const resourceSchema = z.object({
   id: z.string().min(1),
@@ -48,14 +44,8 @@ export const resourceSchema = z.object({
   if (value.minDurationMinutes > value.maxDurationMinutes) {
     ctx.addIssue({ code: 'custom', path: ['maxDurationMinutes'], message: '최대 이용시간은 최소 이용시간 이상이어야 합니다.' });
   }
-  if (value.minDurationMinutes % value.slotMinutes !== 0 || value.maxDurationMinutes % value.slotMinutes !== 0) {
-    ctx.addIssue({ code: 'custom', path: ['slotMinutes'], message: '최소·최대 이용시간은 슬롯 간격의 배수여야 합니다.' });
-  }
   if (value.availableFrom >= value.availableTo) {
     ctx.addIssue({ code: 'custom', path: ['availableTo'], message: '운영 종료시간은 시작시간보다 늦어야 합니다.' });
-  }
-  if ((minutesOfDay(value.availableTo) - minutesOfDay(value.availableFrom)) % value.slotMinutes !== 0) {
-    ctx.addIssue({ code: 'custom', path: ['slotMinutes'], message: '운영시간은 슬롯 간격으로 정확히 나누어져야 합니다.' });
   }
   if (value.typeCode === 'ROOM' && value.capacity == null) {
     ctx.addIssue({ code: 'custom', path: ['capacity'], message: '회의실 수용 인원을 입력하세요.' });

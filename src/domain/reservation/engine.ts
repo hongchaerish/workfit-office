@@ -2,7 +2,7 @@ import type { User } from '@/domain/user/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { Reservation, ReservationRequest, ReservationStatus } from './schema';
 import { reservationRequestSchema } from './schema';
-import { resourceDateKey, resourceMinuteOfDay } from './time';
+import { resourceDateKey } from './time';
 
 export type ReservationErrorCode =
   | 'INVALID_INPUT'
@@ -28,11 +28,6 @@ export class ReservationError extends Error {
 }
 
 const OCCUPYING_STATUSES: ReservationStatus[] = ['PENDING', 'CONFIRMED'];
-
-const parseTime = (value: string) => {
-  const [hours, minutes] = value.split(':').map(Number);
-  return hours * 60 + minutes;
-};
 
 const occupiedInterval = (startAt: string, endAt: string, resource: Resource) => ({
   start: new Date(startAt).getTime() - resource.bufferBeforeMinutes * 60_000,
@@ -74,25 +69,10 @@ export function validateReservationRequest(
     throw new ReservationError('CROSS_DAY', '1차 버전에서는 날짜를 넘기는 예약을 지원하지 않습니다.');
   }
 
-  const startMinute = resourceMinuteOfDay(start);
-  const endMinute = resourceMinuteOfDay(end);
-  const openMinute = parseTime(resource.availableFrom);
+  // 시간 단위·운영시간·최소/최대 이용시간은 보지 않는다 — 분 단위로 자유롭게 잡고,
+  // 다른 예약과 겹칠 때만 막는다(2026-10-15 결정). 자원의 해당 설정값은 데이터에만 남는다.
   if (start.getUTCSeconds() !== 0 || start.getUTCMilliseconds() !== 0 || end.getUTCSeconds() !== 0 || end.getUTCMilliseconds() !== 0) {
     throw new ReservationError('SLOT_MISMATCH', '예약 시간은 분 단위로 선택하세요.');
-  }
-  if ((startMinute - openMinute) % resource.slotMinutes !== 0 || (endMinute - openMinute) % resource.slotMinutes !== 0) {
-    throw new ReservationError('SLOT_MISMATCH', `${resource.slotMinutes}분 단위로 시간을 선택하세요.`);
-  }
-  if (startMinute < openMinute || endMinute > parseTime(resource.availableTo)) {
-    throw new ReservationError('OUTSIDE_HOURS', `운영시간 ${resource.availableFrom}~${resource.availableTo} 안에서 예약하세요.`);
-  }
-
-  const durationMinutes = (end.getTime() - start.getTime()) / 60_000;
-  if (durationMinutes < resource.minDurationMinutes || durationMinutes > resource.maxDurationMinutes) {
-    throw new ReservationError(
-      'DURATION',
-      `이용시간은 ${resource.minDurationMinutes}~${resource.maxDurationMinutes}분이어야 합니다.`,
-    );
   }
 
   if (resource.bookingMode === 'TIME_SLOT' && input.quantity !== 1) {

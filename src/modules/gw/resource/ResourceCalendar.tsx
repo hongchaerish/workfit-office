@@ -48,8 +48,13 @@ export default function ResourceCalendar({ resources, reservations, users, onRes
   const weekStart = startOfWeek(date);
   const weekDates = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const userName = (id: string) => users.find((user) => user.id === id)?.name ?? id;
-  const axisStart = Math.floor(Math.min(...filteredResources.map((resource) => minutes(resource.availableFrom)), 8 * 60) / 60) * 60;
-  const axisEnd = Math.ceil(Math.max(...filteredResources.map((resource) => minutes(resource.availableTo)), 20 * 60) / 60) * 60;
+  // 예약 시간에 운영시간 제한이 없으므로, 보이는 날짜의 예약이 축 밖으로 잘리지 않게 축을 넓힌다.
+  const shownDates = view === 'day' ? [date] : weekDates;
+  const shownRows = reservations.filter((row) => DISPLAY_STATUSES.has(row.status) && shownDates.some((day) => isSameLocalDate(row.startAt, day)));
+  const rowStarts = shownRows.map((row) => resourceMinuteOfDay(new Date(row.startAt)));
+  const rowEnds = shownRows.map((row) => (isSameLocalDate(row.endAt, toDateInput(new Date(row.startAt))) ? resourceMinuteOfDay(new Date(row.endAt)) : 24 * 60));
+  const axisStart = Math.floor(Math.min(...filteredResources.map((resource) => minutes(resource.availableFrom)), ...rowStarts, 8 * 60) / 60) * 60;
+  const axisEnd = Math.min(24 * 60, Math.ceil(Math.max(...filteredResources.map((resource) => minutes(resource.availableTo)), ...rowEnds, 20 * 60) / 60) * 60);
   const axisDuration = axisEnd - axisStart;
   const axisLabels = Array.from({ length: Math.floor(axisDuration / 120) + 1 }, (_, index) => axisStart + index * 120).filter((value) => value <= axisEnd);
   const visibleRows = (resourceId: string, targetDate: string) => reservations
