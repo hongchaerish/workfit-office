@@ -124,7 +124,7 @@ function ResourceEditor({ actor, canManage, resource, users, departments, onClos
         <div className="grid gap-3 sm:grid-cols-3">
           {/* 시간 단위·이용시간·운영시간은 예약 판정에 쓰지 않는다(2026-10-15) — 입력을 두지 않는다. */}
           <label><span className={labelClass}>예약 가능(일)</span><input type="number" min={0} required value={draft.maxAdvanceDays} onChange={(event) => set('maxAdvanceDays', Number(event.target.value))} className={inputClass} /></label>
-          <label><span className={labelClass}>취소 마감(분)</span><input type="number" min={0} required value={draft.cancelDeadlineMinutes} onChange={(event) => set('cancelDeadlineMinutes', Number(event.target.value))} className={inputClass} /></label>
+          <div><span className={labelClass}>변경·취소 가능 시간</span><p className="text-[11px] text-ink2">예약 시작 전까지 가능</p></div>
           <label><span className={labelClass}>앞 버퍼(분)</span><input type="number" min={0} required value={draft.bufferBeforeMinutes} onChange={(event) => set('bufferBeforeMinutes', Number(event.target.value))} className={inputClass} /></label>
           <label><span className={labelClass}>뒤 버퍼(분)</span><input type="number" min={0} required value={draft.bufferAfterMinutes} onChange={(event) => set('bufferAfterMinutes', Number(event.target.value))} className={inputClass} /></label>
         </div>

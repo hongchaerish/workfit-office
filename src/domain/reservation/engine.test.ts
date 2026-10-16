@@ -3,7 +3,7 @@ import test from 'node:test';
 import { USER_SEED } from '@/data/seeds/user.seed';
 import { RESOURCE_SEED } from '@/data/seeds/resource.seed';
 import { reservationSchema, type Reservation } from './schema';
-import { assertCancellationAllowed, deriveLifecycle, planReschedule, ReservationError } from './engine';
+import { assertCancellationAllowed, assertRescheduleAllowed, deriveLifecycle, planReschedule, ReservationError } from './engine';
 import { userSchema, type User } from '@/domain/user/schema';
 
 function actor(id: string): User {
@@ -53,46 +53,36 @@ function reservation(startAt: string): Reservation {
   });
 }
 
-test('신청자는 취소 마감 30분 전까지 취소할 수 있다', () => {
-  assert.doesNotThrow(() => assertCancellationAllowed(
-    requester,
-    vehicle,
-    reservation('2026-08-12T00:30:00.000Z'),
-    now,
-  ));
-});
+for (const [action, check] of [['취소', assertCancellationAllowed], ['변경', assertRescheduleAllowed]] as const) {
+  test(`${action}: 기존 마감이 120분이어도 시작 직전까지 가능하다`, () => {
+    for (const startAt of ['2026-08-12T01:59:00.000Z', '2026-08-12T00:01:00.000Z', '2026-08-12T00:00:01.000Z']) {
+      assert.doesNotThrow(() => check(requester, { ...vehicle, cancelDeadlineMinutes: 120 }, reservation(startAt), now));
+    }
+  });
 
-test('신청자는 취소 마감 29분 전부터 취소할 수 없다', () => {
-  assert.throws(
-    () => assertCancellationAllowed(
-      requester,
-      vehicle,
-      reservation('2026-08-12T00:29:00.000Z'),
-      now,
-    ),
-    (error) => error instanceof ReservationError && error.code === 'CANCEL_DEADLINE',
-  );
-});
+  test(`${action}: 시작 시각부터는 본인이 처리할 수 없다`, () => {
+    for (const startAt of ['2026-08-12T00:00:00.000Z', '2026-08-11T23:59:00.000Z']) {
+      assert.throws(() => check(requester, vehicle, reservation(startAt), now),
+        (error) => error instanceof ReservationError && error.code === 'PAST_TIME');
+    }
+  });
 
-test('타인과 자원 담당자는 신청자의 예약을 취소할 수 없다', () => {
-  const row = reservation('2026-08-12T02:00:00.000Z');
-  for (const unauthorized of [otherUser, resourceManager]) {
-    assert.throws(
-      () => assertCancellationAllowed(unauthorized, vehicle, row, now),
-      (error) => error instanceof ReservationError && error.code === 'FORBIDDEN',
-    );
-  }
-});
+  test(`${action}: 타인·잠금 계정과 종료 상태 예약은 계속 차단한다`, () => {
+    const row = reservation('2026-08-12T00:01:00.000Z');
+    for (const unauthorized of [otherUser, resourceManager, { ...requester, status: '잠금' as const }]) {
+      assert.throws(() => check(unauthorized, vehicle, row, now),
+        (error) => error instanceof ReservationError && error.code === 'FORBIDDEN');
+    }
+    for (const status of ['CANCELLED', 'COMPLETED', 'EXPIRED', 'REJECTED'] as const) {
+      assert.throws(() => check(requester, vehicle, { ...row, status }, now),
+        (error) => error instanceof ReservationError && error.code === 'INVALID_STATUS');
+    }
+  });
 
-test('ADMIN은 비상 관리 권한으로 취소 마감의 제한을 받지 않는다', () => {
-  assert.doesNotThrow(() => assertCancellationAllowed(
-    admin,
-    vehicle,
-    reservation('2026-08-12T00:01:00.000Z'),
-    now,
-    true, // 관리자 여부는 users.roleGroup 대신 호출 측(usePermission)이 넘긴다.
-  ));
-});
+  test(`${action}: 기존 관리자 예외는 유지한다`, () => {
+    assert.doesNotThrow(() => check(admin, vehicle, reservation('2026-08-11T23:59:00.000Z'), now, true));
+  });
+}
 
 test('시작이 지난 대기 예약은 승인 기한 만료로, 종료가 지난 확정 예약은 이용 완료로 읽힌다', () => {
   const pending = { ...reservation('2026-08-12T01:00:00.000Z'), status: 'PENDING' as const, approvedAt: null };

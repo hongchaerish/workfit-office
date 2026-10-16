@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Building2,
   Calendar,
@@ -14,15 +14,19 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useResources } from '@/features/resource/useResources';
-import { useReservations, useCreateReservation } from '@/features/resource/useReservations';
+import { useReservations, useCreateReservation, useCancelReservation, useRescheduleReservation } from '@/features/resource/useReservations';
 import { useDepartments } from '@/features/department/useDepartments';
 import { resolveDeptId } from '@/domain/department/engine';
 import type { Resource } from '@/domain/resource/schema';
+import type { Reservation } from '@/domain/reservation/schema';
+import { canCancelReservation, planReschedule, type RescheduleInput } from '@/domain/reservation/engine';
 import {
   combineLocalDateTime,
   dateRangeIso,
   defaultReservationWindow,
+  formatResourceDateTime,
   formatResourceTime,
+  toDateInput,
 } from '@/modules/gw/resource/resourceDate';
 import MobileCommonHeader from './MobileCommonHeader';
 
@@ -47,6 +51,17 @@ export default function MobileResourceScreen() {
   const [formPurpose, setFormPurpose] = useState('');
   const [formAttendees, setFormAttendees] = useState(1);
   const [formError, setFormError] = useState('');
+  const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [notice, setNotice] = useState('');
+  const cancelSubmitting = useRef(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Reservation | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleStart, setRescheduleStart] = useState('');
+  const [rescheduleEnd, setRescheduleEnd] = useState('');
+  const [rescheduleError, setRescheduleError] = useState('');
+  const rescheduleSubmitting = useRef(false);
 
   const resourcesQuery = useResources();
   const resources = resourcesQuery.data ?? [];
@@ -61,6 +76,110 @@ export default function MobileResourceScreen() {
   const reservations = reservationsQuery.data ?? [];
 
   const createReservation = useCreateReservation();
+  const cancelReservation = useCancelReservation();
+  const rescheduleReservation = useRescheduleReservation();
+  const reservationBusy = cancelReservation.isPending || rescheduleReservation.isPending;
+  const rescheduleResource = resources.find((resource) => resource.id === rescheduleTarget?.resourceId);
+  const rescheduleNext = useMemo<RescheduleInput | null>(() => {
+    if (!rescheduleDate || !rescheduleStart || !rescheduleEnd) return null;
+    try {
+      return {
+        startAt: combineLocalDateTime(rescheduleDate, rescheduleStart),
+        endAt: combineLocalDateTime(rescheduleDate, rescheduleEnd),
+      };
+    } catch {
+      return null;
+    }
+  }, [rescheduleDate, rescheduleStart, rescheduleEnd]);
+  const rescheduleUnchanged = !rescheduleNext || (
+    rescheduleNext.startAt === rescheduleTarget?.startAt && rescheduleNext.endAt === rescheduleTarget?.endAt
+  );
+  const reschedulePlan = rescheduleResource && rescheduleTarget && rescheduleNext && !rescheduleUnchanged && rescheduleStart < rescheduleEnd
+    ? planReschedule(rescheduleResource, rescheduleTarget, rescheduleNext)
+    : null;
+
+  const openReschedule = (reservation: Reservation) => {
+    if (cancelSubmitting.current || rescheduleSubmitting.current || !user || !canCancelReservation(user, reservation)) return;
+    setRescheduleTarget(reservation);
+    setRescheduleDate(toDateInput(new Date(reservation.startAt)));
+    setRescheduleStart(formatResourceTime(reservation.startAt));
+    setRescheduleEnd(formatResourceTime(reservation.endAt));
+    setRescheduleError('');
+    setNotice('');
+  };
+
+  const closeReschedule = () => {
+    if (!rescheduleSubmitting.current) setRescheduleTarget(null);
+  };
+
+  const handleReschedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (rescheduleSubmitting.current) return;
+    if (!user || !rescheduleTarget || !canCancelReservation(user, rescheduleTarget)) {
+      setRescheduleError('본인 예약만 변경할 수 있습니다.');
+      return;
+    }
+    if (!rescheduleNext) {
+      setRescheduleError('변경할 날짜와 시각을 입력하세요.');
+      return;
+    }
+    if (rescheduleStart >= rescheduleEnd) {
+      setRescheduleError('종료 시각은 시작 시각보다 뒤여야 합니다.');
+      return;
+    }
+    if (rescheduleUnchanged) return;
+    rescheduleSubmitting.current = true;
+    setRescheduleError('');
+    try {
+      // 웹과 같은 경로가 최신 예약의 마감·충돌·재승인을 검사한다. 시간 이외의 필드는 전달하지 않는다.
+      const updated = await rescheduleReservation.mutateAsync({ actor: user, id: rescheduleTarget.id, next: rescheduleNext });
+      setRescheduleTarget(null);
+      setSelectedDate(new Date(`${toDateInput(new Date(updated.startAt))}T00:00:00`));
+      setNotice(updated.status === 'PENDING' ? '예약 시간을 변경했습니다. 담당자 재승인을 기다립니다.' : '예약 시간을 변경했습니다.');
+    } catch (caught) {
+      setRescheduleError(caught instanceof Error ? caught.message : '예약 변경에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      rescheduleSubmitting.current = false;
+    }
+  };
+
+  const openCancellation = (reservation: Reservation) => {
+    if (cancelSubmitting.current || rescheduleSubmitting.current || !user || !canCancelReservation(user, reservation)) return;
+    setCancelTarget(reservation);
+    setCancelReason('');
+    setCancelError('');
+    setNotice('');
+  };
+
+  const closeCancellation = () => {
+    if (!cancelSubmitting.current) setCancelTarget(null);
+  };
+
+  const handleCancelReservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cancelSubmitting.current) return;
+    if (!user || !cancelTarget || !canCancelReservation(user, cancelTarget)) {
+      setCancelError('본인 예약만 취소할 수 있습니다.');
+      return;
+    }
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelError('취소 사유를 입력하세요.');
+      return;
+    }
+    cancelSubmitting.current = true;
+    setCancelError('');
+    try {
+      // Web과 같은 저장소에서 최신 예약 상태·취소 마감을 검사한다. 관리자 예외는 적용하지 않는다.
+      await cancelReservation.mutateAsync({ actor: user, id: cancelTarget.id, reason });
+      setCancelTarget(null);
+      setNotice('예약을 취소했습니다.');
+    } catch (caught) {
+      setCancelError(caught instanceof Error ? caught.message : '예약 취소에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      cancelSubmitting.current = false;
+    }
+  };
 
   // 날짜 이동
   const handlePrevDay = () => {
@@ -217,6 +336,7 @@ export default function MobileResourceScreen() {
 
       {/* 2. 자원 및 타임라인 목록 */}
       <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-3">
+        {notice && <p role="status" className="rounded-xl border border-teal/20 bg-teal-soft/20 p-3 text-[12px] font-semibold text-teal">{notice}</p>}
         {resources.length === 0 ? (
           <div className="py-16 text-center text-[12px] text-ink3">등록된 자원이 없습니다.</div>
         ) : (
@@ -271,14 +391,38 @@ export default function MobileResourceScreen() {
                       return (
                         <div
                           key={r.id}
-                          className="flex items-center justify-between rounded-xl bg-panel-alt/60 px-2.5 py-1.5 text-[11.5px]"
+                          className="rounded-xl bg-panel-alt/60 px-2.5 py-1.5 text-[11.5px]"
                         >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Clock size={12} className="text-teal shrink-0" />
-                            <span className="font-bold text-ink font-mono">{startTime} ~ {endTime}</span>
-                            <span className="truncate text-ink2 font-medium">({r.title})</span>
+                          <p className="mb-1 break-words font-medium text-ink2">{r.title}</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <Clock size={12} className="text-teal shrink-0" />
+                              <span className="shrink-0 whitespace-nowrap font-bold text-ink font-mono">{startTime} ~ {endTime}</span>
+                            </div>
+                            <span className="shrink-0 text-[10.5px] text-ink3">{r.requesterUserId}</span>
                           </div>
-                          <span className="text-[10.5px] text-ink3 shrink-0">{r.requesterUserId}</span>
+                          {user && canCancelReservation(user, r) && (r.status === 'PENDING' || r.status === 'CONFIRMED') && (
+                            <div className="mt-1 flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                aria-label={`${r.title} 예약 시간 변경`}
+                                disabled={reservationBusy}
+                                onClick={() => openReschedule(r)}
+                                className="rounded-lg border border-teal/20 px-2 py-1.5 text-[10.5px] font-bold text-teal disabled:opacity-50"
+                              >
+                                시간 변경
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`${r.title} 예약 취소`}
+                                disabled={reservationBusy}
+                                onClick={() => openCancellation(r)}
+                                className="rounded-lg border border-rose-500/20 px-2 py-1.5 text-[10.5px] font-bold text-rose-600 disabled:opacity-50"
+                              >
+                                예약 취소
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })
@@ -289,6 +433,86 @@ export default function MobileResourceScreen() {
           })
         )}
       </div>
+
+      {/* 본인 예약 시간 변경 — 웹의 변경·재승인 규칙을 그대로 사용한다. */}
+      {rescheduleTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="mobile-reservation-reschedule-title" className="w-full max-w-[440px] max-h-[90dvh] overflow-y-auto rounded-2xl bg-white shadow-xl">
+            <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-[#101830] px-4 py-3 text-white">
+              <h2 id="mobile-reservation-reschedule-title" className="text-[13.5px] font-bold">예약 시간 변경</h2>
+              <button type="button" aria-label="예약 시간 변경 창 닫기" disabled={rescheduleReservation.isPending} onClick={closeReschedule} className="p-1 disabled:opacity-50"><X size={18} /></button>
+            </header>
+            <form onSubmit={handleReschedule} className="space-y-3 p-4">
+              <div className="rounded-xl bg-panel-alt p-3 text-[12px] text-ink2">
+                <p className="break-words font-bold">{rescheduleTarget.title} · {rescheduleTarget.resourceNameSnapshot}</p>
+                <p className="mt-1">현재 {formatResourceDateTime(rescheduleTarget.startAt)} ~ {formatResourceDateTime(rescheduleTarget.endAt)}</p>
+              </div>
+              {rescheduleError && <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-[12px] text-rose-600">{rescheduleError}</p>}
+              <label className="block text-[12px] font-bold text-ink2">
+                변경 날짜
+                <input type="date" required value={rescheduleDate} disabled={rescheduleReservation.isPending} onChange={(e) => setRescheduleDate(e.target.value)} className="mt-1 h-10 w-full min-w-0 max-w-full rounded-xl border border-border bg-panel px-3 text-[13px] font-normal text-ink outline-none focus:border-teal" />
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                <label className="min-w-0 text-[12px] font-bold text-ink2">
+                  변경 시작 시각
+                  <input type="time" step={60} required value={rescheduleStart} disabled={rescheduleReservation.isPending} onChange={(e) => setRescheduleStart(e.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-border bg-panel px-3 text-[13px] font-normal text-ink outline-none focus:border-teal" />
+                </label>
+                <label className="min-w-0 text-[12px] font-bold text-ink2">
+                  변경 종료 시각
+                  <input type="time" step={60} required value={rescheduleEnd} disabled={rescheduleReservation.isPending} onChange={(e) => setRescheduleEnd(e.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-border bg-panel px-3 text-[13px] font-normal text-ink outline-none focus:border-teal" />
+                </label>
+              </div>
+              {reschedulePlan && rescheduleResource?.approvalMode === 'APPROVAL' && (
+                <p className={`rounded-xl p-3 text-[12px] ${reschedulePlan.keepsApproval ? 'bg-teal-soft/20 text-teal' : 'bg-amber-500/10 text-amber-700'}`}>
+                  {reschedulePlan.keepsApproval ? '기존 시간 범위 안의 변경이라 승인이 유지됩니다.' : '승인형 자원이라 변경 후 담당자 재승인이 필요합니다. 승인 전까지 승인 대기 상태가 됩니다.'}
+                </p>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button type="button" disabled={rescheduleReservation.isPending} onClick={closeReschedule} className="flex-1 rounded-xl bg-panel-alt py-2.5 text-[12px] font-bold text-ink2 disabled:opacity-50">닫기</button>
+                <button type="submit" disabled={rescheduleReservation.isPending || rescheduleUnchanged} className="flex-1 rounded-xl bg-teal py-2.5 text-[12px] font-bold text-white disabled:opacity-50">{rescheduleReservation.isPending ? '변경 중…' : reschedulePlan?.status === 'PENDING' ? '변경 후 재승인 요청' : '변경'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* 본인 예약 취소 — 조회·신청과 별도 상태로 관리한다. */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="mobile-reservation-cancel-title" className="w-full max-w-[440px] max-h-[90dvh] overflow-y-auto rounded-2xl bg-white shadow-xl">
+            <header className="flex items-center justify-between border-b border-border bg-[#101830] px-4 py-3 text-white">
+              <h2 id="mobile-reservation-cancel-title" className="text-[13.5px] font-bold">예약 취소</h2>
+              <button type="button" aria-label="예약 취소 창 닫기" disabled={cancelReservation.isPending} onClick={closeCancellation} className="p-1 disabled:opacity-50">
+                <X size={18} />
+              </button>
+            </header>
+            <form onSubmit={handleCancelReservation} className="space-y-3 p-4">
+              <div className="rounded-xl bg-panel-alt p-3 text-[12px] text-ink2">
+                <p className="break-words font-bold">{cancelTarget.title} · {cancelTarget.resourceNameSnapshot}</p>
+                <p className="mt-1">{formatResourceDateTime(cancelTarget.startAt)} ~ {formatResourceDateTime(cancelTarget.endAt)}</p>
+              </div>
+              {cancelError && <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-[12px] text-rose-600">{cancelError}</p>}
+              <label className="block text-[12px] font-bold text-ink2" htmlFor="mobile-reservation-cancel-reason">
+                취소 사유
+              </label>
+              <textarea
+                id="mobile-reservation-cancel-reason"
+                autoFocus
+                rows={3}
+                value={cancelReason}
+                disabled={cancelReservation.isPending}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="예약을 취소하는 사유를 입력하세요."
+                className="w-full rounded-xl border border-border bg-panel p-3 text-[13px] text-ink outline-none focus:border-teal disabled:opacity-50"
+              />
+              <div className="flex gap-2 pt-2">
+                <button type="button" disabled={cancelReservation.isPending} onClick={closeCancellation} className="flex-1 rounded-xl bg-panel-alt py-2.5 text-[12px] font-bold text-ink2 disabled:opacity-50">닫기</button>
+                <button type="submit" disabled={cancelReservation.isPending || !cancelReason.trim()} className="flex-1 rounded-xl bg-rose-600 py-2.5 text-[12px] font-bold text-white disabled:opacity-50">{cancelReservation.isPending ? '취소 중…' : '예약 취소'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {/* 3. 예약 신청 모달 */}
       {isModalOpen && (

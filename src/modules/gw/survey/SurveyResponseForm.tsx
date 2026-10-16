@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Survey } from '@/domain/survey/schema';
 import type { User } from '@/domain/user/schema';
 import { missingRequiredQuestions, SurveyError } from '@/domain/survey/engine';
@@ -38,15 +38,19 @@ interface Props {
   questions: SurveyQuestion[];
   onSubmitted: () => void;
   onBack: () => void;
+  variant?: 'desktop' | 'mobile';
+  onSubmittingChange?: (pending: boolean) => void;
 }
 
 /** 설문 응답 — 필수값 검증 후 확인 모달을 거쳐 제출한다. ([[jwheo/feat/survey/DESIGN.md]] §10.2 · §11.4) */
-export default function SurveyResponseForm({ actor, actorDeptId, survey, questions, onSubmitted, onBack }: Props) {
+export default function SurveyResponseForm({ actor, actorDeptId, survey, questions, onSubmitted, onBack, variant = 'desktop', onSubmittingChange }: Props) {
+  const mobile = variant === 'mobile';
   const [answers, setAnswers] = useState<Record<string, SurveyAnswerInput>>({});
   const [missing, setMissing] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const submit = useSubmitSurveyResponse();
+  const sending = useRef(false);
 
   const valueOf = (questionId: string) => answers[questionId] ?? blank(questionId);
   const patch = (questionId: string, changes: Partial<SurveyAnswerInput>) => {
@@ -79,8 +83,11 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
   };
 
   const send = async () => {
+    if (sending.current) return;
+    sending.current = true;
     setConfirming(false);
     setError('');
+    onSubmittingChange?.(true);
     try {
       await submit.mutateAsync({
         actor,
@@ -90,12 +97,15 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
       onSubmitted();
     } catch (caught) {
       setError(message(caught));
+    } finally {
+      sending.current = false;
+      onSubmittingChange?.(false);
     }
   };
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <Button onClick={onBack} size="sm">← 참여할 설문</Button>
+      <Button onClick={onBack} disabled={mobile && submit.isPending} size="sm">← 참여할 설문</Button>
 
       <section className="rounded-xl border border-border bg-panel p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -112,7 +122,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
         </div>
       </section>
 
-      {error && <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
+      {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-[11px] font-semibold text-red-500">{error}</div>}
       {missing.length > 0 && (
         <div className="rounded-lg border border-amber/25 bg-amber-soft/25 px-3 py-2.5 text-[11px] font-semibold text-amber">
           답변하지 않은 필수 질문이 {missing.length}개 있습니다.
@@ -139,6 +149,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
                     type={question.type === 'SINGLE_CHOICE' ? 'radio' : 'checkbox'}
                     name={`q-${question.id}`}
                     checked={value.selectedOptionIds.includes(option.id)}
+                    disabled={mobile && submit.isPending}
                     onChange={() => toggleOption(question, option.id)}
                   />
                   {option.label}
@@ -149,6 +160,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
                 <input
                   className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none focus:border-teal"
                   maxLength={limit}
+                  disabled={mobile && submit.isPending}
                   value={value.textValue ?? ''}
                   onChange={(event) => patch(question.id, { textValue: event.target.value })}
                 />
@@ -159,6 +171,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
                     rows={4}
                     className="w-full rounded-lg border border-border bg-panel px-3 py-2 text-[11.5px] text-ink outline-none focus:border-teal"
                     maxLength={limit}
+                    disabled={mobile && submit.isPending}
                     value={value.textValue ?? ''}
                     onChange={(event) => patch(question.id, { textValue: event.target.value })}
                   />
@@ -175,6 +188,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
                         type="radio"
                         name={`q-${question.id}`}
                         checked={value.ratingValue === score}
+                        disabled={mobile && submit.isPending}
                         onChange={() => patch(question.id, { ratingValue: score })}
                       />
                       {score}
@@ -197,7 +211,21 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
         </Button>
       </div>
 
-      <Modal open={confirming} onClose={() => setConfirming(false)} title="설문을 제출할까요?" width={420}
+      {mobile ? confirming && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-3">
+          <section role="dialog" aria-modal="true" aria-labelledby="mobile-survey-confirm-title" className="w-full max-w-[420px] max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-panel p-4 shadow-xl">
+            <h2 id="mobile-survey-confirm-title" className="text-[15px] font-bold text-ink">설문을 제출할까요?</h2>
+            <p className="mt-3 text-[13px] leading-relaxed text-ink2">
+              제출하면 응답을 수정하거나 취소할 수 없고, 한 번만 참여할 수 있습니다.
+              {survey.anonymous && ' 익명 설문이므로 제출 후에는 본인의 응답을 다시 찾을 수 없습니다.'}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button onClick={() => setConfirming(false)}>취소</Button>
+              <Button disabled={submit.isPending} onClick={send} variant="primary">제출</Button>
+            </div>
+          </section>
+        </div>
+      ) : <Modal open={confirming} onClose={() => setConfirming(false)} title="설문을 제출할까요?" width={420}
         footer={
           <div className="flex justify-end gap-2">
             <Button onClick={() => setConfirming(false)}>취소</Button>
@@ -208,7 +236,7 @@ export default function SurveyResponseForm({ actor, actorDeptId, survey, questio
           제출하면 응답을 수정하거나 취소할 수 없고, 한 번만 참여할 수 있습니다.
           {survey.anonymous && ' 익명 설문이므로 제출 후에는 본인의 응답을 다시 찾을 수 없습니다.'}
         </p>
-      </Modal>
+      </Modal>}
     </div>
   );
 }
