@@ -8,6 +8,9 @@ import { userSchema } from '@/domain/user/schema';
 import { departmentSchema } from '@/domain/department/schema';
 import { roleGroupSchema } from '@/domain/roleGroup/schema';
 import { positionSchema } from '@/domain/position/schema';
+import { jobTitleSchema } from '@/domain/jobTitle/schema';
+import { employeeProfileSchema } from '@/domain/employeeProfile/schema';
+import { applyAffiliations } from '@/domain/employeeProfile/affiliation';
 import type { Coll, DirectoryPort, SurveyStorePort } from '../../../../server/survey/port';
 import { withDeadline } from '../../../../server/survey/deadline';
 
@@ -172,7 +175,17 @@ export function createAppwritePorts(
   };
 
   const directory: DirectoryPort = {
-    listUsers: () => listAll('users', userSchema),
+    // 사람 소속은 인명관리(기준정보 ID)로 채운다 — 계정의 이름 칸은 쓰지 않는다
+    listUsers: async () => {
+      const [users, profiles, depts, positions, jobTitles] = await Promise.all([
+        listAll('users', userSchema),
+        listAll('employeeProfiles', employeeProfileSchema),
+        listAll('departments', departmentSchema),
+        listAll('positions', positionSchema),
+        listAll('jobTitles', jobTitleSchema),
+      ]);
+      return applyAffiliations(users, profiles, { depts, positions, jobTitles });
+    },
     listDepartments: () => listAll('departments', departmentSchema),
     listRoleGroups: () => listAll('roleGroups', roleGroupSchema),
     listPositions: () => listAll('positions', positionSchema),
