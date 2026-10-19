@@ -208,10 +208,9 @@ export const chatRoomRepo = {
           rows.push(room);
         }
         for (const { roomId, name } of plan.rename) {
+          if (!(await this.applyDeptRoomRename(roomId, name))) continue;
           const idx = rows.findIndex((r) => r.id === roomId);
-          const updated = { ...rows[idx], name };
-          await backend.save(updated);
-          rows[idx] = updated;
+          if (idx >= 0) rows[idx] = { ...rows[idx], name };
           await appendSystemMessage(roomId, `부서명 변경으로 방 이름이 ${name}으로 바뀌었습니다`);
         }
       } catch (e) {
@@ -295,6 +294,17 @@ export const chatRoomRepo = {
     const room = await this.get(id);
     if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
     await this.save({ ...room, deletedAt: nowLocalIso(), deletedBy: adminId });
+  },
+
+  /**
+   * 부서명 변경을 방 이름에 반영 — 저장 직전에 그 방을 다시 읽는다. 여러 브라우저가 동시에 동기화해도
+   * 이미 바뀌었으면 건너뛰고(메시지 중복 방지), 그사이 바뀐 참여자 등은 최신 값 그대로 둔다. 반영했으면 true.
+   */
+  async applyDeptRoomRename(roomId: string, name: string): Promise<boolean> {
+    const fresh = (await backend.loadAll()).find((r) => r.id === roomId);
+    if (!fresh || fresh.name === name) return false;
+    await backend.save({ ...fresh, name });
+    return true;
   },
 
   /** 퇴직 — 살아있는 부서방에서 그 사람을 뺀다. 뺀 방 ID 목록을 돌려준다(시스템 메시지는 호출자 몫). */
