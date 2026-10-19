@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
-import { useUsers, useUpdateUserJobTitle, useUpdateUserDept } from '@/features/user/useUsers';
+import { useUsers, useUpdateUserJobTitle } from '@/features/user/useUsers';
+import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
+import { cascadeDepartmentRename } from '@/data/department/renameDepartment';
 import { usePositions } from '@/features/position/usePositions';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
@@ -28,7 +31,7 @@ export default function DepartmentScreen() {
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
   const updateJobTitle = useUpdateUserJobTitle();
-  const updateUserDept = useUpdateUserDept();
+  const qc = useQueryClient();
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
 
@@ -106,12 +109,10 @@ export default function DepartmentScreen() {
       headUserId: sel.headUserId || null,
     });
 
-    // 부서명 변경에 따른 소속 사용자들의 부서명 일괄 자동 업데이트 (동기화)
+    // 부서명 변경 — 계정·인명관리·겸직 정보의 부서명을 함께 바꾼다(하나라도 빠지면 조직도에 옛 이름 부서가 따로 생긴다).
     if (oldDept && oldDept.name !== sel.name) {
-      const affectedUsers = users.filter((u) => u.dept === oldDept.name);
-      for (const u of affectedUsers) {
-        await updateUserDept.mutateAsync({ id: u.id, dept: sel.name });
-      }
+      await cascadeDepartmentRename({ deptId: oldDept.id, oldName: oldDept.name, newName: sel.name });
+      for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] });
     }
 
     if (sel.headUserId) {
