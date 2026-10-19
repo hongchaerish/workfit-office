@@ -102,3 +102,8 @@ test('ID를 채우기 전 프로필을 다른 칸만 고쳐 저장해도 예전 
   assert.equal(raw.dept, '없어진팀');
   assert.equal(raw.positionId, 'PA1');
 });
+
+test('이름에 테스트 표시가 없는 테스트 계정도 DB의 예전 부서가 테스트면 테스트 부서로 보인다', async () => {
+  await employeeProfileStore.save(employeeProfileSchema.parse({ id: 'UT9', userId: 'UT9', empNo: 'T9', name: '관리자', dept: '테스트', positionId: 'PA1' }));
+  assert.equal((await employeeProfileRepo.listIncludingTestAccounts()).find((p) => p.id === 'UT9')?.dept, '테스트');
+});
