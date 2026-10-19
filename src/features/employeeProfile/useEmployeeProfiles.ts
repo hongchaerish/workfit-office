@@ -17,7 +17,7 @@ export function useEmployeeProfiles() {
 /**
  * 임직원 인사정보 발령 및 수정 Mutation.
  * 1) 신규 employeeProfiles 컬렉션에 인사/개인정보를 영구 저장.
- * 2) users 컬렉션에도 기본 소속(dept, position, jobTitle)을 동기화하여 전사 시스템 일관성을 유지.
+ * 2) 소속(부서·직급·직책)은 인명관리에만 ID로 저장한다. 계정에는 상태·업무 이메일만 맞춘다.
  */
 /** 본인 정보 수정(프로필 설정) — 연락처·주소·생년월일·생일 설정 등 허용 항목만 */
 export function useUpdateMyEmployeeProfile() {
@@ -56,6 +56,10 @@ export function useUpsertEmployeeProfile() {
         dept: values.dept || existing?.dept || '미지정',
         position: values.position || existing?.position || '사원',
         jobTitle: values.jobTitle || existing?.jobTitle || '팀원',
+        // 저장소가 위 이름을 ID로 바꾼다 — 이름으로 못 찾을 때 기존 소속을 잃지 않게 기존 ID를 함께 넘긴다
+        deptId: existing?.deptId ?? null,
+        positionId: existing?.positionId ?? null,
+        jobTitleId: existing?.jobTitleId ?? null,
         status: nextStatus,
         isAttendanceTarget: values.isAttendanceTarget !== undefined ? values.isAttendanceTarget : (existing?.isAttendanceTarget ?? true),
         phone: values.phone !== undefined ? values.phone : (existing?.phone || ''),
@@ -75,15 +79,12 @@ export function useUpsertEmployeeProfile() {
       // 1. employeeProfiles 저장
       await employeeProfileRepo.save(updated);
 
-      // 2. 계정(users)에 인사 소속 사본을 맞춘다. 계정 상태는 재직 상태가 바뀐 경우에만,
-      //    업무 이메일은 넘어온 경우에만 바꾼다 — 사용자 관리에서 정한 계정 값을 덮지 않게.
+      // 2. 계정(users)은 상태·업무 이메일만 맞춘다. 소속은 인명관리에만 있다(계정으로 복사하지 않음).
+      //    계정 상태는 재직 상태가 바뀐 경우에만, 업무 이메일은 넘어온 경우에만 — 사용자 관리에서 정한 값을 덮지 않게.
       const u = await userRepo.get(updated.userId);
-      if (u) {
+      if (u && (accountStatus || email !== undefined)) {
         await userRepo.save(userSchema.parse({
           ...u,
-          dept: updated.dept,
-          position: updated.position,
-          jobTitle: updated.jobTitle,
           ...(accountStatus ? { status: accountStatus } : {}),
           ...(email !== undefined ? { email: email.trim() } : {}),
         }));

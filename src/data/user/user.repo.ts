@@ -87,9 +87,10 @@ export const userRepo = {
       const p = profileMap.get(u.id);
       return {
         ...u,
-        dept: p?.dept || u.dept || '미지정',
-        position: p?.position || u.position || '사원',
-        jobTitle: p?.jobTitle || u.jobTitle || '',
+        // 소속은 인명관리(기준정보 ID로 찾은 현재 이름)만 본다. 계정의 이름 칸은 읽지 않는다 — 발령 전이면 미지정.
+        dept: p?.dept ?? '미지정',
+        position: p?.position ?? '사원',
+        jobTitle: p?.jobTitle ?? '',
         phone: p?.phone || (u as any).phone || '',
       };
     });
