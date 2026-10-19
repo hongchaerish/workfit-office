@@ -241,6 +241,8 @@ const COLLECTIONS: CollectionDef[] = [
       S('deptName', 128, true),
       BOOL('isPrimary', false),
       S('jobTitle', 64),
+      // 겸직 직책의 기준(기준정보 ID). jobTitle 은 읽지 않는 이름 사본.
+      S('jobTitleId', 64),
       INT('order', false, 0),
       S('assignedAt', 40),
       S('createdAt', 40),
@@ -252,6 +254,18 @@ const COLLECTIONS: CollectionDef[] = [
       IX('deptId', ['deptId']),
       IX('user_primary', ['userId', 'isPrimary']),
     ],
+  },
+  {
+    // 인명관리. 컬렉션과 기존 칸은 이미 있다 — 여기서는 본직 소속 ID 칸만 추가한다(없는 칸만 만든다).
+    // dept·position·jobTitle 은 읽지 않는 이름 사본. ([[docs/superpowers/specs/2026-10-19-affiliation-ids-design.md]])
+    id: 'employeeProfiles',
+    name: '임직원 인사 프로필',
+    attributes: [
+      S('deptId', 64),
+      S('positionId', 64),
+      S('jobTitleId', 64),
+    ],
+    indexes: [],
   },
   {
     id: 'companyInfo',
