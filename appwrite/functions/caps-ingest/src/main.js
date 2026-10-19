@@ -277,7 +277,7 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
   // 3. 부서장이면 맡은 부서(인명관리 부서 ID 기준) 소속 전원, 아니면 나 하나.
-  const { deptNames, memberNames } = headScope({ uid, aff, depts, profiles, users });
+  const { deptNames, memberNames } = headScope({ uid, aff, depts, profiles, users, masters: { depts, positions, jobTitles } });
   const names = deptNames.length > 0 ? memberNames : new Set([myName]);
 
   const empIds = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));

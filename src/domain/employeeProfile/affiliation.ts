@@ -34,6 +34,20 @@ export function resolveAffiliation(ids: Partial<AffiliationIds>, masters: OrgMas
   };
 }
 
+type StoredAffiliation = Partial<AffiliationIds> & { dept?: string; position?: string; jobTitle?: string };
+
+/**
+ * 저장된 소속 ID — 세 ID 중 하나라도 있으면 채워진 사람이라 ID만 쓴다.
+ * 셋 다 비어 있으면(기존 데이터 채우기 전) 예전 이름 칸으로 찾는다. 채우기 순서가 어긋나도 소속·권한이 사라지지 않게.
+ * (Appwrite는 빈 칸을 null로 돌려주므로 칸 하나로는 "안 채움"과 "없음"을 구분할 수 없다.)
+ */
+export function storedAffiliationIds(stored: StoredAffiliation, masters: OrgMasters): AffiliationIds {
+  if (stored.deptId || stored.positionId || stored.jobTitleId) {
+    return { deptId: stored.deptId ?? null, positionId: stored.positionId ?? null, jobTitleId: stored.jobTitleId ?? null };
+  }
+  return affiliationIdsFromNames({ dept: stored.dept, position: stored.position, jobTitle: stored.jobTitle }, masters);
+}
+
 /** 고른 이름을 ID로 — 이름으로 못 찾으면(화면에 남은 옛 이름 등) 기존 ID를 유지한다. 직책 빈칸은 '직책 없음'. */
 export function affiliationIdsFromNames(
   names: { dept?: string; position?: string; jobTitle?: string },
@@ -53,9 +67,12 @@ export function affiliationIdsFromNames(
  */
 export function applyAffiliations<U extends { id: string; name: string; dept?: string; position?: string; jobTitle?: string }>(
   users: U[],
-  profiles: ({ userId: string } & Partial<AffiliationIds>)[],
+  profiles: ({ userId: string } & StoredAffiliation)[],
   masters: OrgMasters,
 ): (U & Affiliation)[] {
   const byUser = new Map(profiles.map((p) => [p.userId, p]));
-  return users.map((u) => ({ ...u, ...resolveAffiliation(byUser.get(u.id) ?? {}, masters, { isTest: isTestAccount(u) }) }));
+  return users.map((u) => {
+    const p = byUser.get(u.id);
+    return { ...u, ...resolveAffiliation(p ? storedAffiliationIds(p, masters) : {}, masters, { isTest: isTestAccount(u) }) };
+  });
 }

@@ -47,3 +47,14 @@ test('부서장 지정이 없어도 팀장 직책이면 자기 부서, 아니면
   const t = headScope({ uid: 'U012', aff: affiliationOf('U012', profiles, masters), depts: noHeads, profiles, users });
   assert.deepEqual(t.deptNames, []);
 });
+
+test('ID를 아직 채우지 않은 예전 프로필은 예전 이름 칸으로 소속·부서원을 찾는다', () => {
+  const legacy = [
+    { userId: 'U011', dept: '데이터플랫폼 개발팀', position: '과장', jobTitle: '팀장' },
+    { userId: 'U012', dept: '데이터플랫폼 개발팀', position: '과장', jobTitle: '' },
+  ];
+  const aff = affiliationOf('U011', legacy, masters);
+  assert.equal(aff.deptId, 'D240');
+  const s = headScope({ uid: 'U011', aff, depts: masters.depts, profiles: legacy, users, masters });
+  assert.deepEqual([...s.memberNames].sort(), ['김승기', '홍채원']);
+});

@@ -3,7 +3,7 @@ import { employeeProfileSchema, type EmployeeProfile } from '@/domain/employeePr
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
 import { isTestAccount } from '@/domain/user/testAccount';
-import { affiliationIdsFromNames, resolveAffiliation } from '@/domain/employeeProfile/affiliation';
+import { affiliationIdsFromNames, resolveAffiliation, storedAffiliationIds } from '@/domain/employeeProfile/affiliation';
 import { loadOrgMasters } from '@/data/_backend/orgMasters';
 
 /** 예전 브라우저 저장 키 — DB 이전([[migrateLegacySharedSettings]]) 때만 읽는다. */
@@ -124,7 +124,7 @@ export const employeeProfileRepo = {
       return {
         ...item,
         // 소속 이름은 저장값이 아니라 ID로 기준정보에서 찾은 현재 이름
-        ...resolveAffiliation(item, masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) }),
+        ...resolveAffiliation(storedAffiliationIds(item, masters), masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) }),
         ...(override !== undefined ? { isAttendanceTarget: override } : {}),
         ...(birthday ? { birthLunar: birthday.birthLunar, birthdayPublic: birthday.birthdayPublic } : {}),
       };

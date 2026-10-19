@@ -294,7 +294,7 @@ export default function AuthScreen() {
         <div>
           <h1 className="text-xl font-extrabold tracking-tight text-ink">그룹권한관리</h1>
           <p className="mt-0.5 text-xs text-ink3">
-            역할 그룹별로 전체 35개 화면의 접근 권한 및 세부 액션(작성·수정·삭제·엑셀·관리)을 설정합니다.
+            역할 그룹별로 전체 {SYSTEM_SCREENS.length}개 화면의 접근 권한 및 세부 액션(작성·수정·삭제·엑셀·관리)을 설정합니다.
           </p>
         </div>
         <div className="flex items-center gap-2">

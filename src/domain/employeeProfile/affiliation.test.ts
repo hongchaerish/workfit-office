@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { affiliationIdsFromNames, applyAffiliations, resolveAffiliation } from './affiliation';
+import { affiliationIdsFromNames, applyAffiliations, resolveAffiliation, storedAffiliationIds } from './affiliation';
 
 const M = {
   depts: [{ id: 'D240', name: '데이터플랫폼 개발팀' }, { id: 'D210', name: '품질심사팀' }],
@@ -43,4 +43,16 @@ test('사람 목록에 인명관리 소속 이름을 채운다 — 계정 이름
   const out = applyAffiliations(users, profiles, M);
   assert.deepEqual(out.map((u) => [u.dept, u.position, u.jobTitle]), [['품질심사팀', '과장', ''], ['미지정', '사원', ''], ['테스트', '사원', '']]);
   assert.equal(out[0].name, '가');
+});
+
+test('ID가 아직 비어 있으면(기존 데이터 채우기 전) 예전 이름으로 찾고, ID가 있으면 ID만 본다', () => {
+  // 채우기 전: ID 없음 → 예전 이름으로
+  assert.deepEqual(storedAffiliationIds({ dept: '품질심사팀', position: '과장', jobTitle: '팀장' }, M), { deptId: 'D210', positionId: 'P05', jobTitleId: 'J03' });
+  // 채운 뒤: ID가 우선 — 예전 이름 사본이 다른 부서를 가리켜도 무시
+  assert.deepEqual(storedAffiliationIds({ deptId: 'D240', dept: '품질심사팀', positionId: 'P05', jobTitleId: null, jobTitle: '팀장' }, M), { deptId: 'D240', positionId: 'P05', jobTitleId: null });
+});
+
+test('사람 목록 채우기도 ID가 없으면 예전 이름으로 찾는다', () => {
+  const out = applyAffiliations([{ id: 'U1', name: '가' }], [{ userId: 'U1', dept: '품질심사팀', position: '과장' }], M);
+  assert.deepEqual([out[0].dept, out[0].position], ['품질심사팀', '과장']);
 });
