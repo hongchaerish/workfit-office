@@ -59,7 +59,8 @@ export function FolderManageModal({
     setIsSubmitting(true);
     setError('');
     try {
-      await onSubmit(trimmed, description.trim() || undefined);
+      // 빈 설명도 그대로 보내야 수정 시 기존 설명이 지워진다.
+      await onSubmit(trimmed, description.trim());
       onClose();
     } catch (err: any) {
       setError(err?.message || '폴더 저장 중 오류가 발생했습니다.');
