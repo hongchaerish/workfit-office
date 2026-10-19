@@ -22,6 +22,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Client, Databases, Query } from 'node-appwrite';
 import { z } from 'zod';
 import { resolveUserId } from './token.js';
+import { affiliationOf, headScope, matchesExecMapping } from './scope.js';
 
 /* ------------------------------------------------------------------ 계약 §2 인증 */
 
@@ -241,7 +242,16 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   const me = (await dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)])).documents[0];
   const myName = me ? String(me.name).trim() : '';
 
-  const employees = await listAll(dbs, DB, 'employees', [], log);
+  // 소속은 인명관리(기준정보 ID)로 판단한다 — 계정의 dept·position·jobTitle 칸은 옛 사본이라 보지 않는다.
+  const [employees, users, profiles, depts, positions, jobTitles] = await Promise.all([
+    listAll(dbs, DB, 'employees', [], log),
+    listAll(dbs, DB, 'users', [], log),
+    listAll(dbs, DB, 'employeeProfiles', [], log),
+    listAll(dbs, DB, 'departments', [], log),
+    listAll(dbs, DB, 'positions', [], log),
+    listAll(dbs, DB, 'jobTitles', [], log),
+  ]);
+  const aff = affiliationOf(uid, profiles, { depts, positions, jobTitles });
   const matched = employees.find((e) => String(e.name).trim() === myName && myName !== '');
   const myEmpId = matched === undefined ? null : Number(matched.empId);
 
@@ -251,23 +261,7 @@ async function resolveViewerScope(dbs, DB, uid, log) {
       Query.equal('roleCode', ['EXEC', 'OPERATOR']),
       Query.limit(100),
     ]);
-    const isMappedExec = mappings.documents.some((m) => {
-      // 1-1. 사용자 ID 또는 이름 매칭
-      if (m.targetType === 'USER') {
-        return m.targetId === uid || m.targetId === me?.empNo || (myName && m.targetName && m.targetName.includes(myName));
-      }
-      // 1-2. 부서 매칭
-      if (m.targetType === 'DEPT' && me?.dept) {
-        return m.targetId === me.dept || m.targetName === me.dept;
-      }
-      // 1-3. 직급 매칭
-      if (m.targetType === 'POSITION' && me?.position) {
-        return m.targetId === me.position || m.targetName === me.position;
-      }
-      return false;
-    });
-
-    if (isMappedExec) {
+    if (mappings.documents.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
       log(`scope uid=${uid} kind=admin (roleMappings EXEC/OPERATOR matched) empId=${myEmpId ?? '(없음)'}`);
       return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
     }
@@ -276,34 +270,15 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   }
 
   // 2. 직급/직책에 임원 명칭 포함 또는 레거시 화이트리스트
-  if (FULL_ACCESS_USER_IDS.has(uid) || hasFullAccessTitle(me)) {
+  if (FULL_ACCESS_USER_IDS.has(uid) || hasFullAccessTitle(aff)) {
     log(`scope uid=${uid} kind=admin (title/whitelist matched) empId=${myEmpId ?? '(없음)'}`);
     return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
   }
   if (!me) return { empIds: new Set(), kind: 'self', deptNames: [], myEmpId: null, myName: '' };
 
-  // 3. 부서장 판정 (departments.headUserId 또는 팀장/부서장 직책/직급)
-  const headed = await dbs.listDocuments(DB, 'departments', [Query.equal('headUserId', uid), Query.limit(50)]);
-  const deptNames = headed.documents.map((d) => String(d.name));
-
-  // 3-1. 테스트 부서장(testB) 또는 조직도 직책 팀장/부서장 폴백
-  if (deptNames.length === 0 && me.dept) {
-    const jobText = `${me.position ?? ''} ${me.jobTitle ?? ''} ${me.name ?? ''}`.toLowerCase();
-    if (jobText.includes('팀장') || jobText.includes('부서장') || jobText.includes('testb')) {
-      deptNames.push(String(me.dept));
-    }
-  }
-
-  // 부서장이면 그 부서 소속 전원, 아니면 나 하나.
-  const names = new Set();
-  if (deptNames.length > 0) {
-    for (const dept of deptNames) {
-      const members = await dbs.listDocuments(DB, 'users', [Query.equal('dept', dept), Query.limit(200)]);
-      for (const m of members.documents) names.add(String(m.name).trim());
-    }
-  } else {
-    names.add(myName);
-  }
+  // 3. 부서장이면 맡은 부서(인명관리 부서 ID 기준) 소속 전원, 아니면 나 하나.
+  const { deptNames, memberNames } = headScope({ uid, aff, depts, profiles, users });
+  const names = deptNames.length > 0 ? memberNames : new Set([myName]);
 
   const empIds = new Set(employees.filter((e) => names.has(String(e.name).trim())).map((e) => Number(e.empId)));
   const kind = deptNames.length > 0 ? 'head' : 'self';
