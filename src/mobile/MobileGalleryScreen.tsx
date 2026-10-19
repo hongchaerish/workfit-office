@@ -10,12 +10,20 @@ import {
   Search,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  Pencil,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  FolderInput,
+  Home,
   X,
 } from 'lucide-react';
 import { useGalleryDirectory } from '@/features/gw/gallery/useGalleryDirectory';
 import { PhotoUploadModal } from '@/modules/gw/gallery/components/PhotoUploadModal';
 import { FolderManageModal } from '@/modules/gw/gallery/components/FolderManageModal';
-import type { GalleryPhoto } from '@/domain/gallery/schema';
+import { FolderSelectModal } from '@/modules/gw/gallery/components/FolderSelectModal';
+import type { FolderDeletionScope, FolderTreeNode } from '@/features/gw/gallery/useGalleryDirectory';
+import type { GalleryFolder, GalleryPhoto } from '@/domain/gallery/schema';
 import MobileCommonHeader from './MobileCommonHeader';
 
 export default function MobileGalleryScreen() {
@@ -36,8 +44,33 @@ export default function MobileGalleryScreen() {
     deletePhoto,
     batchDelete,
     createFolder,
+    updateFolder,
+    deleteFolder,
+    getFolderDeletionScope,
     isFolderMutating,
+    folderTree,
+    breadcrumbs,
+    subFolders,
+    goUp,
+    batchMove,
+    batchCopy,
   } = useGalleryDirectory();
+  const [transferMode, setTransferMode] = useState<{ mode: 'move' | 'copy'; ids: string[] } | null>(null);
+  // 폴더별 '하위 포함' 사진 수 (웹 트리 숫자와 같은 기준)
+  const totalCountById = useMemo(() => {
+    const map = new Map<string, number>();
+    const walk = (nodes: FolderTreeNode[]) => {
+      for (const node of nodes) {
+        map.set(node.id, node.totalPhotoCount);
+        walk(node.children);
+      }
+    };
+    walk(folderTree);
+    return map;
+  }, [folderTree]);
+  const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
+  // 뒤로 버튼에 적을 '한 단계 위' 이름 (최상위 폴더에서는 '전체')
+  const parentLabel = breadcrumbs.length >= 3 ? breadcrumbs[breadcrumbs.length - 2].name : '전체';
   const queryClient = useQueryClient();
 
   const [activePhoto, setActivePhoto] = useState<GalleryPhoto | null>(null);
@@ -53,6 +86,34 @@ export default function MobileGalleryScreen() {
   const [pendingDeletion, setPendingDeletion] = useState<{ kind: 'single' | 'batch'; photos: GalleryPhoto[] } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const deleting = useRef(false);
+  const [editingFolder, setEditingFolder] = useState<GalleryFolder | null>(null);
+  const [pendingFolderDeletion, setPendingFolderDeletion] = useState<FolderDeletionScope | null>(null);
+
+  const requestFolderDeletion = () => {
+    if (!currentFolder || deleting.current) return;
+    const scope = getFolderDeletionScope(currentFolder.id);
+    if (!scope) return;
+    clearSelection();
+    setNotice('');
+    setActionError('');
+    setPendingFolderDeletion(scope);
+  };
+  const confirmFolderDeletion = async () => {
+    if (!pendingFolderDeletion || deleting.current) return;
+    const target = pendingFolderDeletion.folder;
+    deleting.current = true;
+    setIsDeleting(true);
+    try {
+      await deleteFolder(target.id);
+      setNotice(`'${target.name}' 폴더를 삭제했습니다.`);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : '폴더를 삭제하지 못했습니다.');
+    } finally {
+      setPendingFolderDeletion(null);
+      deleting.current = false;
+      setIsDeleting(false);
+    }
+  };
 
   const clearSelection = () => {
     setSelectedIds(new Set());
@@ -153,49 +214,82 @@ export default function MobileGalleryScreen() {
         <p className="mt-1.5 text-[10px] text-ink3">{keyword.trim() ? `검색 결과 ${currentPhotos.length}장` : '제목·설명·작성자·파일명·행사일 검색 · 행사일 기준 정렬'}</p>
       </div>
 
-      {/* 1. 폴더 선택 칩 바 */}
-      <div className="flex items-center gap-1.5 px-3.5 py-2 overflow-x-auto bg-white/70 border-b border-border/50 shrink-0 no-scrollbar">
-        <button
-          type="button"
-          disabled={isDeleting}
-          onClick={() => changeFolder(null)}
-          className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold transition-all ${
-            currentFolderId === null
-              ? 'bg-teal text-white shadow-xs'
-              : 'bg-white text-ink3 hover:bg-panel-alt border border-border/80'
-          }`}
-        >
-          <Folder size={13} />
-          <span>전체 ({photos.length})</span>
-        </button>
+      {/* 1. 현재 위치 경로 (웹의 브레드크럼과 같은 역할) */}
+      <nav aria-label="폴더 경로" className="flex shrink-0 items-center gap-1 border-b border-border/50 bg-white/70 px-3.5 py-1.5">
+        {/* 돌아갈 곳의 이름을 글자로 보여줘 아이콘만 있을 때보다 알아보기 쉽게 한다 */}
+        {currentFolderId !== null && (
+          <button type="button" aria-label={`${parentLabel}(으)로 돌아가기`} disabled={isDeleting} onClick={() => { if (!deleting.current) { clearSelection(); goUp(); } }} className="mr-1 flex h-8 max-w-[45%] shrink-0 items-center gap-0.5 rounded-lg border border-teal/30 bg-teal/5 pl-1.5 pr-2.5 text-[12px] font-bold text-teal disabled:opacity-50">
+            <ChevronLeft size={16} className="shrink-0" />
+            <span className="truncate">{parentLabel}</span>
+          </button>
+        )}
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto no-scrollbar text-[11.5px]">
+          {breadcrumbs.map((crumb, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            return (
+              <span key={crumb.id ?? 'root'} className="flex shrink-0 items-center gap-0.5">
+                {index > 0 && <ChevronRight size={12} className="text-ink3/50" />}
+                <button type="button" disabled={isDeleting || isLast} onClick={() => changeFolder(crumb.id)} className={`flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 ${isLast ? 'font-bold text-ink' : 'text-ink3'}`}>
+                  {index === 0 ? <Home size={12} /> : null}
+                  {index === 0 ? '전체' : crumb.name}
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      </nav>
 
-        {folders.map((f) => {
-          const count = photos.filter((p) => p.folderId === f.id).length;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              disabled={isDeleting}
-              onClick={() => changeFolder(f.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold transition-all ${
-                currentFolderId === f.id
-                  ? 'bg-teal text-white shadow-xs'
-                  : 'bg-white text-ink3 hover:bg-panel-alt border border-border/80'
-              }`}
-            >
-              {currentFolderId === f.id ? <FolderOpen size={13} /> : <Folder size={13} />}
-              <span>{f.name} ({count})</span>
+      {/* 2. 현재 폴더의 바로 아래 폴더만 칩으로 표시 */}
+      {subFolders.length > 0 && (
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/50 bg-white/70 px-3.5 py-2 no-scrollbar">
+          {subFolders.map((f) => {
+            const hasChildren = folders.some((child) => child.parentId === f.id);
+            return (
+              <button
+                key={f.id}
+                type="button"
+                disabled={isDeleting}
+                onClick={() => changeFolder(f.id)}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/80 bg-white px-3 py-1.5 text-[11px] font-bold text-ink2 hover:bg-panel-alt"
+              >
+                {hasChildren ? <FolderOpen size={13} className="text-amber-500" /> : <Folder size={13} className="text-amber-500" />}
+                <span>{f.name}</span>
+                <span className="tabular-nums text-ink3">{totalCountById.get(f.id) ?? 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {currentFolder && !isSelecting && (
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-white px-3.5 py-2 text-[12px]">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-bold text-ink">{currentFolder.name} <span className="font-semibold text-ink3">{currentPhotos.length}장</span></p>
+            {currentFolder.description && <p className="truncate text-[11px] text-ink3">{currentFolder.description}</p>}
+          </div>
+          <button type="button" disabled={isDeleting || isFolderMutating} onClick={() => { setNotice(''); setActionError(''); setEditingFolder(currentFolder); }} className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-2 font-bold text-ink2 disabled:opacity-50">
+            <Pencil size={13} /> 정보 변경
+          </button>
+          {!currentFolder.isSystem && (
+            <button type="button" disabled={isDeleting || isFolderMutating} onClick={requestFolderDeletion} className="flex shrink-0 items-center gap-1 rounded-lg border border-rose-500/30 px-2.5 py-2 font-bold text-rose-600 disabled:opacity-50">
+              <Trash2 size={13} /> 폴더 삭제
             </button>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      )}
 
       {isSelecting && (
         <div role="region" aria-label="사진 선택 작업" className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 bg-white px-3.5 py-2 text-[12px]">
           <span className="font-semibold text-ink">{selectedPhotos.length}장 선택</span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button type="button" disabled={isDeleting || currentPhotos.length === 0} onClick={() => setSelectedIds(selectedPhotos.length === currentPhotos.length ? new Set() : new Set(currentPhotos.map((photo) => photo.id)))} className="rounded-lg border border-border px-2.5 py-2 font-bold text-ink2 disabled:opacity-50">
               {selectedPhotos.length === currentPhotos.length && currentPhotos.length > 0 ? '전체 해제' : '전체 선택'}
+            </button>
+            <button type="button" disabled={isDeleting || selectedPhotos.length === 0 || folders.length === 0} onClick={() => { setNotice(''); setActionError(''); setTransferMode({ mode: 'move', ids: selectedPhotos.map((photo) => photo.id) }); }} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-2 font-bold text-ink2 disabled:opacity-50">
+              <FolderInput size={14} /> 이동
+            </button>
+            <button type="button" disabled={isDeleting || selectedPhotos.length === 0 || folders.length === 0} onClick={() => { setNotice(''); setActionError(''); setTransferMode({ mode: 'copy', ids: selectedPhotos.map((photo) => photo.id) }); }} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-2 font-bold text-ink2 disabled:opacity-50">
+              <Copy size={14} /> 복사
             </button>
             <button type="button" disabled={isDeleting || selectedPhotos.length === 0} onClick={() => requestDeletion(selectedPhotos, 'batch')} className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-2 font-bold text-white disabled:opacity-50">
               <Trash2 size={14} /> 선택 삭제
@@ -247,9 +341,15 @@ export default function MobileGalleryScreen() {
                   <h4 className="text-[11.5px] font-bold text-ink truncate">
                     {photo.title || photo.fileName}
                   </h4>
-                  <span className="text-[10px] text-ink3 block font-mono">
-                    {photo.createdAt.slice(0, 10)}
-                  </span>
+                  <div className="flex items-center justify-between gap-1 text-[10px] text-ink3">
+                    <span className="font-mono">{photo.createdAt.slice(0, 10)}</span>
+                    {/* 상위 폴더에서 볼 때 어느 하위 폴더 사진인지 표시 */}
+                    {photo.folderId !== currentFolderId && folderNameById.get(photo.folderId) && (
+                      <span className="max-w-[60%] truncate rounded-md bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-700">
+                        {folderNameById.get(photo.folderId)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -332,6 +432,61 @@ export default function MobileGalleryScreen() {
           setNotice(`'${created.name}' 폴더를 만들었습니다.`);
         }}
       />}
+
+      {editingFolder && <FolderManageModal
+        isOpen
+        variant="mobile"
+        editingFolder={editingFolder}
+        parentFolder={null}
+        onClose={() => setEditingFolder(null)}
+        onSubmit={async (name, description) => {
+          await updateFolder({ id: editingFolder.id, name, description });
+          setNotice(`'${name}' 폴더 정보를 저장했습니다.`);
+        }}
+      />}
+
+      {transferMode && <FolderSelectModal
+        isOpen
+        variant="mobile"
+        folderTree={folderTree}
+        count={transferMode.ids.length}
+        title={transferMode.mode === 'move' ? '사진 이동' : '사진 복사'}
+        onClose={() => setTransferMode(null)}
+        onConfirm={async (targetFolderId) => {
+          // 창을 연 시점에 고른 사진으로 고정해서 처리한다.
+          // 실패하면 창이 열린 채 오류를 보여주고, 같은 사진으로 다시 시도할 수 있다.
+          const { mode, ids } = transferMode;
+          if (mode === 'move') await batchMove({ photoIds: ids, targetFolderId });
+          else await batchCopy({ photoIds: ids, targetFolderId });
+          clearSelection();
+          const target = folderNameById.get(targetFolderId) ?? '선택한 폴더';
+          setNotice(`사진 ${ids.length}장을 '${target}' 폴더로 ${mode === 'move' ? '이동' : '복사'}했습니다.`);
+        }}
+      />}
+
+      {pendingFolderDeletion && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-3">
+          <section role="dialog" aria-modal="true" aria-labelledby="gallery-folder-delete-title" aria-busy={isDeleting} className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-2xl border border-border bg-white p-4 shadow-xl">
+            <h2 id="gallery-folder-delete-title" className="text-[15px] font-bold text-ink">폴더 삭제</h2>
+            <p className="mt-3 text-[13px] text-ink2">
+              '{pendingFolderDeletion.folder.name}' 폴더를 삭제할까요? 아래 항목이 함께 삭제되며 되돌릴 수 없습니다.
+            </p>
+            <ul className="mt-3 space-y-1 rounded-xl bg-panel-alt p-3 text-[12px] text-ink2">
+              <li>하위 폴더 <b>{pendingFolderDeletion.subFolders.length}</b>개</li>
+              <li>사진 <b>{pendingFolderDeletion.photoCount}</b>장</li>
+            </ul>
+            {pendingFolderDeletion.subFolders.length > 0 && (
+              <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto rounded-xl border border-border p-3 text-[11.5px] text-ink3">
+                {pendingFolderDeletion.subFolders.map((folder) => <li key={folder.id} className="break-all">{folder.path || folder.name}</li>)}
+              </ul>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" disabled={isDeleting} onClick={() => { if (!deleting.current) setPendingFolderDeletion(null); }} className="rounded-xl border border-border px-4 py-2.5 text-[12px] font-bold text-ink2 disabled:opacity-50">취소</button>
+              <button type="button" disabled={isDeleting} onClick={() => void confirmFolderDeletion()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[12px] font-bold text-white disabled:opacity-50">{isDeleting ? '삭제 중…' : '폴더 삭제'}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {pendingDeletion && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-3">

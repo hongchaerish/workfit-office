@@ -51,6 +51,7 @@ export default function GalleryScreen() {
     createFolder,
     updateFolder,
     deleteFolder,
+    getFolderDeletionScope,
     uploadPhotos,
     deletePhoto,
     batchMove,
@@ -151,8 +152,15 @@ export default function GalleryScreen() {
   };
 
   const handleDeleteFolder = async (folder: GalleryFolder) => {
-    if (confirm(`'${folder.name}' 카테고리와 내부 하위 분류 및 등록된 사진을 모두 삭제하시겠습니까?`)) {
+    const scope = getFolderDeletionScope(folder.id);
+    const detail = scope
+      ? `\n\n함께 삭제: 하위 폴더 ${scope.subFolders.length}개, 사진 ${scope.photoCount}장\n삭제 후에는 되돌릴 수 없습니다.`
+      : '';
+    if (!confirm(`'${folder.name}' 카테고리를 삭제하시겠습니까?${detail}`)) return;
+    try {
       await deleteFolder(folder.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '폴더를 삭제하지 못했습니다.');
     }
   };
 

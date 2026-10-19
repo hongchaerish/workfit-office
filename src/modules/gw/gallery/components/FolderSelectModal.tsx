@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FolderTreeNode } from '@/features/gw/gallery/useGalleryDirectory';
 import { X, Folder, ChevronRight, ChevronDown, Check } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface FolderSelectModalProps {
   title: string;
   count: number;
   onConfirm: (targetFolderId: string) => Promise<void>;
+  variant?: 'desktop' | 'mobile';
 }
 
 export function FolderSelectModal({
@@ -18,10 +19,14 @@ export function FolderSelectModal({
   title,
   count,
   onConfirm,
+  variant = 'desktop',
 }: FolderSelectModalProps) {
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(folderTree.map((f) => f.id)));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const sending = useRef(false);
+  const mobile = variant === 'mobile';
 
   if (!isOpen) return null;
 
@@ -36,19 +41,26 @@ export function FolderSelectModal({
   };
 
   const handleConfirm = async () => {
-    if (!selectedFolderId) return;
+    if (!selectedFolderId || sending.current) return;
+    sending.current = true;
     setIsSubmitting(true);
+    setError('');
     try {
       await onConfirm(selectedFolderId);
       onClose();
+    } catch (err) {
+      // 실패 시 창을 닫지 않고 이유를 보여준다 (일괄 처리는 순차라 일부만 반영됐을 수 있음)
+      const reason = err instanceof Error ? err.message : '';
+      setError(`처리 중 오류가 났습니다. 일부 사진만 처리됐을 수 있으니 목록을 확인해 주세요.${reason ? ` (${reason})` : ''}`);
     } finally {
+      sending.current = false;
       setIsSubmitting(false);
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 ${mobile ? 'z-[60] p-3' : 'z-50 p-4'} flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-200`}
       // 바깥(어두운 배경)을 누르면 닫는다 — 처리 중에는 닫지 않는다
       onMouseDown={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
     >
@@ -61,15 +73,23 @@ export function FolderSelectModal({
           </div>
           <button
             type="button"
+            aria-label="폴더 선택 창 닫기"
             onClick={onClose}
+            disabled={isSubmitting}
             className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel hover:text-ink"
           >
             <X size={16} />
           </button>
         </div>
 
+        {error && (
+          <div role="alert" className="mx-4 mt-3 shrink-0 rounded-lg bg-danger/10 p-2.5 text-[12px] font-medium text-danger">
+            {error}
+          </div>
+        )}
+
         {/* 폴더 트리 목록 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        <div className={`flex-1 overflow-y-auto p-4 space-y-1 ${isSubmitting ? 'pointer-events-none opacity-60' : ''}`}>
           {folderTree.map((node) => (
             <SelectNodeItem
               key={node.id}
