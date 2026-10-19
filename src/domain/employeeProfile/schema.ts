@@ -18,12 +18,16 @@ export const employeeProfileSchema = z.object({
   empNo: z.string().min(1),
   /** 이름 */
   name: z.string().min(1),
-  /** 소속 부서 */
+  /** 소속 부서 이름 — 읽을 때 deptId로 기준정보에서 채운다(저장값은 읽지 않는 사본) */
   dept: z.string().default('미지정'),
-  /** 직급 */
+  /** 직급 이름 — 읽을 때 positionId로 채운다 */
   position: z.string().default('사원'),
-  /** 직책 */
+  /** 직책 이름 — 읽을 때 jobTitleId로 채운다 */
   jobTitle: z.string().default('팀원'),
+  /** 본직 부서·직급·직책 — 소속의 유일한 기준(기준정보 ID) */
+  deptId: z.string().nullable().optional(),
+  positionId: z.string().nullable().optional(),
+  jobTitleId: z.string().nullable().optional(),
   /** 재직 상태 */
   status: z.enum(EMPLOYMENT_STATUS).default('ACTIVE'),
   /** 근태 관리 대상 여부 (true: 대상[기본], false: 전사관리 제외[비상근/대표이사/부위원장 등]) */

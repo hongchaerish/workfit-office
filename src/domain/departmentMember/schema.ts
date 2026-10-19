@@ -30,6 +30,8 @@ export const departmentMemberSchema = z.object({
    * ★ 위원회 규칙: 소속 부서의 deptType === '위원회'인 경우 빈 문자열('')로 고정됩니다.
    */
   jobTitle: z.string().default(''),
+  /** 직책의 기준(기준정보 ID) — 읽을 때 jobTitle 이름을 이것으로 채운다 */
+  jobTitleId: z.string().nullable().optional(),
   /** 표시/정렬 순서 */
   order: z.number().default(0),
   /** 발령/배정 일시 (ISO) */

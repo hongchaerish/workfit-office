@@ -3,6 +3,8 @@ import { employeeProfileSchema, type EmployeeProfile } from '@/domain/employeePr
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
 import { isTestAccount } from '@/domain/user/testAccount';
+import { affiliationIdsFromNames, resolveAffiliation } from '@/domain/employeeProfile/affiliation';
+import { loadOrgMasters } from '@/data/_backend/orgMasters';
 
 /** 예전 브라우저 저장 키 — DB 이전([[migrateLegacySharedSettings]]) 때만 읽는다. */
 export const LEGACY_ATTENDANCE_TARGET_STORAGE_KEY = 'workfit-attendance-target-overrides';
@@ -109,10 +111,11 @@ export const employeeProfileRepo = {
 
   /** 테스트 계정 프로필까지 포함한 전체 목록 — 사용자 조인·저장 경로 전용. */
   async listIncludingTestAccounts(): Promise<EmployeeProfile[]> {
-    const [items, overrides, birthdaySettings] = await Promise.all([
+    const [items, overrides, birthdaySettings, masters] = await Promise.all([
       backend.loadAll(),
       loadAttendanceOverrides(),
       birthdaySettingBackend.loadAll(),
+      loadOrgMasters(),
     ]);
     const birthdayByUser = new Map(birthdaySettings.map((b) => [b.userId, b]));
     return items.map((item) => {
@@ -120,6 +123,8 @@ export const employeeProfileRepo = {
       const birthday = birthdayByUser.get(item.userId);
       return {
         ...item,
+        // 소속 이름은 저장값이 아니라 ID로 기준정보에서 찾은 현재 이름
+        ...resolveAffiliation(item, masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) }),
         ...(override !== undefined ? { isAttendanceTarget: override } : {}),
         ...(birthday ? { birthLunar: birthday.birthLunar, birthdayPublic: birthday.birthdayPublic } : {}),
       };
@@ -145,8 +150,13 @@ export const employeeProfileRepo = {
       // 프로필 id 키가 가장 우선이라 이 한 건으로 옛 userId·사번 키 값도 덮인다
       await attendanceTargetBackend.save({ targetKey: item.id, isTarget: item.isAttendanceTarget, updatedAt: now });
     }
+    // 화면에서 고른 소속 이름을 ID로 바꿔 저장한다. 이름 칸은 그 순간의 현재 이름 사본(읽지 않음).
+    const masters = await loadOrgMasters();
+    const ids = affiliationIdsFromNames(item, masters, item);
+    const names = resolveAffiliation(ids, masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) });
     await backend.save({
       ...item,
+      ...names,
       updatedAt: now,
     });
   },
