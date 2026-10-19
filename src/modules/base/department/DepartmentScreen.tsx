@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
-import { useUsers, useUpdateUserJobTitle } from '@/features/user/useUsers';
+import { useUsers } from '@/features/user/useUsers';
 import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
-import { cascadeDepartmentRename } from '@/data/department/renameDepartment';
+import { cascadeDepartmentRename, departmentDeleteBlocker, setPersonJobTitle } from '@/data/orgSync/orgSync';
 import { usePositions } from '@/features/position/usePositions';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
@@ -30,8 +30,9 @@ export default function DepartmentScreen() {
   const { data: positions = [] } = usePositions();
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
-  const updateJobTitle = useUpdateUserJobTitle();
   const qc = useQueryClient();
+  // 계정·인명관리·소속 정보를 바꾼 뒤 다른 화면이 새 값을 다시 읽게 한다
+  const refreshPeople = () => { for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] }); };
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
 
@@ -112,7 +113,6 @@ export default function DepartmentScreen() {
     // 부서명 변경 — 계정·인명관리·겸직 정보의 부서명을 함께 바꾼다(하나라도 빠지면 조직도에 옛 이름 부서가 따로 생긴다).
     if (oldDept && oldDept.name !== sel.name) {
       await cascadeDepartmentRename({ deptId: oldDept.id, oldName: oldDept.name, newName: sel.name });
-      for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] });
     }
 
     if (sel.headUserId) {
@@ -125,14 +125,14 @@ export default function DepartmentScreen() {
         const rank = getRank(sel.headUserId);
         newJob = rank >= 3 ? '팀장' : '임원';
       }
-      await updateJobTitle.mutateAsync({ id: sel.headUserId, jobTitle: newJob });
+      await setPersonJobTitle(sel.headUserId, newJob);
 
       const deptUser = users.find((u) => u.id === sel.headUserId);
       if (deptUser) {
         // 기존 해당 부서의 부서장(팀장/본부장/위원장) 자격을 가진 다른 유저들을 팀원으로 원상복구
         const others = users.filter((u) => u.dept === deptUser.dept && ['팀장', '본부장', '위원장'].includes(u.jobTitle) && u.id !== sel.headUserId);
         for (const other of others) {
-          await updateJobTitle.mutateAsync({ id: other.id, jobTitle: '팀원' });
+          await setPersonJobTitle(other.id, '팀원');
         }
       }
     }
@@ -142,16 +142,20 @@ export default function DepartmentScreen() {
       if (!isStillHead) {
         const rank = getRank(oldHeadUserId);
         const newJob = rank >= 3 ? '팀원' : '임원';
-        await updateJobTitle.mutateAsync({ id: oldHeadUserId, jobTitle: newJob });
+        await setPersonJobTitle(oldHeadUserId, newJob);
       }
     }
 
+    refreshPeople();
     setMsg('저장되었습니다.');
     setSel(null);
   };
 
   const del = async (id: string) => {
     const dept = rows.find((d) => d.id === id);
+    if (!dept) return;
+    const blocker = await departmentDeleteBlocker(dept, rows);
+    if (blocker) return window.alert(blocker);
     if (!window.confirm(`'${dept?.name ?? id}' 부서를 삭제할까요?\n부서 단체방은 대화를 보존한 채 일반 단체방으로 바뀝니다.`)) return;
     const headUserId = dept?.headUserId;
 
@@ -170,9 +174,10 @@ export default function DepartmentScreen() {
       if (!isStillHead) {
         const rank = getRank(headUserId);
         const newJob = rank >= 3 ? '팀원' : '임원';
-        await updateJobTitle.mutateAsync({ id: headUserId, jobTitle: newJob });
+        await setPersonJobTitle(headUserId, newJob);
       }
     }
+    refreshPeople();
 
     if (sel?.id === id) setSel(null);
   };
@@ -225,7 +230,7 @@ export default function DepartmentScreen() {
         <div className="rounded-xl border border-border bg-panel p-4">
           {sel ? (
             <div className="space-y-3">
-              <div className="text-[13px] font-bold text-ink">{sel.id ? `부서 편집 · ${sel.id}` : '새 부서'}</div>
+              <div className="text-[13px] font-bold text-ink">{sel.id ? '부서 편집' : '새 부서'}</div>
               <Field label="부서명"><input value={sel.name} onChange={(e) => setSel({ ...sel, name: e.target.value })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-3 py-2 text-[13px] text-ink outline-none focus:border-teal" /></Field>
               <Field label="상위 부서">
                 <select value={sel.parentId ?? ''} onChange={(e) => setSel({ ...sel, parentId: e.target.value || null })} className="w-full rounded-lg border border-border-hi bg-panel-alt px-2 py-2 text-[12.5px] text-ink outline-none focus:border-teal">

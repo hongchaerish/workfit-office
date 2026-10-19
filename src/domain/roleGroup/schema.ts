@@ -68,13 +68,10 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_BASE_APPROC', name: '결재 프로세스 설정', url: '/base/approval-process', category: 'BASE', desc: '부서합의, 전결규정 등 프로세스 옵션', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APMON', name: '결재문서 모니터링', url: '/base/approval-monitor', category: 'BASE', desc: '전사 결재문서 전체 조회 및 감사', supportedActions: ['access', 'update'] },
 
-  // 4. 시스템 관리 & 보안 감사 (8개)
+  // 4. 시스템 관리 & 보안 감사
   { id: 'S_SYS_AUTH', name: '그룹권한 관리', url: '/base/auth', category: 'SYS', desc: '역할 그룹 생성 및 메뉴/기능 권한 부여', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_SYS_MENU', name: '메뉴 관리', url: '/sys/menu', category: 'SYS', desc: '네비게이션 메뉴 구조 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_SYS_LOG', name: '로그 관리', url: '/sys/log', category: 'SYS', desc: '시스템 접속 및 변경 감사 로그', supportedActions: ['access'] },
   { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', category: 'SYS', desc: '법인 정보 및 사업자 등록 정보', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', category: 'SYS', desc: '다국어 라벨 및 언어 설정', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', category: 'SYS', desc: '시스템 전역 환경 변수 및 설정', supportedActions: ['access', 'update'] },
   { id: 'S_SYS_BACKUP', name: '데이터 백업', url: '/sys/backup', category: 'SYS', desc: '데이터베이스 백업 및 복원', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', category: 'SYS', desc: '외부 시스템 연동 및 API 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
 
