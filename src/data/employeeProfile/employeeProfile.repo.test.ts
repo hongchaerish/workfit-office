@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { attendanceTargetBackend, employeeProfileRepo } from './employeeProfile.repo';
+import { attendanceTargetBackend, employeeProfileRepo, employeeProfileStore } from './employeeProfile.repo';
 import { departmentRepo } from '@/data/department/department.repo';
 import { positionRepo } from '@/data/position/position.repo';
 import { jobTitleRepo } from '@/data/jobTitle/jobTitle.repo';
-import { userRepo } from '@/data/user/user.repo';
+import { userRepo, userStore } from '@/data/user/user.repo';
 import { userSchema } from '@/domain/user/schema';
 import { employeeProfileSchema } from '@/domain/employeeProfile/schema';
 import { positionSchema } from '@/domain/position/schema';
@@ -85,4 +85,20 @@ test('사람 목록은 프로필 ID로 이름을 채우고, 프로필 없는 계
   const u9 = await userRepo.get('UA9');
   assert.deepEqual([u1?.dept, u1?.position, u1?.jobTitle], ['나팀2', '가직급', '가직책']);
   assert.deepEqual([u9?.dept, u9?.position, u9?.jobTitle], ['미지정', '사원', '']);
+});
+
+test('계정을 저장해도(로그인 기록 등) DB의 계정 소속 칸은 원래 값 그대로 — 화면용 이름을 쓰지 않는다', async () => {
+  await userRepo.save(userSchema.parse({ id: 'UB1', empNo: 'B1', name: '프로필없음', email: 'b1@x.co', dept: '영업부', position: '과장', jobTitle: '팀장' }));
+  await userRepo.updateActiveChatRoom('UB1', 'ROOM-1');
+  const raw = (await userStore.loadAll()).find((u) => u.id === 'UB1')!;
+  assert.deepEqual([raw.dept, raw.position, raw.jobTitle, raw.activeChatRoomId], ['영업부', '과장', '팀장', 'ROOM-1']);
+});
+
+test('ID를 채우기 전 프로필을 다른 칸만 고쳐 저장해도 예전 이름 칸은 그대로 — 기준정보에 없는 이름도 잃지 않는다', async () => {
+  await employeeProfileStore.save(employeeProfileSchema.parse({ id: 'UC1', userId: 'UC1', empNo: 'C1', name: '옛사람', dept: '없어진팀', position: '가직급', jobTitle: '' }));
+  const p = (await employeeProfileRepo.get('UC1'))!;
+  await employeeProfileRepo.save({ ...p, phone: '010-1' }, { keepAttendanceTarget: true });
+  const raw = (await employeeProfileStore.loadAll()).find((x) => x.id === 'UC1')!;
+  assert.equal(raw.dept, '없어진팀');
+  assert.equal(raw.positionId, 'PA1');
 });

@@ -55,7 +55,7 @@ export function useUpsertEmployeeProfile() {
         name: values.name || existing?.name || '',
         dept: values.dept || existing?.dept || '미지정',
         position: values.position || existing?.position || '사원',
-        jobTitle: values.jobTitle || existing?.jobTitle || '팀원',
+        jobTitle: values.jobTitle !== undefined ? values.jobTitle : (existing?.jobTitle ?? '팀원'),
         // 저장소가 위 이름을 ID로 바꾼다 — 이름으로 못 찾을 때 기존 소속을 잃지 않게 기존 ID를 함께 넘긴다
         deptId: existing?.deptId ?? null,
         positionId: existing?.positionId ?? null,

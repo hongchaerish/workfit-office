@@ -98,6 +98,9 @@ const backend = createCrudBackend<EmployeeProfile>({
   stripFields: ['isAttendanceTarget', 'birthLunar', 'birthdayPublic'],
 });
 
+/** 테스트에서 DB 원본을 확인할 때만 쓴다. */
+export const employeeProfileStore = backend;
+
 export const employeeProfileRepo = {
   /** 임직원 인사 프로필 목록 — 접속자가 볼 수 없는 테스트 계정 프로필은 빠진다([[testAccountVisibility]]). */
   async list(): Promise<EmployeeProfile[]> {
@@ -153,10 +156,16 @@ export const employeeProfileRepo = {
     // 화면에서 고른 소속 이름을 ID로 바꿔 저장한다. 이름 칸은 그 순간의 현재 이름 사본(읽지 않음).
     const masters = await loadOrgMasters();
     const ids = affiliationIdsFromNames(item, masters, item);
-    const names = resolveAffiliation(ids, masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) });
+    // 소속 이름 칸은 읽지 않는 옛 사본 — 기존 프로필이면 DB 값을 그대로 둔다(ID 채우기 전 원래 이름을 잃지 않게).
+    // 새 프로필만 그 순간의 현재 이름을 사본으로 남긴다.
+    const stored = (await backend.loadAll()).find((p) => p.id === item.id);
+    const names = stored
+      ? { dept: stored.dept, position: stored.position, jobTitle: stored.jobTitle }
+      : resolveAffiliation(ids, masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) });
     await backend.save({
       ...item,
       ...names,
+      ...ids,
       updatedAt: now,
     });
   },

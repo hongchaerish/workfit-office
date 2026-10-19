@@ -22,6 +22,9 @@ export type Affiliation = AffiliationIds & { dept: string; position: string; job
 type Named = { id: string; name: string };
 const nameOf = (list: Named[], id?: string | null) => (id ? list.find((x) => x.id === id)?.name : undefined);
 const idOf = (list: Named[], name?: string) => (name ? list.find((x) => x.name === name)?.id : undefined);
+/** 고른 이름의 ID — 기존 ID가 같은 이름이면 그것(같은 이름이 둘 이상일 때 엉뚱한 쪽으로 옮겨 가지 않게). */
+const pick = (list: Named[], name: string | undefined, current?: string | null) =>
+  current && name && nameOf(list, current) === name ? current : idOf(list, name);
 
 export function resolveAffiliation(ids: Partial<AffiliationIds>, masters: OrgMasters, opts: { isTest?: boolean } = {}): Affiliation {
   return {
@@ -55,9 +58,9 @@ export function affiliationIdsFromNames(
   fallback: Partial<AffiliationIds> = {},
 ): AffiliationIds {
   return {
-    deptId: idOf(masters.depts, names.dept) ?? fallback.deptId ?? null,
-    positionId: idOf(masters.positions, names.position) ?? fallback.positionId ?? null,
-    jobTitleId: names.jobTitle === '' ? null : (idOf(masters.jobTitles, names.jobTitle) ?? fallback.jobTitleId ?? null),
+    deptId: pick(masters.depts, names.dept, fallback.deptId) ?? fallback.deptId ?? null,
+    positionId: pick(masters.positions, names.position, fallback.positionId) ?? fallback.positionId ?? null,
+    jobTitleId: names.jobTitle === '' ? null : (pick(masters.jobTitles, names.jobTitle, fallback.jobTitleId) ?? fallback.jobTitleId ?? null),
   };
 }
 

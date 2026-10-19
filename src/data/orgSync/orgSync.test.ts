@@ -68,3 +68,9 @@ test('직급·직책 삭제 차단은 ID 기준, 퇴직자만 쓰면 허용', as
   assert.equal(await positionDeleteBlocker('PX2'), null);
   assert.match((await jobTitleDeleteBlocker('JX1')) ?? '', /명/);
 });
+
+test('기준정보에 없는 직책으로 지정하면 조용히 넘어가지 않고 알린다', async () => {
+  await person('UJ9', { dept: 'X팀', jobTitle: 'X직책' });
+  await assert.rejects(setPersonJobTitle('UJ9', '위원장'), /직책 '위원장'/);
+  assert.equal((await employeeProfileRepo.get('UJ9'))?.jobTitleId, 'JX1');
+});

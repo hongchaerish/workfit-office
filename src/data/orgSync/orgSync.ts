@@ -1,6 +1,7 @@
 import { userRepo } from '@/data/user/user.repo';
 import { employeeProfileRepo } from '@/data/employeeProfile/employeeProfile.repo';
 import { departmentMemberRepo } from '@/data/departmentMember/departmentMember.repo';
+import { loadOrgMasters } from '@/data/_backend/orgMasters';
 
 /*
  * 조직 기준정보(부서·직급·직책)와 사람 소속 사이의 규칙.
@@ -10,6 +11,10 @@ import { departmentMemberRepo } from '@/data/departmentMember/departmentMember.r
 
 /** 한 사람의 직책을 인명관리와 본직 소속행에 저장한다(부서장 지정·해제 등). 이름은 저장소가 ID로 바꾼다. */
 export async function setPersonJobTitle(userId: string, jobTitle: string): Promise<void> {
+  // 저장소는 못 찾은 이름이면 기존 직책을 유지한다 — 코드에서 정한 직책이 기준정보에 없으면 조용히 무시되지 않게 먼저 알린다.
+  if (jobTitle && !(await loadOrgMasters()).jobTitles.some((j) => j.name === jobTitle)) {
+    throw new Error(`직책 '${jobTitle}'이(가) 직급관리에 없습니다. 직급관리 > 직책에 먼저 추가하세요.`);
+  }
   const profile = (await employeeProfileRepo.listIncludingTestAccounts()).find((p) => p.userId === userId || p.id === userId);
   if (profile && profile.jobTitle !== jobTitle) {
     await employeeProfileRepo.save({ ...profile, jobTitle }, { keepAttendanceTarget: true });
