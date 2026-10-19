@@ -14,8 +14,6 @@ const DEMO_PW = '06c4371239ef075e099d6d84de05e43ad7f649fc75350eac00ce55bc859cf21
 export const USER_SEED: Omit<User, 'sealUrl' | 'photoUrl' | 'signUrl' | 'signType' | 'resignedAt' | 'fcmToken' | 'assignments'>[] = [
   // 대표이사
   { id: 'U001', empNo: '100001', name: '박영미', dept: '대표이사', position: '대표이사', jobTitle: '대표이사', email: 'ympark@workfit.kr', status: '사용', lastLogin: '2026-07-07 08:40', managerId: null, password: DEMO_PW },
-  // 대표이사 직속 — 직책 재경이사 / 직급 이사 (미사용)
-  { id: 'U002', empNo: '100002', name: '류지광', dept: '대표이사 직속', position: '이사', jobTitle: '', email: 'jgryu@workfit.kr', status: '미사용', lastLogin: '2026-07-07 08:31', managerId: 'U001', password: DEMO_PW },
   // AX지능화본부 — 직책 본부장 / 직급 상무이사
   { id: 'U003', empNo: '200001', name: '손승원', dept: 'AX지능화본부', position: '상무이사', jobTitle: '본부장', email: 'smartfactory@workfit.kr', status: '사용', lastLogin: '2026-07-07 09:02', managerId: 'U001', password: DEMO_PW },
   // 품질심사팀 — 팀장 강윤석(직급 이사)
