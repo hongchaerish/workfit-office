@@ -3,6 +3,8 @@
  * 읽을 때는 ID로 기준정보의 현재 이름을 찾고, 저장할 때는 화면에서 고른 이름을 ID로 바꾼다.
  * ([[docs/superpowers/specs/2026-10-19-affiliation-ids-design.md]])
  */
+import { isTestAccount } from '@/domain/user/testAccount';
+
 export interface OrgMasters {
   depts: { id: string; name: string }[];
   positions: { id: string; name: string }[];
@@ -43,4 +45,17 @@ export function affiliationIdsFromNames(
     positionId: idOf(masters.positions, names.position) ?? fallback.positionId ?? null,
     jobTitleId: names.jobTitle === '' ? null : (idOf(masters.jobTitles, names.jobTitle) ?? fallback.jobTitleId ?? null),
   };
+}
+
+/**
+ * 사람 목록에 본직 소속 이름을 채운다 — 원본 인명관리(ID)만 쓰고 계정의 이름 칸은 무시한다.
+ * 서버처럼 DB 원본을 직접 읽는 곳에서 쓴다(화면 쪽은 저장소가 같은 규칙으로 채운다).
+ */
+export function applyAffiliations<U extends { id: string; name: string; dept?: string; position?: string; jobTitle?: string }>(
+  users: U[],
+  profiles: ({ userId: string } & Partial<AffiliationIds>)[],
+  masters: OrgMasters,
+): (U & Affiliation)[] {
+  const byUser = new Map(profiles.map((p) => [p.userId, p]));
+  return users.map((u) => ({ ...u, ...resolveAffiliation(byUser.get(u.id) ?? {}, masters, { isTest: isTestAccount(u) }) }));
 }
