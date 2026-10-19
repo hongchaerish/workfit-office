@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatRoomRepo, type CreateRoomInput } from '@/data/chatRoom/chatRoom.repo';
 import { chatMessageRepo } from '@/data/chatMessage/chatMessage.repo';
-import { nowLocalIso } from '@/shared/lib/datetime';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 import { CHAT_THREAD_KEY } from './useChatThread';
 
 /**
@@ -64,21 +64,7 @@ export function useInviteMembers() {
   return useMutation({
     mutationFn: async ({ roomId, userIds, inviterName, inviteeNames }: InviteVars) => {
       await chatRoomRepo.addMembers(roomId, userIds);
-      await chatMessageRepo.append({
-        id: `${roomId}-sys-${Date.now()}`,
-        roomId,
-        senderId: '',
-        senderName: '',
-        text: `${inviterName}님이 ${inviteeNames.join(', ')}님을 초대했습니다`,
-        type: 'system',
-        attachment: null,
-        replyTo: null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [],
-        isEdited: false,
-        reactions: {},
-      });
+      await appendSystemMessage(roomId, `${inviterName}님이 ${inviteeNames.join(', ')}님을 초대했습니다`);
     },
     onSuccess: (_data, { roomId }) => {
       qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
@@ -92,21 +78,7 @@ export function useLeaveRoom() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ roomId, userId, userName }: { roomId: string; userId: string; userName: string }) => {
-      await chatMessageRepo.append({
-        id: `${roomId}-sys-${Date.now()}`,
-        roomId,
-        senderId: '',
-        senderName: '',
-        text: `${userName}님이 나갔습니다`,
-        type: 'system',
-        attachment: null,
-        replyTo: null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [],
-        isEdited: false,
-        reactions: {},
-      });
+      await appendSystemMessage(roomId, `${userName}님이 나갔습니다`);
       await chatRoomRepo.leave(roomId, userId);
     },
     onSuccess: () => {
@@ -124,21 +96,7 @@ export function useKickMember() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ roomId, targetId, targetName, kickerName }: { roomId: string; targetId: string; targetName: string; kickerName: string }) => {
-      await chatMessageRepo.append({
-        id: `${roomId}-sys-${Date.now()}`,
-        roomId,
-        senderId: '',
-        senderName: '',
-        text: `${kickerName}님이 ${targetName}님을 내보냈습니다`,
-        type: 'system',
-        attachment: null,
-        replyTo: null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [],
-        isEdited: false,
-        reactions: {},
-      });
+      await appendSystemMessage(roomId, `${kickerName}님이 ${targetName}님을 내보냈습니다`);
       await chatRoomRepo.leave(roomId, targetId);
     },
     onSuccess: (_data, { roomId }) => {
@@ -157,21 +115,7 @@ export function useDeleteRoom() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ roomId, adminId, adminName }: { roomId: string; adminId: string; adminName: string }) => {
-      await chatMessageRepo.append({
-        id: `${roomId}-sys-${Date.now()}`,
-        roomId,
-        senderId: '',
-        senderName: '',
-        text: `관리자 ${adminName}님이 이 방을 삭제했습니다`,
-        type: 'system',
-        attachment: null,
-        replyTo: null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [],
-        isEdited: false,
-        reactions: {},
-      });
+      await appendSystemMessage(roomId, `관리자 ${adminName}님이 이 방을 삭제했습니다`);
       await chatRoomRepo.softDelete(roomId, adminId);
     },
     onSuccess: () => {
@@ -187,21 +131,7 @@ export function useUpdateRoomName() {
   return useMutation({
     mutationFn: async ({ roomId, name, userName }: { roomId: string; name: string; userName: string }) => {
       await chatRoomRepo.updateName(roomId, name);
-      await chatMessageRepo.append({
-        id: `${roomId}-sys-${Date.now()}`,
-        roomId,
-        senderId: '',
-        senderName: '',
-        text: `${userName}님이 대화방 이름을 '${name}'(으)로 변경했습니다`,
-        type: 'system',
-        attachment: null,
-        replyTo: null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [],
-        isEdited: false,
-        reactions: {},
-      });
+      await appendSystemMessage(roomId, `${userName}님이 대화방 이름을 '${name}'(으)로 변경했습니다`);
     },
     onSuccess: (_data, { roomId }) => {
       qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });

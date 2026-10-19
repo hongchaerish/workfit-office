@@ -7,13 +7,15 @@ import { chatRoomSchema, type ChatRoom, type ChatRoomType, type LastMessage } fr
 import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { deptIdOfRoom, planDeptRoomSync } from '@/domain/chatRoom/deptRoom';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
 /**
  * 채팅방 Repository — DB 접근을 캡슐화하는 유일한 계층.
  * ([[DB_이관_대비_설계원칙.md]] 원칙 1 / [[Firestore_Appwrite_이관_단계별_계획서]] Phase 1 PoC)
  *
  * 저장 백엔드(Firestore / Appwrite / in-memory)는 `VITE_DB_DRIVER` 로 결정되며,
- * 아래 ChatRoomBackend 어댑터 뒤에 격리된다. 파생 로직(부서방 자동 동기화·1:1 중복 방지·
+ * 아래 ChatRoomBackend 어댑터 뒤에 격리된다. 파생 로직(부서방 개설·이름 따라가기·1:1 중복 방지·
  * 채번·멤버 관리·정렬)은 백엔드와 무관하게 공개 메서드에 그대로 남는다.
  */
 const COLL = 'chatRooms';
@@ -187,70 +189,30 @@ export const chatRoomRepo = {
   async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
     let rows = await backend.loadAll();
 
-    // 부서별 단톡방 동적 개설 및 인사이동(사일런트 퇴사/퇴직) 자동 반영 (60초 쓰로틀 적용)
+    // 부서방: 방 없는 부서에 한 번 개설 + 부서명 변경 시 이름 따라가기만 (참여자는 직접 관리, 60초 쓰로틀)
     const now = Date.now();
     if (now - lastDeptSyncAt > DEPT_SYNC_THROTTLE_MS) {
       lastDeptSyncAt = now;
       try {
         const depts = await departmentRepo.list();
         const users = await userRepo.listIncludingTestAccounts();
-
-        for (const dept of depts) {
-          const deptMembers = users.filter((u) => u.dept === dept.name && u.status === '사용').map((u) => u.id);
-          if (deptMembers.length === 0) continue;
-
-          let existing = rows.find((r) => r.deptId === dept.id);
-          if (!existing) {
-            existing = rows.find((r) => r.id === `RM-DEPT-${dept.id}` || r.id === `ROOM-DEPT-${dept.id}`);
-          }
-          if (!existing) {
-            existing = rows.find((r) => (r.type === 'dept' || r.type === 'group') && (r.name.includes(dept.name) || r.name === `[${dept.name}]` || r.name === `${dept.name} 단체방`));
-          }
-
-          const standardRoomName = `[${dept.name}] 부서 단체방`;
-
-          if (!existing) {
-            const roomId = `RM-DEPT-${dept.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-            const newRoom = chatRoomSchema.parse({
-              id: roomId,
-              name: standardRoomName,
-              type: 'dept',
-              deptId: dept.id,
-              members: deptMembers,
-              color: ROOM_COLORS[Math.abs(roomId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
-              lastMessage: { text: `${dept.name} 부서 단체방이 개설되었습니다.`, at: nowLocalIso(), senderId: 'system' },
-              createdAt: nowLocalIso(),
-              createdBy: 'system',
-            });
-            await backend.save(newRoom);
-            rows.push(newRoom);
-          } else {
-            let changed = false;
-            let updated = { ...existing };
-
-            if (updated.type !== 'dept') {
-              updated.type = 'dept';
-              changed = true;
-            }
-            if (updated.deptId !== dept.id) {
-              updated.deptId = dept.id;
-              changed = true;
-            }
-            if (updated.name !== standardRoomName) {
-              updated.name = standardRoomName;
-              changed = true;
-            }
-            if (!sameMembers(existing.members, deptMembers)) {
-              updated.members = deptMembers;
-              changed = true;
-            }
-
-            if (changed) {
-              await backend.save(updated);
-              const idx = rows.findIndex((r) => r.id === existing.id);
-              if (idx >= 0) rows[idx] = updated;
-            }
-          }
+        const plan = planDeptRoomSync({
+          depts,
+          users,
+          rooms: rows,
+          now: nowLocalIso(),
+          pickColor: (id) => ROOM_COLORS[Math.abs(id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
+        });
+        for (const room of plan.create) {
+          await backend.save(room);
+          rows.push(room);
+        }
+        for (const { roomId, name } of plan.rename) {
+          const idx = rows.findIndex((r) => r.id === roomId);
+          const updated = { ...rows[idx], name };
+          await backend.save(updated);
+          rows[idx] = updated;
+          await appendSystemMessage(roomId, `부서명 변경으로 방 이름이 ${name}으로 바뀌었습니다`);
         }
       } catch (e) {
         // Appwrite 일시적 지연이나 한도 초과 시에도 조회 목록 표시 자체는 정상 유지
@@ -333,6 +295,22 @@ export const chatRoomRepo = {
     const room = await this.get(id);
     if (!room) throw new Error(`채팅방을 찾을 수 없습니다: ${id}`);
     await this.save({ ...room, deletedAt: nowLocalIso(), deletedBy: adminId });
+  },
+
+  /** 퇴직 — 살아있는 부서방에서 그 사람을 뺀다. 뺀 방 ID 목록을 돌려준다(시스템 메시지는 호출자 몫). */
+  async removeMemberFromDeptRooms(userId: string): Promise<string[]> {
+    const rows = await this.list(undefined, { includeDeleted: true });
+    const targets = rows.filter((r) => r.type === 'dept' && !r.deletedAt && r.members.includes(userId));
+    for (const r of targets) await this.save({ ...r, members: r.members.filter((m) => m !== userId) });
+    return targets.map((r) => r.id);
+  },
+
+  /** 부서 삭제 — 그 부서방을 일반 단체방으로 바꾼다(이름·참여자·대화 유지). 바뀐 방 ID 목록을 돌려준다. */
+  async detachDeptRoom(deptId: string): Promise<string[]> {
+    const rows = await this.list(undefined, { includeDeleted: true });
+    const targets = rows.filter((r) => deptIdOfRoom(r) === deptId);
+    for (const r of targets) await this.save({ ...r, type: 'group', deptId: null });
+    return targets.map((r) => r.id);
   },
 
   /** 새 메시지 전송 시 목록 표시용 lastMessage 갱신. */
