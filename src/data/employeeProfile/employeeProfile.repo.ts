@@ -127,7 +127,7 @@ export const employeeProfileRepo = {
       return {
         ...item,
         // 소속 이름은 저장값이 아니라 ID로 기준정보에서 찾은 현재 이름
-        ...resolveAffiliation(storedAffiliationIds(item, masters), masters, { isTest: isTestAccount({ id: item.userId, name: item.name }) }),
+        ...resolveAffiliation(storedAffiliationIds(item, masters), masters, { isTest: isTestAccount({ id: item.userId, name: item.name, dept: item.dept }) }),
         ...(override !== undefined ? { isAttendanceTarget: override } : {}),
         ...(birthday ? { birthLunar: birthday.birthLunar, birthdayPublic: birthday.birthdayPublic } : {}),
       };
