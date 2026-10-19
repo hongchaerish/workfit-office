@@ -259,8 +259,6 @@ export function ApprovalFormCatalog({
                           )}
                         </div>
                         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink3">
-                          <span className="font-mono text-ink2">{formItem.code}</span>
-                          <span>·</span>
                           <span className="truncate">{folderName}</span>
                         </div>
                       </div>

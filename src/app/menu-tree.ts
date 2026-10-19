@@ -63,15 +63,15 @@ export const MENU_TREE: MenuNode[] = [
       },
       {
         id: 'G_SYS_MGMT', name: '시스템 관리', icon: '⚙', order: 40, use: true, children: [
-          { id: 'S_SYS_MENU', name: '메뉴 관리', url: '/sys/menu', icon: '▦', order: 10, use: true },
+          { id: 'S_SYS_MENU', name: '메뉴 관리', url: '/sys/menu', icon: '▦', order: 10, use: false },
           { id: 'S_SYS_LOG', name: '로그 관리', url: '/sys/log', icon: '◷', order: 20, use: true },
         ]
       },
       {
         id: 'G_SYS_GLOBAL', name: '글로벌/운영', icon: '⌗', order: 50, use: true, children: [
           { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 5, use: true },
-          { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', icon: '⌗', order: 10, use: true },
-          { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', icon: '⚙', order: 30, use: true },
+          { id: 'S_SYS_I18N', name: '다국어 관리', url: '/sys/i18n', icon: '⌗', order: 10, use: false },
+          { id: 'S_SYS_ENV', name: '환경 설정', url: '/sys/env', icon: '⚙', order: 30, use: false },
           { id: 'S_SYS_BACKUP', name: '데이터 백업', url: '/sys/backup', icon: '⛁', order: 40, use: true },
           { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', icon: '⇄', order: 50, use: true },
         ]

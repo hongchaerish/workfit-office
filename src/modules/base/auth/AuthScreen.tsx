@@ -374,7 +374,6 @@ export default function AuthScreen() {
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] font-mono text-ink3 mt-0.5">{g.code}</div>
                   </div>
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${

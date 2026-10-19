@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { usePositions, useRemovePosition, useUpsertPosition } from '@/features/position/usePositions';
 import { useJobTitles, useRemoveJobTitle, useUpsertJobTitle } from '@/features/jobTitle/useJobTitles';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePermission } from '@/features/auth/usePermission';
+import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
+import { cascadeJobTitleRename, cascadePositionRename, jobTitleDeleteBlocker, positionDeleteBlocker } from '@/data/orgSync/orgSync';
 import type { Position } from '@/domain/position/schema';
 import type { JobTitle } from '@/domain/jobTitle/schema';
 
@@ -20,6 +23,9 @@ export default function PositionScreen() {
 
   const [tab, setTab] = useState<'position' | 'jobTitle'>('position');
   const [msg, setMsg] = useState('');
+  const qc = useQueryClient();
+  // 이름을 바꾸면 사람 쪽 값도 바뀌므로 다른 화면이 새 값을 다시 읽게 한다
+  const refreshPeople = () => { for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] }); };
 
   /* ── 직급 (Position) ── */
   const { data: positions = [], isLoading: isPosLoading } = usePositions();
@@ -50,12 +56,20 @@ export default function PositionScreen() {
     if (!selPos) return;
     if (!selPos.name.trim()) return setMsg('직급명을 입력하세요.');
     const item = { ...selPos, id: selPos.id || nextPosId() };
+    const before = positions.find((p) => p.id === selPos.id);
     await upsertPos.mutateAsync(item);
+    if (before && before.name !== item.name) {
+      await cascadePositionRename(before.name, item.name);
+      refreshPeople();
+    }
     setMsg('저장되었습니다.');
     setSelPos(null);
   };
 
   const delPos = async (id: string) => {
+    const target = positions.find((p) => p.id === id);
+    const blocker = target ? await positionDeleteBlocker(target.name) : null;
+    if (blocker) return window.alert(blocker);
     await removePos.mutateAsync(id);
     if (selPos?.id === id) setSelPos(null);
   };
@@ -64,12 +78,20 @@ export default function PositionScreen() {
     if (!selJob) return;
     if (!selJob.name.trim()) return setMsg('직책명을 입력하세요.');
     const item = { ...selJob, id: selJob.id || nextJobId() };
+    const before = jobTitles.find((j) => j.id === selJob.id);
     await upsertJob.mutateAsync(item);
+    if (before && before.name !== item.name) {
+      await cascadeJobTitleRename(before.name, item.name);
+      refreshPeople();
+    }
     setMsg('저장되었습니다.');
     setSelJob(null);
   };
 
   const delJob = async (id: string) => {
+    const target = jobTitles.find((j) => j.id === id);
+    const blocker = target ? await jobTitleDeleteBlocker(target.name) : null;
+    if (blocker) return window.alert(blocker);
     await removeJob.mutateAsync(id);
     if (selJob?.id === id) setSelJob(null);
   };
@@ -204,7 +226,7 @@ export default function PositionScreen() {
             <table className="w-full border-collapse text-[12.5px]">
               <thead>
                 <tr>
-                  {['직책 ID', '직책명', ''].map((h) => (
+                  {['직책명', ''].map((h) => (
                     <th
                       key={h}
                       className="border-b border-border bg-panel-alt px-3.5 py-2.5 text-left text-[10.5px] font-bold text-ink2"
@@ -217,7 +239,7 @@ export default function PositionScreen() {
               <tbody>
                 {isJobLoading && (
                   <tr>
-                    <td colSpan={3} className="px-3.5 py-8 text-center text-ink3">
+                    <td colSpan={2} className="px-3.5 py-8 text-center text-ink3">
                       불러오는 중…
                     </td>
                   </tr>
@@ -233,7 +255,6 @@ export default function PositionScreen() {
                       selJob?.id === j.id ? 'bg-teal-soft/60' : 'hover:bg-panel-alt'
                     }`}
                   >
-                    <td className="border-b border-border px-3.5 py-2.5 tabular-nums text-ink2">{j.id}</td>
                     <td className="border-b border-border px-3.5 py-2.5 font-semibold text-ink">{j.name}</td>
                     <td className="border-b border-border px-3.5 py-2.5 text-right">
                       {canDelete && (
@@ -261,7 +282,7 @@ export default function PositionScreen() {
             selPos ? (
               <div className="space-y-3">
                 <div className="text-[13px] font-bold text-ink">
-                  {selPos.id ? `직급 편집 · ${selPos.id}` : '새 직급'}
+                  {selPos.id ? '직급 편집' : '새 직급'}
                 </div>
                 <Field label="직급명">
                   <input
@@ -327,7 +348,7 @@ export default function PositionScreen() {
           ) : selJob ? (
             <div className="space-y-3">
               <div className="text-[13px] font-bold text-ink">
-                {selJob.id ? `직책 편집 · ${selJob.id}` : '새 직책'}
+                {selJob.id ? '직책 편집' : '새 직책'}
               </div>
               <Field label="직책명">
                 <input
