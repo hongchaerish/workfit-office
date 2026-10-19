@@ -8,10 +8,18 @@
  */
 
 const nameOf = (list, id) => (id ? list.find((x) => x.$id === id)?.name ?? '' : '');
+const idOf = (list, name) => (name ? list.find((x) => x.name === name)?.$id ?? null : null);
+
+/** 세 ID 중 하나라도 있으면 ID만, 셋 다 비어 있으면(기존 데이터 채우기 전) 예전 이름 칸으로 찾는다. */
+function storedIds(p, masters) {
+  if (p.deptId || p.positionId || p.jobTitleId) return { deptId: p.deptId ?? null, positionId: p.positionId ?? null, jobTitleId: p.jobTitleId ?? null };
+  return { deptId: idOf(masters.depts, p.dept), positionId: idOf(masters.positions, p.position), jobTitleId: idOf(masters.jobTitles, p.jobTitle) };
+}
 
 /** uid의 본직 소속(ID와 현재 이름). 인명관리가 없으면 모두 빈 값. */
 export function affiliationOf(uid, profiles, masters) {
-  const p = profiles.find((x) => x.userId === uid) ?? {};
+  const found = profiles.find((x) => x.userId === uid);
+  const p = found ? storedIds(found, masters) : {};
   return {
     deptId: p.deptId ?? null,
     dept: nameOf(masters.depts, p.deptId),
@@ -43,7 +51,7 @@ export function matchesExecMapping(m, { uid, empNo, myName, aff }) {
  * 부서장 열람 범위 — 맡은 부서(departments.headUserId)의 인명관리 소속자 전원.
  * 맡은 부서가 없어도 팀장·부서장 직책(또는 테스트 부서장 testB)이면 자기 부서를 본다.
  */
-export function headScope({ uid, aff, depts, profiles, users }) {
+export function headScope({ uid, aff, depts, profiles, users, masters = { depts, positions: [], jobTitles: [] } }) {
   const headed = depts.filter((d) => d.headUserId === uid);
   let deptIds = headed.map((d) => d.$id);
   let deptNames = headed.map((d) => String(d.name));
@@ -58,7 +66,7 @@ export function headScope({ uid, aff, depts, profiles, users }) {
   }
 
   const ids = new Set(deptIds);
-  const memberIds = new Set(profiles.filter((p) => ids.has(p.deptId)).map((p) => p.userId));
+  const memberIds = new Set(profiles.filter((p) => ids.has(storedIds(p, masters).deptId)).map((p) => p.userId));
   const memberNames = new Set(users.filter((u) => memberIds.has(u.id)).map((u) => String(u.name).trim()));
   return { deptNames, memberNames };
 }
