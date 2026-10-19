@@ -4,7 +4,7 @@ import { useJobTitles, useRemoveJobTitle, useUpsertJobTitle } from '@/features/j
 import { useQueryClient } from '@tanstack/react-query';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
-import { cascadeJobTitleRename, cascadePositionRename, jobTitleDeleteBlocker, positionDeleteBlocker } from '@/data/orgSync/orgSync';
+import { jobTitleDeleteBlocker, positionDeleteBlocker } from '@/data/orgSync/orgSync';
 import type { Position } from '@/domain/position/schema';
 import type { JobTitle } from '@/domain/jobTitle/schema';
 
@@ -24,7 +24,7 @@ export default function PositionScreen() {
   const [tab, setTab] = useState<'position' | 'jobTitle'>('position');
   const [msg, setMsg] = useState('');
   const qc = useQueryClient();
-  // 이름을 바꾸면 사람 쪽 값도 바뀌므로 다른 화면이 새 값을 다시 읽게 한다
+  // 이름을 바꾸면 사람 정보 화면이 새 이름을 다시 읽게 한다
   const refreshPeople = () => { for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] }); };
 
   /* ── 직급 (Position) ── */
@@ -58,17 +58,14 @@ export default function PositionScreen() {
     const item = { ...selPos, id: selPos.id || nextPosId() };
     const before = positions.find((p) => p.id === selPos.id);
     await upsertPos.mutateAsync(item);
-    if (before && before.name !== item.name) {
-      await cascadePositionRename(before.name, item.name);
-      refreshPeople();
-    }
+    if (before && before.name !== item.name) refreshPeople();
     setMsg('저장되었습니다.');
     setSelPos(null);
   };
 
   const delPos = async (id: string) => {
     const target = positions.find((p) => p.id === id);
-    const blocker = target ? await positionDeleteBlocker(target.name) : null;
+    const blocker = target ? await positionDeleteBlocker(target.id) : null;
     if (blocker) return window.alert(blocker);
     await removePos.mutateAsync(id);
     if (selPos?.id === id) setSelPos(null);
@@ -80,17 +77,14 @@ export default function PositionScreen() {
     const item = { ...selJob, id: selJob.id || nextJobId() };
     const before = jobTitles.find((j) => j.id === selJob.id);
     await upsertJob.mutateAsync(item);
-    if (before && before.name !== item.name) {
-      await cascadeJobTitleRename(before.name, item.name);
-      refreshPeople();
-    }
+    if (before && before.name !== item.name) refreshPeople();
     setMsg('저장되었습니다.');
     setSelJob(null);
   };
 
   const delJob = async (id: string) => {
     const target = jobTitles.find((j) => j.id === id);
-    const blocker = target ? await jobTitleDeleteBlocker(target.name) : null;
+    const blocker = target ? await jobTitleDeleteBlocker(target.id) : null;
     if (blocker) return window.alert(blocker);
     await removeJob.mutateAsync(id);
     if (selJob?.id === id) setSelJob(null);

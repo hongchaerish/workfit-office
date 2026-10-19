@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDepartments, useRemoveDepartment, useUpsertDepartment } from '@/features/department/useDepartments';
 import { useUsers } from '@/features/user/useUsers';
 import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmentMembers';
-import { cascadeDepartmentRename, departmentDeleteBlocker, setPersonJobTitle } from '@/data/orgSync/orgSync';
+import { departmentDeleteBlocker, setPersonJobTitle } from '@/data/orgSync/orgSync';
 import { usePositions } from '@/features/position/usePositions';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
@@ -31,7 +31,7 @@ export default function DepartmentScreen() {
   const upsert = useUpsertDepartment();
   const remove = useRemoveDepartment();
   const qc = useQueryClient();
-  // 계정·인명관리·소속 정보를 바꾼 뒤 다른 화면이 새 값을 다시 읽게 한다
+  // 부서·직책을 바꾼 뒤 사람 정보 화면이 새 값을 다시 읽게 한다
   const refreshPeople = () => { for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] }); };
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
@@ -109,11 +109,6 @@ export default function DepartmentScreen() {
       parentId: sel.parentId || null,
       headUserId: sel.headUserId || null,
     });
-
-    // 부서명 변경 — 계정·인명관리·겸직 정보의 부서명을 함께 바꾼다(하나라도 빠지면 조직도에 옛 이름 부서가 따로 생긴다).
-    if (oldDept && oldDept.name !== sel.name) {
-      await cascadeDepartmentRename({ deptId: oldDept.id, oldName: oldDept.name, newName: sel.name });
-    }
 
     if (sel.headUserId) {
       let newJob = '팀장';

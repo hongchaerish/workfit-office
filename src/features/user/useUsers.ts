@@ -45,23 +45,3 @@ export function useRemoveUsers() {
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
-
-export function useUpdateUserJobTitle() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, jobTitle }: { id: string; jobTitle: string }) => {
-      await userRepo.updateJobTitle(id, jobTitle);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
-  });
-}
-
-export function useUpdateUserDept() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, dept }: { id: string; dept: string }) => {
-      await userRepo.updateDept(id, dept);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
-  });
-}
