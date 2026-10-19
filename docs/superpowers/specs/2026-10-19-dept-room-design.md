@@ -43,15 +43,17 @@
 ## 4. 변경 위치
 
 ### 4.1 데이터 계층 — `src/data/chatRoom/chatRoom.repo.ts`
+- **확인된 사실 (2026-10-19, 운영·개발 DB 읽기 전용 조회)**: Appwrite `chatRooms` 컬렉션에 `deptId` 칸이 없고, 저장 어댑터(`toAttrs`/`fromRow`)도 이 값을 다루지 않는다. 그래서 모든 부서방의 `deptId`가 비어 있고, 현재 동기화는 60초마다 부서방 전부를 "deptId 다름"으로 판단해 다시 저장하고 있다. 운영의 부서방 9개는 모두 방 ID `RM-DEPT-{부서ID}`로 부서 9개와 1:1 대응하며, 삭제된 방·주인 없는 방은 없다.
+  → 부서 판별은 **방 ID에서 부서 ID를 꺼내는 방식**(`RM-DEPT-{id}`/`ROOM-DEPT-{id}`)으로 한다. DB 칸은 추가하지 않는다.
 - `list()` 안의 동기화를 **개설 전용**으로 축소한다.
-  - 기존 방 찾기: `deptId` 일치 → 방 ID `RM-DEPT-{id}`/`ROOM-DEPT-{id}` 일치. **이름 매칭 단계 삭제.**
+  - 기존 방 찾기: 방 ID `RM-DEPT-{id}`/`ROOM-DEPT-{id}` 일치(타입·삭제 여부 무관 — 같은 ID 방이 있으면 절대 새로 만들지 않아 덮어쓰기를 막는다) → `deptId` 일치. **이름 매칭 단계 삭제.**
   - 찾으면 아무것도 쓰지 않는다. 단, 방 이름이 표준 이름과 다르면 이름만 고친다(부서명 변경 반영). 이름 변경 시 위 시스템 메시지를 함께 남긴다.
   - 없고 사용 중 부서원이 있으면 개설(현재 로직 유지).
   - 60초 쓰로틀은 유지한다. 이제 쓰기는 개설·이름 변경 때만 일어난다.
 - 판정 로직은 순수 함수로 분리해 테스트한다: `planDeptRoomSync(depts, users, rooms) → { create: ChatRoom[]; rename: {roomId, name}[] }` (위치: `src/domain/chatRoom/deptRoom.ts`).
 - 추가 메서드:
   - `removeMemberFromDeptRooms(userId)` — 퇴직용. 해당 사용자가 들어 있는 살아있는 `dept` 방에서 제외하고, 제외된 방 ID 목록을 돌려준다.
-  - `detachDeptRoom(deptId)` — 부서 삭제용. `type: 'group'`, `deptId: null`로 바꾸고 방 ID를 돌려준다(없으면 null).
+  - `detachDeptRoom(deptId)` — 부서 삭제용. `type: 'group'`, `deptId: null`로 바꾸고 전환된 방 ID 목록을 돌려준다(없으면 빈 배열).
 
 ### 4.2 기능 계층 — `src/features/chat/useChatRooms.ts`
 - 시스템 메시지 생성 코드가 훅마다 복사돼 있으므로 `appendSystemMessage(roomId, text)` 도우미로 모은다 (기존 초대·나가기·내보내기·삭제 훅도 이것을 사용).
@@ -62,7 +64,7 @@
 - 방 이름 변경: `group`만 (현재와 동일, dept 제외 유지).
 
 ### 4.4 화면 — 모바일 `src/mobile/MobileChatThread.tsx`, `src/mobile/MobileChatList.tsx`
-- 나가기·초대·내보내기 조건을 PC와 동일하게 `group || dept`.
+- 나가기·초대 조건을 PC와 동일하게 `group || dept`. (모바일은 일반 단체방도 내보내기가 없으므로 내보내기는 PC 전용 유지.)
 - "🏢 부서방은 인사이동 시 자동 관리됩니다" 항목 삭제.
 - 관리자 삭제는 이미 dept 제외 — 유지.
 
@@ -78,7 +80,7 @@
 
 - **DB 구조 변경 없음.** 새 칸·새 컬렉션 없음 → 운영 DB 사전 작업 없음.
 - 기존 방의 참여자는 그대로 두고, 배포 이후부터 직접 관리로 바뀐다.
-- 착수 전 운영 DB **읽기 전용** 확인:
+- 착수 전 운영 DB **읽기 전용** 확인 (2026-10-19 완료 — 1·2·3 모두 해당 없음. 개발 DB에만 시험용 잔여 방 2개가 있으며 새 규칙에서 일반 권한을 가진 부서방으로 남을 뿐 문제없음):
   1. 모든 `type: 'dept'` 방에 `deptId`가 있는지 — 없으면 이름 매칭 삭제 후 중복 개설될 수 있으므로, 해당 방은 작업 전에 보고하고 처리 방법을 사용자와 정한다.
   2. 지움 표시가 있는 부서방 존재 여부 — 있으면 되살릴지 사용자에게 묻는다 (기본: 그대로 둠).
   3. 이미 삭제된 부서에 묶인 `dept` 방 존재 여부 — 있으면 일반 단체방 전환 여부를 사용자에게 묻는다.
