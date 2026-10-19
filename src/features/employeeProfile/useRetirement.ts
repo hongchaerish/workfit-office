@@ -5,6 +5,9 @@ import { approvalDocRepo } from '@/data/approvalDoc/approvalDoc.repo';
 import { isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { employeeProfileSchema } from '@/domain/employeeProfile/schema';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
+import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
 
 /**
  * 퇴직 처리 — 인명관리에서만 한다(사용자 관리는 계정만 다룬다, 2026-10-15 결정).
@@ -44,6 +47,15 @@ export async function retireEmployee(userId: string): Promise<{ reconnectedRepor
     updatedAt: new Date().toISOString(),
   });
   await employeeProfileRepo.save(profile, { keepAttendanceTarget: true });
+  // 부서방에서 제외 — 메신저 쪽 실패가 퇴직 처리(계정·인사) 자체를 실패시키지 않게 한다.
+  try {
+    const name = user?.name || userId;
+    for (const roomId of await chatRoomRepo.removeMemberFromDeptRooms(userId)) {
+      await appendSystemMessage(roomId, `퇴직 처리로 ${name}님이 제외되었습니다`);
+    }
+  } catch (e) {
+    console.warn('퇴직자 부서방 제외 실패:', (e as Error)?.message || e);
+  }
   return result;
 }
 
@@ -55,6 +67,7 @@ export function useRetireEmployee() {
       qc.invalidateQueries({ queryKey: ['users'] });
       qc.invalidateQueries({ queryKey: ['employeeProfiles'] });
       qc.invalidateQueries({ queryKey: ['blockingApprovals'] });
+      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
     },
   });
 }

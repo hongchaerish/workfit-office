@@ -4,6 +4,8 @@ import { useUsers, useUpdateUserJobTitle, useUpdateUserDept } from '@/features/u
 import { usePositions } from '@/features/position/usePositions';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
+import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
 /**
  * 부서/조직관리 (기준정보) — 부서 트리·상위부서·부서유형·부서장 CRUD.
@@ -149,9 +151,18 @@ export default function DepartmentScreen() {
 
   const del = async (id: string) => {
     const dept = rows.find((d) => d.id === id);
+    if (!window.confirm(`'${dept?.name ?? id}' 부서를 삭제할까요?\n부서 단체방은 대화를 보존한 채 일반 단체방으로 바뀝니다.`)) return;
     const headUserId = dept?.headUserId;
 
     await remove.mutateAsync(id);
+
+    try {
+      for (const roomId of await chatRoomRepo.detachDeptRoom(id)) {
+        await appendSystemMessage(roomId, '부서 삭제로 일반 단체방으로 전환되었습니다');
+      }
+    } catch (e) {
+      console.warn('부서방 전환 실패:', (e as Error)?.message || e);
+    }
 
     if (headUserId) {
       const isStillHead = rows.some((d) => d.id !== id && d.headUserId === headUserId);
