@@ -518,8 +518,8 @@ function MessengerThread({
 
   const [showMemberList, setShowMemberList] = useState(false);
   const kick = useKickMember();
-  /** 단체방(그룹)에서만 내보내기 — 부서방은 인사 정보로 참여자가 자동 동기화되어 내보내도 되돌아온다. */
-  const canKick = room.type === 'group';
+  /** 단체방·부서방에서 내보내기 — 참여자 누구나. 방 안 시스템 메시지로 기록된다. */
+  const canKick = room.type === 'group' || room.type === 'dept';
   const onKick = async (targetId: string, targetName: string) => {
     if (kick.isPending) return;
     if (!window.confirm(`${targetName}님을 이 대화방에서 내보내시겠어요?\n대화 내용은 보존됩니다.`)) return;
@@ -592,8 +592,9 @@ function MessengerThread({
 
   const processedItems = useMemo(() => processMessageBundles(filteredMessages), [filteredMessages]);
 
-  const canLeave = room.type === 'group';
-  const canDelete = isAdmin;
+  const canLeave = room.type === 'group' || room.type === 'dept';
+  // 부서방은 부서가 있는 한 유지 — 관리자도 삭제하지 않는다(부서 삭제 시 일반 단체방으로 전환).
+  const canDelete = isAdmin && room.type !== 'dept';
 
   const onLeave = async () => {
     if (leave.isPending) return;
@@ -783,7 +784,7 @@ function MessengerThread({
             >
               📁
             </button>
-            {room.type === 'group' && (
+            {(room.type === 'group' || room.type === 'dept') && (
               <button onClick={() => setInviting(true)} title="멤버 초대" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[17px] leading-none text-ink2 hover:bg-panel-alt">＋</button>
             )}
             {(canLeave || canDelete || room.type === 'direct') && (

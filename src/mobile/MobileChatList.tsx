@@ -87,11 +87,8 @@ export default function MobileChatList() {
         ...(sheetRoom.type === 'direct'
           ? [{ label: '채팅방 삭제', danger: true, onClick: () => hideRoom(sheetRoom.id) }]
           : []),
-        ...(sheetRoom.type === 'group'
+        ...(sheetRoom.type === 'group' || sheetRoom.type === 'dept'
           ? [{ label: '방 나가기', danger: true, onClick: () => handleLeaveRoom(sheetRoom.id) }]
-          : []),
-        ...(sheetRoom.type === 'dept'
-          ? [{ label: '🏢 부서방은 인사이동 시 자동 관리됩니다', onClick: () => setSheetRoom(null) }]
           : []),
       ]
     : [];
