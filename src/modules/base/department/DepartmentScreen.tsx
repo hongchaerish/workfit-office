@@ -146,6 +146,15 @@ export default function DepartmentScreen() {
     setSel(null);
   };
 
+  // 직책 지정 실패(기준정보에 없는 직책 등)를 알림으로 보여 준다
+  const withAlert = (fn: () => Promise<void>) => async () => {
+    try {
+      await fn();
+    } catch (e) {
+      window.alert((e as Error)?.message || '저장 중 오류가 발생했습니다.');
+    }
+  };
+
   const del = async (id: string) => {
     const dept = rows.find((d) => d.id === id);
     if (!dept) return;
@@ -214,7 +223,7 @@ export default function DepartmentScreen() {
               <span className="truncate text-[11.5px] text-ink2">{nameOf(d.headUserId)}</span>
               <span className="text-right">
                 {canDelete && (
-                  <button onClick={(e) => { e.stopPropagation(); del(d.id); }} className="text-[11.5px] text-ink3 hover:text-red-500">삭제</button>
+                  <button onClick={(e) => { e.stopPropagation(); void withAlert(() => del(d.id))(); }} className="text-[11.5px] text-ink3 hover:text-red-500">삭제</button>
                 )}
               </span>
             </div>
@@ -253,7 +262,7 @@ export default function DepartmentScreen() {
               {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setSel(null)} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
-                <button onClick={save} disabled={upsert.isPending || (sel.id ? !canUpdate : !canCreate)} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">저장</button>
+                <button onClick={withAlert(save)} disabled={upsert.isPending || (sel.id ? !canUpdate : !canCreate)} className="rounded-lg bg-teal px-4 py-2 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">저장</button>
               </div>
             </div>
           ) : (

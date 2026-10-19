@@ -58,6 +58,9 @@ import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
 
 registerTestAccountSource(() => backend.loadAll());
 
+/** 테스트에서 DB 원본을 확인할 때만 쓴다. */
+export const userStore = backend;
+
 export const userRepo = {
   /**
    * 화면용 사용자 목록 — 접속자가 볼 수 없는 테스트 계정은 빠진다([[testAccountVisibility]]).
@@ -159,7 +162,9 @@ export const userRepo = {
 
   async save(user: User): Promise<void> {
     const raw = userSchema.parse(user);
-    await backend.save(raw);
+    // 계정의 소속 이름 칸은 읽지 않는 옛 사본이다. 읽을 때 채운 화면용 값(인명관리 기준)을 다시 쓰지 않고 DB 값을 그대로 둔다.
+    const stored = (await backend.loadAll()).find((u) => u.id === raw.id);
+    await backend.save(stored ? { ...raw, dept: stored.dept, position: stored.position, jobTitle: stored.jobTitle } : raw);
   },
 
   /**

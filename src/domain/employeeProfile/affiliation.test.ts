@@ -56,3 +56,9 @@ test('사람 목록 채우기도 ID가 없으면 예전 이름으로 찾는다',
   const out = applyAffiliations([{ id: 'U1', name: '가' }], [{ userId: 'U1', dept: '품질심사팀', position: '과장' }], M);
   assert.deepEqual([out[0].dept, out[0].position], ['품질심사팀', '과장']);
 });
+
+test('같은 이름의 기준정보가 둘이면 기존 ID가 그 이름이면 기존 ID를 지킨다', () => {
+  const dupM = { ...M, depts: [{ id: 'D1', name: '영업팀' }, { id: 'D2', name: '영업팀' }] };
+  assert.equal(affiliationIdsFromNames({ dept: '영업팀' }, dupM, { deptId: 'D2' }).deptId, 'D2');
+  assert.equal(affiliationIdsFromNames({ dept: '영업팀' }, dupM).deptId, 'D1');
+});

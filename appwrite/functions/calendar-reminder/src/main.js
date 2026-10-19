@@ -19,6 +19,7 @@
  */
 import { Client, Databases, ID, Query } from 'node-appwrite';
 import { attendeesOf, eventTypeOf, meetingReminderTargets } from './meeting.js';
+import { deptMemberIdsFrom } from './deptMembers.js';
 
 const DB = process.env.APPWRITE_DATABASE_ID || 'workfit';
 const LEAD_MIN = 10;
@@ -78,14 +79,15 @@ function reminderWindows(now) {
   ];
 }
 
-/** 부서 ID → 그 부서 소속 재직자 users.id 목록. */
+/** 부서 ID → 그 부서 소속 재직자 users.id 목록(인명관리 부서 ID 기준). */
 async function deptMemberIds(dbs, deptId) {
   const dept = await dbs.getDocument(DB, 'departments', deptId).catch(() => null);
   if (!dept) return [];
-  const members = await dbs.listDocuments(DB, 'users', [
-    Query.equal('dept', dept.name), Query.equal('status', '사용'), Query.limit(200),
+  const [profiles, users] = await Promise.all([
+    dbs.listDocuments(DB, 'employeeProfiles', [Query.limit(500)]),
+    dbs.listDocuments(DB, 'users', [Query.equal('status', '사용'), Query.limit(500)]),
   ]);
-  return members.documents.map((u) => u.$id);
+  return deptMemberIdsFrom(dept, profiles.documents, users.documents);
 }
 
 /**
