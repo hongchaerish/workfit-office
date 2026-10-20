@@ -26,7 +26,7 @@ test('회사명 비교는 (주)·주식회사·공백을 무시한다', () => {
   assert.notEqual(normalizeCompanyName('대성반도체'), normalizeCompanyName('대성정밀'));
 });
 
-test('거래처 사업 = 연결표 + 연결 안 된 발주처명 일치 사업, 진행 중이 먼저', () => {
+test('도입기업 사업 = 연결표 + 연결 안 된 발주처명 일치 사업, 진행 중이 먼저', () => {
   const v = vendor('V-1', '대성반도체(주)');
   const projects = [
     project('PRJ-0001', { status: 'COMPLETED' }),
@@ -53,7 +53,7 @@ test('사업자번호 형식·검증번호', () => {
   assert.equal(isValidBizNoChecksum('12345'), false);
 });
 
-test('다음 거래처코드와 사업자번호 중복 검사', () => {
+test('다음 도입기업코드와 사업자번호 중복 검사', () => {
   assert.equal(nextVendorCode(['V-10021', 'V-50880', 'X-1']), 'V-50881');
   assert.equal(nextVendorCode([]), 'V-10001');
   const vs = [vendor('V-1', 'A', '124-81-00998'), vendor('V-2', 'B')];

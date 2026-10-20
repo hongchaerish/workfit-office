@@ -7,7 +7,7 @@ import {
 } from '@/domain/bizVendor/schema';
 
 /**
- * 거래처 ↔ 사업 연결 Repository — `bizVendorProjects` 컬렉션만 읽고 쓴다.
+ * 도입기업 ↔ 사업 연결 Repository — `bizVendorProjects` 컬렉션만 읽고 쓴다.
  * vendors·workProjects 는 여기서 건드리지 않는다.
  */
 const backend = createCrudBackend<VendorProjectLink>({
@@ -40,7 +40,7 @@ export const vendorProjectRepo = {
     return row;
   },
 
-  /** 연결 해제 — 연결 행만 지운다. 거래처·사업 데이터는 그대로다. */
+  /** 연결 해제 — 연결 행만 지운다. 도입기업·사업 데이터는 그대로다. */
   async unlink(id: string): Promise<void> {
     await backend.remove(id);
   },

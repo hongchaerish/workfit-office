@@ -3,9 +3,9 @@ import type { Vendor } from '@/domain/vendor/schema';
 import type { WorkProject, WorkProjectStatus } from '@/domain/workProject/schema';
 
 /**
- * 사업관리 — 거래처 ↔ 사업(프로젝트) 연결.
+ * 사업관리 — 도입기업 ↔ 사업(프로젝트) 연결.
  *
- * 거래처는 기존 `vendors`, 사업은 업무관리의 `workProjects` 를 그대로 쓴다(중복 데이터 금지).
+ * 도입기업은 기존 `vendors`, 사업은 업무관리의 `workProjects` 를 그대로 쓴다(중복 데이터 금지).
  * 둘을 잇는 건 별도 연결표 `bizVendorProjects` 하나뿐이라 기존 컬렉션은 건드리지 않는다.
  * 한 사업에 발주처·매입처·외주처가 여럿 붙을 수 있어 프로젝트 칸 하나가 아니라 표로 둔다.
  */
@@ -13,7 +13,7 @@ export const VENDOR_PROJECT_ROLES = ['발주처', '매입처', '외주'] as cons
 export type VendorProjectRole = (typeof VENDOR_PROJECT_ROLES)[number];
 
 export const vendorProjectLinkSchema = z.object({
-  /** `${vendorCode}__${projectId}` — 같은 거래처·사업을 두 번 잇지 못하게 한다. */
+  /** `${vendorCode}__${projectId}` — 같은 도입기업·사업을 두 번 잇지 못하게 한다. */
   id: z.string().min(1),
   vendorCode: z.string().min(1),
   projectId: z.string().min(1),
@@ -38,7 +38,7 @@ export interface VendorProjectRow {
   project: WorkProject;
   /** 연결표에 있으면 그 역할, 없으면 발주처명 일치로 찾은 것. */
   role: VendorProjectRole;
-  /** 'link' = 연결표, 'clientName' = 프로젝트 발주처명이 거래처명과 같아 자동으로 보인 것. */
+  /** 'link' = 연결표, 'clientName' = 프로젝트 발주처명이 도입기업명과 같아 자동으로 보인 것. */
   source: 'link' | 'clientName';
   linkId: string | null;
 }
@@ -53,7 +53,7 @@ export function normalizeCompanyName(name: string): string {
 }
 
 /**
- * 거래처의 사업 목록 — 연결표 + (연결 안 된) 발주처명 일치 사업.
+ * 도입기업의 사업 목록 — 연결표 + (연결 안 된) 발주처명 일치 사업.
  * 발주처명 일치는 연결을 만들기 전 기존 프로젝트도 보이게 하려는 것이다. 정식 연결이 있으면 그쪽이 우선.
  */
 export function projectsOfVendor(
@@ -103,7 +103,7 @@ export function isValidBizNoChecksum(bizNo: string): boolean {
   return (10 - (sum % 10)) % 10 === n[9];
 }
 
-/** 다음 거래처코드 — 기존 `V-숫자` 최댓값 + 1 (최소 V-10001). */
+/** 다음 도입기업코드 — 기존 `V-숫자` 최댓값 + 1 (최소 V-10001). */
 export function nextVendorCode(codes: string[]): string {
   const max = codes.reduce((m, c) => {
     const n = /^V-(\d+)$/.exec(c)?.[1];
@@ -112,7 +112,7 @@ export function nextVendorCode(codes: string[]): string {
   return `V-${max + 1}`;
 }
 
-/** 같은 사업자번호를 쓰는 다른 거래처(자기 자신 제외). 비어 있으면 검사하지 않는다. */
+/** 같은 사업자번호를 쓰는 다른 도입기업(자기 자신 제외). 비어 있으면 검사하지 않는다. */
 export function findDuplicateBizNo(vendors: Vendor[], bizNo: string, selfCode?: string): Vendor | null {
   const d = bizNoDigits(bizNo);
   if (!d) return null;

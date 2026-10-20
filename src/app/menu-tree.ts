@@ -17,12 +17,12 @@ export const MENU_TREE: MenuNode[] = [
   },
 
 
-  /* ── 사업관리 — 거래처와 거래처별 사업(프로젝트)을 관리 ── */
+  /* ── 사업관리 — 도입기업과 도입기업별 사업(프로젝트)을 관리 ── */
   {
     id: 'M_BIZ', name: '사업관리', icon: '▣', order: 25, use: true, children: [
       {
-        id: 'G_BIZ_PARTNER', name: '거래처', icon: '▤', order: 10, use: true, children: [
-          { id: 'S_BIZ_VENDOR', name: '거래처 정보', url: '/biz/vendor', icon: '▤', order: 10, use: true },
+        id: 'G_BIZ_PARTNER', name: '도입기업', icon: '▤', order: 10, use: true, children: [
+          { id: 'S_BIZ_VENDOR', name: '도입기업 정보', url: '/biz/vendor', icon: '▤', order: 10, use: true },
         ]
       },
       {
@@ -56,7 +56,7 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'G_BASE_USER', name: '사용자/권한', icon: '◫', order: 10, use: true, children: [
           { id: 'S_BASE_USER', name: '사용자관리', url: '/base/user', icon: '◫', order: 10, use: true },
-          // 사업관리 > 거래처 정보로 옮김(같은 vendors 데이터). 숨김.
+          // 사업관리 > 도입기업 정보로 옮김(같은 vendors 데이터). 숨김.
           { id: 'S_BASE_VENDOR', name: '거래처관리', url: '/base/vendor', icon: '◫', order: 20, use: false },
           { id: 'S_BASE_AUTH', name: '그룹권한관리', url: '/base/auth', icon: '◫', order: 30, use: true },
         ]

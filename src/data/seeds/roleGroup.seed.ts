@@ -41,7 +41,7 @@ const execPermissions = () => {
   return map;
 };
 
-/** 3. 재무관리자 권한 (그룹웨어 + 사업관리(거래처 포함) 전권 + 코드 + 결재모니터링) */
+/** 3. 재무관리자 권한 (그룹웨어 + 사업관리(도입기업 포함) 전권 + 코드 + 결재모니터링) */
 const financeAdminPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {

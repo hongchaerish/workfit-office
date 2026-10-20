@@ -56,7 +56,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   // 2. 경영 현황 (1개)
   { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', category: 'EXEC', desc: '경영 지표 및 전사 KPI 요약', supportedActions: ['access', 'update'] },
 
-  // 3. 기준 정보 & 결재 관리 (7개) — 거래처 관리(S_BASE_VENDOR)는 사업관리 > 거래처 정보로 옮겨 뺐다
+  // 3. 기준 정보 & 결재 관리 (7개) — 거래처 관리(S_BASE_VENDOR)는 사업관리 > 도입기업 정보로 옮겨 뺐다
   { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', category: 'BASE', desc: '사원 등록, 계정 및 퇴사 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_DEPT', name: '부서/조직 관리', url: '/base/department', category: 'BASE', desc: '부서 생성, 트리 구조 및 부서장 지정', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_POSITION', name: '직급 관리', url: '/base/position', category: 'BASE', desc: '직급 서열 및 명칭 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
@@ -75,8 +75,8 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', category: 'SYS', desc: '외부 시스템 연동 및 API 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
 
   // 5. 사업관리 (2개) — 영업 & 수주 관리(S_SALES_*)는 2026-10-20 숨김 처리되어 목록에서 뺐다
-  { id: 'S_BIZ_VENDOR', name: '거래처 정보', url: '/biz/vendor', category: 'BIZ', desc: '거래처 등록·수정 및 거래처별 진행 사업', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', category: 'BIZ', desc: '사업(프로젝트) 목록과 연결 거래처', supportedActions: ['access', 'update'] },
+  { id: 'S_BIZ_VENDOR', name: '도입기업 정보', url: '/biz/vendor', category: 'BIZ', desc: '도입기업 등록·수정 및 도입기업별 진행 사업', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', category: 'BIZ', desc: '사업(프로젝트) 목록과 연결 도입기업', supportedActions: ['access', 'update'] },
 ];
 
 /** 화면별 액션 플래그 스키마 (표준 4대 CRUD: access, create, update, delete) */

@@ -13,7 +13,7 @@ import { useDepartments } from '@/features/department/useDepartments';
 const LINKS_KEY = 'bizVendorProjects';
 const VENDORS_KEY = 'vendors';
 
-/** 거래처 ↔ 사업 연결 전체. */
+/** 도입기업 ↔ 사업 연결 전체. */
 export function useVendorProjectLinks() {
   return useQuery({ queryKey: [LINKS_KEY], queryFn: () => vendorProjectRepo.list() });
 }
@@ -35,7 +35,7 @@ export function useUnlinkVendorProject() {
   });
 }
 
-/** 거래처 등록(insert)·수정(save). 등록은 같은 코드가 있으면 덮어쓰지 않는다. */
+/** 도입기업 등록(insert)·수정(save). 등록은 같은 코드가 있으면 덮어쓰지 않는다. */
 export function useUpsertVendor() {
   const qc = useQueryClient();
   return useMutation({

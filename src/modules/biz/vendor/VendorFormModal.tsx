@@ -14,7 +14,7 @@ import {
 } from '@/domain/bizVendor/schema';
 import { useUpsertVendor } from '@/features/bizVendor/useBizVendor';
 
-/** 거래처 등록·수정. `vendor` 가 없으면 신규(코드 자동 부여). */
+/** 도입기업 등록·수정. `vendor` 가 없으면 신규(코드 자동 부여). */
 export function VendorFormModal({
   open,
   vendor,
@@ -43,9 +43,9 @@ export function VendorFormModal({
 
   const submit = async () => {
     setErr(null);
-    if (!form.name.trim()) return setErr('거래처명을 입력하세요.');
+    if (!form.name.trim()) return setErr('도입기업명을 입력하세요.');
     if (bizNoError) return setErr(bizNoError);
-    const next: Vendor = { ...form, name: form.name.trim(), bizNo: formatBizNo(form.bizNo), ceo: form.ceo.trim(), manager: form.manager.trim(), addr: form.addr.trim() };
+    const next: Vendor = { ...form, name: form.name.trim(), bizNo: formatBizNo(form.bizNo), ceo: form.ceo.trim(), addr: form.addr.trim() };
     try {
       await upsert.mutateAsync({ vendor: next, isNew });
       onSaved(next);
@@ -58,7 +58,7 @@ export function VendorFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={isNew ? '거래처 신규 등록' : '거래처 수정'}
+      title={isNew ? '도입기업 신규 등록' : '도입기업 수정'}
       width={560}
       footer={
         <>
@@ -70,10 +70,10 @@ export function VendorFormModal({
       }
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="거래처코드" hint={isNew ? '자동 부여' : undefined}>
+        <Field label="도입기업코드" hint={isNew ? '자동 부여' : undefined}>
           <TextField value={form.code} readOnly className="bg-panel-alt font-mono" />
         </Field>
-        <Field label="거래처명" required>
+        <Field label="도입기업명" required>
           <TextField value={form.name} onChange={(e) => set('name', e.target.value)} maxLength={128} placeholder="예: 대성반도체(주)" />
         </Field>
         <Field label="사업자번호" error={bizNoError} hint={bizNoHint}>
@@ -96,11 +96,6 @@ export function VendorFormModal({
         <Field label="사용 여부">
           <SelectField value={form.use} onChange={(e) => set('use', e.target.value as Vendor['use'])} options={VENDOR_USE.map((t) => ({ value: t, label: t }))} />
         </Field>
-        <div className="col-span-2">
-          <Field label="담당자 · 연락처">
-            <TextField value={form.manager} onChange={(e) => set('manager', e.target.value)} maxLength={64} placeholder="예: 김영업 · 010-0000-0000" className="w-full" />
-          </Field>
-        </div>
         <div className="col-span-2">
           <Field label="주소">
             <TextField value={form.addr} onChange={(e) => set('addr', e.target.value)} maxLength={256} className="w-full" />

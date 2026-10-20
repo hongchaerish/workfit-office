@@ -18,7 +18,7 @@ import { VendorDetailModal } from './VendorDetailModal';
 const TYPE_TONE: Record<Vendor['type'], Tone> = { 매입: 'info', 매출: 'ok', 외주: 'mute' };
 const EMPTY = { type: '', use: '', q: '' };
 
-/** 사업관리 › 거래처 정보 — 거래처 목록·등록·수정 + 거래처별 진행 사업. */
+/** 사업관리 › 도입기업 정보 — 도입기업 목록·등록·수정 + 도입기업별 진행 사업. */
 export default function BizVendorScreen() {
   const { canAction } = usePermission();
   const canCreate = canAction('S_BIZ_VENDOR', 'create');
@@ -43,13 +43,12 @@ export default function BizVendorScreen() {
         !kw ||
         v.name.toLowerCase().includes(kw) ||
         v.code.toLowerCase().includes(kw) ||
-        v.manager.toLowerCase().includes(kw) ||
         (kwDigits.length >= 3 && bizNoDigits(v.bizNo).includes(kwDigits)),
       )
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }, [vendors, applied]);
 
-  /** 거래처별 진행 중 사업 수. */
+  /** 도입기업별 진행 중 사업 수. */
   const ongoingCount = useMemo(() => {
     const m = new Map<string, number>();
     for (const v of vendors) m.set(v.code, projectsOfVendor(v, links, projects).filter((r) => isOngoingProject(r.project)).length);
@@ -66,7 +65,7 @@ export default function BizVendorScreen() {
 
   return (
     <div className="flex flex-col gap-4">
-      <BizHead group="거래처" title="거래처 정보" desc="거래처의 사업자 정보와 그 거래처와 진행 중인 사업(프로젝트)을 관리합니다." />
+      <BizHead group="도입기업" title="도입기업 정보" desc="도입기업의 사업자 정보와 그 도입기업과 진행 중인 사업(프로젝트)을 관리합니다." />
 
       {/* 검색 */}
       <div className="flex flex-wrap items-end gap-3 rounded-[10px] border border-border bg-panel p-4">
@@ -81,12 +80,12 @@ export default function BizVendorScreen() {
           </Field>
         </div>
         <div className="min-w-[240px] flex-1">
-          <Field label="거래처명·사업자번호·담당자 검색">
+          <Field label="도입기업명·사업자번호 검색">
             <TextField
               value={draft.q}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
               onKeyDown={(e) => e.key === 'Enter' && search()}
-              placeholder="거래처명, 사업자번호 또는 담당자를 입력하세요."
+              placeholder="도입기업명 또는 사업자번호를 입력하세요."
               className="w-full"
             />
           </Field>
@@ -100,21 +99,21 @@ export default function BizVendorScreen() {
 
       {/* 목록 */}
       <BizListCard
-        title="거래처 목록"
-        count={`총 ${rows.length}개 거래처`}
+        title="도입기업 목록"
+        count={`총 ${rows.length}개 도입기업`}
         footer={<BizPager total={rows.length} page={page} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />}
       >
         <table className="w-full border-collapse text-left">
           <thead>
             <tr>
-              {['No.', '거래처명', '사업자번호', '대표자', '구분', '담당자 · 연락처', '진행 사업', '사용', '관리'].map((h, i) => (
-                <th key={h} className={`${bizTh} ${i === 0 || i >= 6 ? 'text-center' : ''}`}>{h}</th>
+              {['No.', '도입기업명', '사업자번호', '대표자', '구분', '진행 사업', '사용', '관리'].map((h, i) => (
+                <th key={h} className={`${bizTh} ${i === 0 || i >= 5 ? 'text-center' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <BizEmptyRow colSpan={9}>불러오는 중…</BizEmptyRow>}
-            {!isLoading && rows.length === 0 && <BizEmptyRow colSpan={9}>{vendors.length ? '검색 조건에 맞는 거래처가 없습니다.' : '등록된 거래처가 없습니다.'}</BizEmptyRow>}
+            {isLoading && <BizEmptyRow colSpan={8}>불러오는 중…</BizEmptyRow>}
+            {!isLoading && rows.length === 0 && <BizEmptyRow colSpan={8}>{vendors.length ? '검색 조건에 맞는 도입기업이 없습니다.' : '등록된 도입기업이 없습니다.'}</BizEmptyRow>}
             {pageRows.map((v, i) => {
               const n = ongoingCount.get(v.code) ?? 0;
               return (
@@ -127,7 +126,6 @@ export default function BizVendorScreen() {
                   <td className={`${bizTd} font-mono text-ink2`}>{v.bizNo || '-'}</td>
                   <td className={`${bizTd} text-ink2`}>{v.ceo || '-'}</td>
                   <td className={bizTd}><Pill tone={TYPE_TONE[v.type]}>{v.type}</Pill></td>
-                  <td className={`${bizTd} text-ink2`}>{v.manager || '-'}</td>
                   <td className={`${bizTd} text-center font-bold ${n ? 'text-teal' : 'text-ink3'}`}>{n}건</td>
                   <td className={`${bizTd} text-center`}><Pill tone={v.use === '사용' ? 'ok' : 'mute'}>{v.use}</Pill></td>
                   <td className={`${bizTd} text-center`} onClick={(e) => e.stopPropagation()}>

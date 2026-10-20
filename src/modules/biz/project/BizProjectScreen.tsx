@@ -23,7 +23,7 @@ interface PartnerTag {
   role: VendorProjectRole;
 }
 
-/** 사업관리 › 사업 현황 — 업무관리 프로젝트를 사업 관점(번호·사업명·거래처)으로 본다. */
+/** 사업관리 › 사업 현황 — 업무관리 프로젝트를 사업 관점(번호·사업명·도입기업)으로 본다. */
 export default function BizProjectScreen() {
   const navigate = useNavigate();
   const access = useProjectAccess();
@@ -37,7 +37,7 @@ export default function BizProjectScreen() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  /** 사업별 연결 거래처 — 연결표 + 연결이 없을 때 발주처명과 같은 이름의 거래처. */
+  /** 사업별 연결 도입기업 — 연결표 + 연결이 없을 때 발주처명과 같은 이름의 도입기업. */
   const partnersOf = useMemo(() => {
     const vendorByCode = new Map(vendors.map((v) => [v.code, v]));
     const vendorByName = new Map(vendors.map((v) => [normalizeCompanyName(v.name), v]));
@@ -57,7 +57,8 @@ export default function BizProjectScreen() {
     };
   }, [vendors, links]);
 
-  const userName = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
+  /** 담당자 = 프로젝트 책임자(소유자). 사업마다 다르므로 도입기업이 아니라 사업에 둔다. */
+  const userName = useMemo(() => new Map(users.map((u) => [u.id, `${u.name} ${u.position ?? ''}`.trim()])), [users]);
 
   const rows = useMemo(() => {
     const kw = applied.q.trim().toLowerCase();
@@ -65,10 +66,10 @@ export default function BizProjectScreen() {
       .filter((p) => applied.status === 'all' || (applied.status === 'ongoing') === isOngoingProject(p))
       .filter((p) =>
         !kw ||
-        [p.code, p.name, p.contractNo ?? '', ...partnersOf(p).map((t) => t.name)].some((s) => s.toLowerCase().includes(kw)),
+        [p.code, p.name, p.contractNo ?? '', userName.get(p.ownerUserId) ?? '', ...partnersOf(p).map((t) => t.name)].some((s) => s.toLowerCase().includes(kw)),
       )
       .sort((a, b) => a.code.localeCompare(b.code));
-  }, [projects, applied, partnersOf]);
+  }, [projects, applied, partnersOf, userName]);
 
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
   const search = () => { setApplied(draft); setPage(1); };
@@ -76,7 +77,7 @@ export default function BizProjectScreen() {
 
   return (
     <div className="flex flex-col gap-4">
-      <BizHead group="사업 관리" title="사업 현황" desc="그룹웨어 › 프로젝트에 등록된 사업을 프로젝트 번호·사업명·거래처 기준으로 봅니다. 거래처 연결은 거래처 정보에서 합니다." />
+      <BizHead group="사업 관리" title="사업 현황" desc="그룹웨어 › 프로젝트에 등록된 사업을 프로젝트 번호·사업명·도입기업 기준으로 봅니다. 도입기업 연결은 도입기업 정보에서 합니다." />
 
       <div className="flex flex-wrap items-end gap-3 rounded-[10px] border border-border bg-panel p-4">
         <div className="w-32">
@@ -89,12 +90,12 @@ export default function BizProjectScreen() {
           </Field>
         </div>
         <div className="min-w-[240px] flex-1">
-          <Field label="프로젝트 번호·사업명·거래처 검색">
+          <Field label="프로젝트 번호·사업명·도입기업·담당자 검색">
             <TextField
               value={draft.q}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
               onKeyDown={(e) => e.key === 'Enter' && search()}
-              placeholder="프로젝트 번호, 사업명, 계약번호 또는 거래처명을 입력하세요."
+              placeholder="프로젝트 번호, 사업명, 계약번호, 도입기업명 또는 담당자를 입력하세요."
               className="w-full"
             />
           </Field>
@@ -113,14 +114,14 @@ export default function BizProjectScreen() {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr>
-              {['No.', '프로젝트 번호', '관련 사업명', '유형', '거래처', '계약번호', '기간', '책임자', '상태'].map((h, i) => (
-                <th key={h} className={`${bizTh} ${i === 0 || i === 8 ? 'text-center' : ''}`}>{h}</th>
+              {['No.', '프로젝트 번호', '관련 사업명', '유형', '도입기업', '기간', '담당자', '상태'].map((h, i) => (
+                <th key={h} className={`${bizTh} ${i === 0 || i === 7 ? 'text-center' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <BizEmptyRow colSpan={9}>불러오는 중…</BizEmptyRow>}
-            {!isLoading && rows.length === 0 && <BizEmptyRow colSpan={9}>{projects.length ? '검색 조건에 맞는 사업이 없습니다.' : '볼 수 있는 사업이 없습니다.'}</BizEmptyRow>}
+            {isLoading && <BizEmptyRow colSpan={8}>불러오는 중…</BizEmptyRow>}
+            {!isLoading && rows.length === 0 && <BizEmptyRow colSpan={8}>{projects.length ? '검색 조건에 맞는 사업이 없습니다.' : '볼 수 있는 사업이 없습니다.'}</BizEmptyRow>}
             {pageRows.map((p, i) => {
               const tags = partnersOf(p);
               const period = [dateOf(p.contractStartAt ?? p.startAt), dateOf(p.contractEndAt ?? p.dueAt)].filter(Boolean).join(' ~ ');
@@ -133,7 +134,10 @@ export default function BizProjectScreen() {
                 >
                   <td className={`${bizTd} text-center text-ink3`}>{(page - 1) * pageSize + i + 1}</td>
                   <td className={`${bizTd} font-mono font-bold text-ink`}>{p.code}</td>
-                  <td className={`${bizTd} font-semibold text-ink`}>{p.name}</td>
+                  <td className={bizTd}>
+                    <div className="font-semibold text-ink">{p.name}</div>
+                    {p.contractNo && <div className="font-mono text-[10.5px] text-ink3">계약 {p.contractNo}</div>}
+                  </td>
                   <td className={`${bizTd} text-ink2`}>{projectTypeLabel(p)}</td>
                   <td className={bizTd}>
                     {tags.length === 0 ? (
@@ -148,7 +152,6 @@ export default function BizProjectScreen() {
                       </div>
                     )}
                   </td>
-                  <td className={`${bizTd} font-mono text-ink2`}>{p.contractNo || '-'}</td>
                   <td className={`${bizTd} tabular-nums text-ink2`}>{period || '-'}</td>
                   <td className={`${bizTd} text-ink2`}>{userName.get(p.ownerUserId) ?? '-'}</td>
                   <td className={`${bizTd} text-center`}><Pill tone={isOngoingProject(p) ? 'ok' : 'mute'}>{WORK_PROJECT_STATUS_LABELS[p.status]}</Pill></td>
