@@ -7,6 +7,7 @@ interface PhotoUploadModalProps {
   onClose: () => void;
   folders: GalleryFolder[];
   defaultFolderId: string | null;
+  variant?: 'desktop' | 'mobile';
   onUpload: (params: {
     files: File[];
     folderId: string;
@@ -21,7 +22,9 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
   folders,
   defaultFolderId,
   onUpload,
+  variant = 'desktop',
 }) => {
+  const mobile = variant === 'mobile';
   const [selectedFolderId, setSelectedFolderId] = useState<string>(() => {
     return defaultFolderId || (folders[0]?.id ?? '');
   });
@@ -34,10 +37,29 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
   const [error, setError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sending = useRef(false);
+  const initialized = useRef(false);
+  const previewUrls = useRef(new Set<string>());
+
+  React.useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current.clear();
+  }, []);
 
   // 모달 열릴 때 초기화
   React.useEffect(() => {
+    if (!isOpen) {
+      initialized.current = false;
+      return;
+    }
+    // 모바일에서는 폴더 목록이 갱신되어도 작성 중인 입력을 초기화하지 않는다.
+    if (mobile && initialized.current) return;
+    initialized.current = true;
     if (isOpen) {
+      if (mobile) {
+        previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+        previewUrls.current.clear();
+      }
       setSelectedFolderId(defaultFolderId || (folders[0]?.id ?? ''));
       setEventDate(new Date().toISOString().split('T')[0]);
       setCommonTitle('');
@@ -46,16 +68,18 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       setIsUploading(false);
       setError('');
     }
-  }, [isOpen, defaultFolderId, folders]);
+  }, [isOpen, defaultFolderId, folders, mobile]);
 
   if (!isOpen) return null;
 
   const handleFiles = (files: FileList | File[]) => {
+    if (mobile && sending.current) return;
     const fileArr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (fileArr.length === 0) return;
 
     if (selectedFiles.length + fileArr.length > 50) {
-      alert('한 번에 최대 50장까지 등록할 수 있습니다.');
+      if (mobile) setError('한 번에 최대 50장까지 등록할 수 있습니다.');
+      else alert('한 번에 최대 50장까지 등록할 수 있습니다.');
       return;
     }
 
@@ -64,6 +88,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       size: (f.size / (1024 * 1024)).toFixed(1) + 'MB',
       url: URL.createObjectURL(f),
     }));
+    if (mobile) newPreviews.forEach((preview) => previewUrls.current.add(preview.url));
 
     setSelectedFiles((prev) => [...prev, ...fileArr]);
     setPreviews((prev) => [...prev, ...newPreviews]);
@@ -73,12 +98,14 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
     setPreviews((prev) => {
       URL.revokeObjectURL(prev[index].url);
+      previewUrls.current.delete(prev[index].url);
       return prev.filter((_, i) => i !== index);
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mobile && sending.current) return;
     if (selectedFiles.length === 0) {
       setError('업로드할 사진을 선택해주세요.');
       return;
@@ -88,6 +115,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       return;
     }
 
+    sending.current = true;
     setIsUploading(true);
     setError('');
     try {
@@ -99,31 +127,37 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       });
       onClose();
     } catch (err: any) {
-      setError(err?.message || '사진 업로드 중 오류가 발생했습니다.');
+      const message = err?.message || '사진 업로드 중 오류가 발생했습니다.';
+      setError(mobile ? `${message} 일부 사진이 등록되었을 수 있으니 목록을 확인한 후 다시 시도해 주세요.` : message);
     } finally {
+      sending.current = false;
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div className={`fixed inset-0 ${mobile ? 'z-[60] p-3' : 'z-50 p-4'} flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-150`}>
       <div
+        role={mobile ? 'dialog' : undefined}
+        aria-modal={mobile ? true : undefined}
+        aria-label={mobile ? '사진 업로드' : undefined}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl max-h-[calc(90vh/var(--font-scale,1))] flex flex-col rounded-3xl border border-border bg-panel shadow-2xl overflow-hidden"
+        className={`w-full ${mobile ? 'max-w-lg max-h-[92dvh] rounded-2xl' : 'max-w-2xl max-h-[calc(90vh/var(--font-scale,1))] rounded-3xl'} flex flex-col border border-border bg-panel shadow-2xl overflow-hidden`}
       >
         {/* 헤더 */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-panel-alt shrink-0">
+        <div className={`flex items-center justify-between border-b border-border ${mobile ? 'px-4 py-3' : 'px-6 py-4'} bg-panel-alt shrink-0`}>
           <div className="flex items-center gap-2.5">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-teal/10 text-teal">
               <Camera size={18} />
             </div>
             <div>
               <h2 className="text-base font-extrabold text-ink">사진 업로드</h2>
-              <p className="text-[11px] text-ink3">선택한 폴더로 사진을 안전하게 업로드하고 전사 직원과 공유합니다.</p>
+              {!mobile && <p className="text-[11px] text-ink3">선택한 폴더로 사진을 안전하게 업로드하고 전사 직원과 공유합니다.</p>}
             </div>
           </div>
           <button
             type="button"
+            aria-label="업로드 창 닫기"
             onClick={onClose}
             disabled={isUploading}
             className="rounded-lg p-1.5 text-ink3 hover:bg-panel hover:text-ink transition-colors"
@@ -133,9 +167,9 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
         </div>
 
         {/* 폼 본문 */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+        <form onSubmit={handleSubmit} className={`min-h-0 flex-1 overflow-y-auto ${mobile ? 'p-4' : 'p-6'} space-y-4`}>
           {error && (
-            <div className="rounded-xl bg-danger/10 p-3 text-[12.5px] font-medium text-danger">
+            <div role="alert" className="rounded-xl bg-danger/10 p-3 text-[12.5px] font-medium text-danger">
               {error}
             </div>
           )}
@@ -147,6 +181,8 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 저장할 폴더 <span className="text-danger">*</span>
               </label>
               <select
+                aria-label="저장할 폴더"
+                disabled={mobile && isUploading}
                 value={selectedFolderId}
                 onChange={(e) => setSelectedFolderId(e.target.value)}
                 className="h-10 w-full rounded-xl border border-border bg-panel px-3 text-[12.5px] text-ink outline-none focus:border-teal"
@@ -170,6 +206,8 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
               </label>
               <input
                 type="date"
+                aria-label="촬영 / 행사 일자"
+                disabled={mobile && isUploading}
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
                 className="h-10 w-full rounded-xl border border-border bg-panel px-3 text-[12.5px] text-ink outline-none focus:border-teal"
@@ -179,14 +217,16 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
 
           {/* 공통 제목 (옵셔널) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className={mobile ? 'mb-1.5 space-y-1' : 'flex items-center justify-between mb-1.5'}>
               <label className="text-[12px] font-bold text-ink">
                 사진 제목 <span className="text-[11px] font-normal text-ink3">(선택 사항)</span>
               </label>
-              <span className="text-[10.5px] text-ink3">미입력 시 원본 파일명 자동 사용</span>
+              <span className={`${mobile ? 'block' : ''} text-[10.5px] text-ink3`}>미입력 시 원본 파일명 자동 사용</span>
             </div>
             <input
               type="text"
+              aria-label="사진 제목"
+              disabled={mobile && isUploading}
               value={commonTitle}
               onChange={(e) => setCommonTitle(e.target.value)}
               placeholder="예: 춘계 워크숍 단체사진 (여러 장 등록 시 자동으로 번호가 붙습니다)"
@@ -209,7 +249,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
               }}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer select-none ${
+              className={`flex flex-col items-center justify-center ${mobile ? 'p-4' : 'p-6'} rounded-2xl border-2 border-dashed transition-all cursor-pointer select-none ${
                 isDragOver
                   ? 'border-teal bg-teal/10 scale-[0.99]'
                   : 'border-border hover:border-teal hover:bg-panel-alt'
@@ -219,7 +259,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 <Upload size={22} />
               </div>
               <p className="text-[13px] font-bold text-ink">
-                사진 파일을 이곳으로 끌어다 놓거나 클릭하여 선택하세요
+                {mobile ? '눌러서 사진을 선택하세요' : '사진 파일을 이곳으로 끌어다 놓거나 클릭하여 선택하세요'}
               </p>
               <p className="text-[11px] text-ink3 mt-0.5">
                 JPG, PNG, GIF, WEBP 지원 (최대 50장 동시 업로드 가능)
@@ -229,7 +269,12 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 type="file"
                 multiple
                 accept="image/*"
-                onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                aria-label="사진 파일 선택"
+                disabled={mobile && isUploading}
+                onChange={(e) => {
+                  if (e.target.files) handleFiles(e.target.files);
+                  if (mobile) e.target.value = '';
+                }}
                 className="hidden"
               />
             </div>
@@ -244,8 +289,10 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 </span>
                 <button
                   type="button"
+                  disabled={mobile && isUploading}
                   onClick={() => {
                     previews.forEach((p) => URL.revokeObjectURL(p.url));
+                    previewUrls.current.clear();
                     setSelectedFiles([]);
                     setPreviews([]);
                   }}
@@ -264,11 +311,13 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                     <img src={item.url} alt={item.name} className="h-full w-full object-cover" />
                     <button
                       type="button"
+                      aria-label={`${item.name} 선택 해제`}
+                      disabled={mobile && isUploading}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRemoveFile(idx);
                       }}
-                      className="absolute top-1 right-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      className={`absolute top-1 right-1 grid ${mobile ? 'h-7 w-7 opacity-100' : 'h-5 w-5 opacity-0 group-hover:opacity-100'} place-items-center rounded-full bg-black/70 text-white transition-opacity`}
                     >
                       <X size={12} />
                     </button>
@@ -282,7 +331,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
           )}
 
           {/* 푸터 */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border shrink-0">
+          <div className={`flex items-center justify-end gap-2 pt-3 border-t border-border shrink-0 ${mobile ? 'sticky -bottom-4 bg-panel pb-4' : ''}`}>
             <button
               type="button"
               onClick={onClose}

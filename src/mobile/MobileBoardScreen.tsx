@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   Pin,
@@ -35,7 +36,13 @@ const CATEGORIES: { id: BoardCategory; label: string; icon: string }[] = [
   { id: 'archive', label: '자료실', icon: '📁' },
 ];
 
+const isBoardCategory = (value: string | null): value is BoardCategory =>
+  CATEGORIES.some((category) => category.id === value);
+
 export default function MobileBoardScreen() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const boardParam = searchParams.get('board');
+  const selectedPostId = searchParams.get('postId');
   const { canAction, user } = usePermission();
   const canCreate = canAction('S_GW_BOARD', 'create');
   const canUpdate = canAction('S_GW_BOARD', 'update');
@@ -53,12 +60,48 @@ export default function MobileBoardScreen() {
   const isSubmitting = actions.saving;
 
   const [formError, setFormError] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<BoardCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const selectedPost = useMemo(() => posts.find((p) => String(p.id) === selectedPostId) ?? null, [posts, selectedPostId]);
+  const requestedCategory = isBoardCategory(boardParam) ? boardParam : 'ALL';
+  // 웹과 같이 글 ID가 있으면 실제 글이 속한 게시판을 우선한다.
+  const selectedCategory = selectedPost && isBoardCategory(selectedPost.boardId)
+    ? selectedPost.boardId
+    : requestedCategory;
+  const missingLinkedPost = Boolean(selectedPostId && postsQuery.isSuccess && !postsQuery.isFetching && !selectedPost);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const viewedPostId = useRef<string | null>(null);
+
+  useEffect(() => {
+    setConfirmDelete(false);
+    setDetailError('');
+  }, [selectedPostId]);
+
+  // 링크 진입과 목록 클릭 모두 기존 세션별 조회수 규칙을 사용한다.
+  useEffect(() => {
+    if (!selectedPost) {
+      viewedPostId.current = null;
+      return;
+    }
+    if (viewedPostId.current === selectedPost.id) return;
+    viewedPostId.current = selectedPost.id;
+    actions.countView(selectedPost);
+  }, [selectedPost, actions]);
+
+  const setBoardLocation = (category: BoardCategory, postId: string | null, replace = false) => {
+    const next = new URLSearchParams(searchParams);
+    if (category === 'ALL') next.delete('board');
+    else next.set('board', category);
+    if (postId) next.set('postId', postId);
+    else next.delete('postId');
+    setSearchParams(next, { replace });
+  };
+
+  const closePost = () => {
+    setConfirmDelete(false);
+    setDetailError('');
+    setBoardLocation(selectedCategory, null, true);
+  };
 
   // 글쓰기·수정 창 상태 (editing 이 있으면 수정)
   const [isWriteOpen, setIsWriteOpen] = useState(false);
@@ -88,10 +131,9 @@ export default function MobileBoardScreen() {
   };
 
   const openPost = (post: Post) => {
-    actions.countView(post);
     setConfirmDelete(false);
     setDetailError('');
-    setSelectedPostId(String(post.id));
+    setBoardLocation(isBoardCategory(post.boardId) ? post.boardId : selectedCategory, String(post.id));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,8 +179,7 @@ export default function MobileBoardScreen() {
     setDetailError('');
     try {
       await actions.remove(selectedPost);
-      setSelectedPostId(null);
-      setConfirmDelete(false);
+      closePost();
     } catch (err) {
       setDetailError(`게시글 삭제에 실패했습니다. ${err instanceof Error ? err.message : ''}`);
     }
@@ -207,7 +248,7 @@ export default function MobileBoardScreen() {
           <button
             key={cat.id}
             type="button"
-            onClick={() => setSelectedCategory(cat.id)}
+            onClick={() => setBoardLocation(cat.id, null)}
             className={`flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1 text-[11px] font-bold transition-all ${
               selectedCategory === cat.id
                 ? 'bg-teal text-white shadow-xs'
@@ -222,6 +263,12 @@ export default function MobileBoardScreen() {
 
       {/* 3. 게시글 목록 */}
       <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2">
+        {missingLinkedPost && (
+          <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-[12px] text-ink2">
+            <p>요청한 게시글을 찾을 수 없거나 열람할 수 없습니다.</p>
+            <button type="button" onClick={closePost} className="mt-2 font-bold text-teal underline">게시글 목록 보기</button>
+          </div>
+        )}
         {isLoading ? (
           <div className="py-16 text-center text-[12px] text-ink3">게시글을 불러오는 중입니다…</div>
         ) : loadError ? (
@@ -479,7 +526,8 @@ export default function MobileBoardScreen() {
             </div>
             <button
               type="button"
-              onClick={() => setSelectedPostId(null)}
+              aria-label="게시글 닫기"
+              onClick={closePost}
               className="grid h-8 w-8 place-items-center rounded-lg hover:bg-white/10 text-white transition-colors cursor-pointer"
             >
               <X size={18} />

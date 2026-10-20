@@ -4,6 +4,14 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { galleryRepo } from '@/data/gallery/gallery.repo';
 import type { GalleryFolder, GalleryPhoto } from '@/domain/gallery/schema';
 import { fileStorage } from '@/shared/lib/storage';
+import { buildFolderPath, collectFolderSubtree, folderDeletionOrder, planFolderRename } from '@/domain/gallery/folderRules';
+
+/** 폴더 삭제 확인창에 보여줄 범위 */
+export interface FolderDeletionScope {
+  folder: GalleryFolder;
+  subFolders: GalleryFolder[];
+  photoCount: number;
+}
 
 export interface FolderTreeNode extends GalleryFolder {
   children: FolderTreeNode[];
@@ -121,7 +129,10 @@ export function useGalleryDirectory() {
     let list = photos;
 
     if (currentFolderId !== null) {
-      list = list.filter((p) => p.folderId === currentFolderId);
+      // 상위 폴더에서는 하위 폴더 사진까지 함께 보여준다 (트리의 '하위 포함' 장수와 일치)
+      const ids = new Set(collectFolderSubtree(folders, currentFolderId).map((f) => f.id));
+      ids.add(currentFolderId);
+      list = list.filter((p) => ids.has(p.folderId));
     }
 
     const q = keyword.trim().toLowerCase();
@@ -142,7 +153,7 @@ export function useGalleryDirectory() {
     });
 
     return list;
-  }, [photos, currentFolderId, keyword, sortOrder]);
+  }, [photos, folders, currentFolderId, keyword, sortOrder]);
 
   // ── 10. 상위 폴더로 이동 헬퍼 ──
   const goUp = useCallback(() => {
@@ -158,7 +169,7 @@ export function useGalleryDirectory() {
       const newId = `fld_${Date.now()}`;
       const parent = params.parentId ? folders.find((f) => f.id === params.parentId) : null;
       const depth = parent ? parent.depth + 1 : 0;
-      const path = parent ? `${parent.path}/${params.name}` : `/${params.name}`;
+      const path = parent ? `${buildFolderPath(folders, parent.id)}/${params.name.trim()}` : `/${params.name.trim()}`;
 
       const newFolder: GalleryFolder = {
         id: newId,
@@ -186,47 +197,85 @@ export function useGalleryDirectory() {
     mutationFn: async (params: { id: string; name: string; description?: string }) => {
       const target = folders.find((f) => f.id === params.id);
       if (!target) throw new Error('폴더를 찾을 수 없습니다.');
-      const updated: GalleryFolder = {
-        ...target,
-        name: params.name.trim(),
-        description: params.description !== undefined ? params.description.trim() : target.description,
-        updatedAt: new Date().toISOString(),
-      };
-      await galleryRepo.saveFolder(updated);
+      const name = params.name.trim();
+      if (!name) throw new Error('폴더명을 입력해주세요.');
+      // 빈 문자열은 '설명 지우기', undefined만 '기존 설명 유지'
+      const description = params.description !== undefined ? params.description.trim() : target.description;
+      // 이름이 바뀌면 하위 폴더의 표시 경로(path)도 함께 다시 저장한다.
+      const plan = planFolderRename(folders, params.id, name, description);
+      let saved = 0;
+      try {
+        for (const folder of plan) {
+          await galleryRepo.saveFolder(folder);
+          saved += 1;
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          saved === 0
+            ? `폴더 정보를 저장하지 못했습니다. (${reason})`
+            : `폴더 이름은 바뀌었지만 하위 폴더 경로 ${plan.length - 1}개 중 ${saved - 1}개만 반영됐습니다. 다시 저장해 주세요. (${reason})`,
+        );
+      }
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_FOLDERS });
     },
   });
 
+  /** 삭제 확인창용: 함께 지워질 하위 폴더와 사진 수 (현재 불러온 목록 기준) */
+  const getFolderDeletionScope = useCallback(
+    (folderId: string): FolderDeletionScope | null => {
+      const subtree = collectFolderSubtree(folders, folderId);
+      if (subtree.length === 0) return null;
+      const ids = new Set(subtree.map((f) => f.id));
+      return {
+        folder: subtree[0],
+        subFolders: subtree.slice(1),
+        photoCount: photos.filter((p) => ids.has(p.folderId)).length,
+      };
+    },
+    [folders, photos],
+  );
+
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      // 하위 폴더 ID 목록 추출 (재귀)
-      const allSubFolderIds = new Set<string>();
-      function collect(pid: string) {
-        allSubFolderIds.add(pid);
-        const children = folders.filter((f) => f.parentId === pid);
-        for (const c of children) collect(c.id);
-      }
-      collect(folderId);
+      // 다른 사람이 그사이 올린 사진까지 지우도록 최신 목록으로 범위를 다시 계산한다.
+      const [latestFolders, latestPhotos] = await Promise.all([galleryRepo.listFolders(), galleryRepo.listPhotos()]);
+      const target = latestFolders.find((f) => f.id === folderId);
+      if (!target) throw new Error('폴더를 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.');
+      if (target.isSystem) throw new Error('기본 폴더는 삭제할 수 없습니다.');
 
-      // 하위 모든 폴더 삭제
-      for (const fid of allSubFolderIds) {
-        await galleryRepo.removeFolder(fid);
-      }
+      const folderIds = folderDeletionOrder(latestFolders, folderId);
+      const idSet = new Set(folderIds);
+      const photoIds = latestPhotos.filter((p) => idSet.has(p.folderId)).map((p) => p.id);
 
-      // 소속된 사진들 삭제
-      const relatedPhotos = photos.filter((p) => allSubFolderIds.has(p.folderId));
-      if (relatedPhotos.length > 0) {
-        await galleryRepo.batchDeletePhotos(relatedPhotos.map((p) => p.id));
+      // 사진 → 깊은 하위 폴더 → 선택한 폴더 순서로 지운다.
+      // 중간에 실패해도 남은 사진·폴더는 화면에 그대로 보여 다시 지울 수 있다.
+      let photosDone = 0;
+      let foldersDone = 0;
+      try {
+        for (const id of photoIds) {
+          await galleryRepo.removePhoto(id);
+          photosDone += 1;
+        }
+        for (const id of folderIds) {
+          await galleryRepo.removeFolder(id);
+          foldersDone += 1;
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `삭제 중 오류가 났습니다. 사진 ${photoIds.length}장 중 ${photosDone}장, 폴더 ${folderIds.length}개 중 ${foldersDone}개를 삭제했습니다. 목록을 확인하고 다시 시도해 주세요. (${reason})`,
+        );
+      } finally {
+        const removed = new Set(folderIds.slice(0, foldersDone));
+        setCurrentFolderId((cur) => (cur && removed.has(cur) ? null : cur));
       }
     },
-    onSuccess: (_, folderId) => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_FOLDERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_PHOTOS });
-      if (currentFolderId === folderId) {
-        setCurrentFolderId(null);
-      }
     },
   });
 
@@ -325,7 +374,8 @@ export function useGalleryDirectory() {
     mutationFn: async (params: { photoIds: string[]; targetFolderId: string }) => {
       await galleryRepo.batchMovePhotos(params.photoIds, params.targetFolderId);
     },
-    onSuccess: () => {
+    // 순차 처리 중 실패해도 이미 반영된 사진이 보이도록 항상 다시 불러온다
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_PHOTOS });
     },
   });
@@ -338,7 +388,7 @@ export function useGalleryDirectory() {
         dept: user?.dept || '전사',
       });
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_PHOTOS });
     },
   });
@@ -377,6 +427,7 @@ export function useGalleryDirectory() {
     createFolder: createFolderMutation.mutateAsync,
     updateFolder: updateFolderMutation.mutateAsync,
     deleteFolder: deleteFolderMutation.mutateAsync,
+    getFolderDeletionScope,
     isFolderMutating: createFolderMutation.isPending || updateFolderMutation.isPending || deleteFolderMutation.isPending,
 
     uploadPhotos: uploadPhotosMutation.mutateAsync,

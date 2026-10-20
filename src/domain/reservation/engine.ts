@@ -164,15 +164,16 @@ export function canCancelReservation(actor: User, row: Reservation, isAdmin = fa
   );
 }
 
-export function assertCancellationAllowed(actor: User, resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
+/** 본인 예약은 시작 전까지 취소 가능. 기존 자원별 사전 마감(분)은 적용하지 않는다. */
+export function assertCancellationAllowed(actor: User, _resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
   if (!canCancelReservation(actor, row, isAdmin)) {
     throw new ReservationError('FORBIDDEN', '본인 예약만 취소할 수 있습니다.');
   }
   if (row.status !== 'PENDING' && row.status !== 'CONFIRMED') {
     throw new ReservationError('INVALID_STATUS', '현재 상태에서는 예약을 취소할 수 없습니다.');
   }
-  if (!isAdmin && new Date(row.startAt).getTime() - now.getTime() < resource.cancelDeadlineMinutes * 60_000) {
-    throw new ReservationError('CANCEL_DEADLINE', `예약 시작 ${resource.cancelDeadlineMinutes}분 전까지만 취소할 수 있습니다.`);
+  if (!isAdmin && new Date(row.startAt).getTime() <= now.getTime()) {
+    throw new ReservationError('PAST_TIME', '예약 시작 이후에는 취소할 수 없습니다.');
   }
 }
 
@@ -218,15 +219,15 @@ export function planReschedule(resource: Resource, row: Reservation, next: Resch
   return { status: 'PENDING', keepsApproval: false };
 }
 
-/** 시간 변경 권한 — 취소와 같다(본인은 마감 전, 관리자는 언제든). */
-export function assertRescheduleAllowed(actor: User, resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
+/** 시간 변경 권한 — 취소와 같다(본인은 시작 전, 관리자는 기존 예외 유지). */
+export function assertRescheduleAllowed(actor: User, _resource: Resource, row: Reservation, now = new Date(), isAdmin = false): void {
   if (!canCancelReservation(actor, row, isAdmin)) {
     throw new ReservationError('FORBIDDEN', '본인 예약만 변경할 수 있습니다.');
   }
   if (row.status !== 'PENDING' && row.status !== 'CONFIRMED') {
     throw new ReservationError('INVALID_STATUS', '현재 상태에서는 예약을 변경할 수 없습니다.');
   }
-  if (!isAdmin && new Date(row.startAt).getTime() - now.getTime() < resource.cancelDeadlineMinutes * 60_000) {
-    throw new ReservationError('CANCEL_DEADLINE', `예약 시작 ${resource.cancelDeadlineMinutes}분 전까지만 변경할 수 있습니다.`);
+  if (!isAdmin && new Date(row.startAt).getTime() <= now.getTime()) {
+    throw new ReservationError('PAST_TIME', '예약 시작 이후에는 변경할 수 없습니다.');
   }
 }

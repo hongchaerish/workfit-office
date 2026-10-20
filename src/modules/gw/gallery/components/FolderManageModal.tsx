@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { GalleryFolder } from '@/domain/gallery/schema';
 import { X, Folder, FolderPlus } from 'lucide-react';
 
@@ -8,6 +8,8 @@ interface FolderManageModalProps {
   parentFolder: GalleryFolder | null;
   editingFolder: GalleryFolder | null;
   onSubmit: (name: string, description?: string) => Promise<void>;
+  variant?: 'desktop' | 'mobile';
+  locationPicker?: ReactNode;
 }
 
 export function FolderManageModal({
@@ -16,11 +18,15 @@ export function FolderManageModal({
   parentFolder,
   editingFolder,
   onSubmit,
+  variant = 'desktop',
+  locationPicker,
 }: FolderManageModalProps) {
+  const mobile = variant === 'mobile';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const sending = useRef(false);
 
   const isEdit = Boolean(editingFolder);
 
@@ -42,29 +48,33 @@ export function FolderManageModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mobile && sending.current) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError('폴더명을 입력해주세요.');
       return;
     }
 
+    sending.current = true;
     setIsSubmitting(true);
     setError('');
     try {
-      await onSubmit(trimmed, description.trim() || undefined);
+      // 빈 설명도 그대로 보내야 수정 시 기존 설명이 지워진다.
+      await onSubmit(trimmed, description.trim());
       onClose();
     } catch (err: any) {
       setError(err?.message || '폴더 저장 중 오류가 발생했습니다.');
     } finally {
+      sending.current = false;
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden">
+    <div className={`fixed inset-0 ${mobile ? 'z-[60] p-3' : 'z-50 p-4'} flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-200`}>
+      <div role={mobile ? 'dialog' : undefined} aria-modal={mobile ? true : undefined} aria-label={mobile ? isEdit ? '폴더 정보 변경' : '폴더 생성' : undefined} className={`w-full max-w-md ${mobile ? 'max-h-[90dvh] flex flex-col' : ''} rounded-2xl border border-border bg-panel shadow-2xl overflow-hidden`}>
         {/* 헤더 */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-panel-alt">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5 bg-panel-alt">
           <div className="flex items-center gap-2">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-teal/10 text-teal">
               {isEdit ? <Folder size={18} /> : <FolderPlus size={18} />}
@@ -82,6 +92,8 @@ export function FolderManageModal({
           </div>
           <button
             type="button"
+            aria-label="폴더 창 닫기"
+            disabled={mobile && isSubmitting}
             onClick={onClose}
             className="grid h-7 w-7 place-items-center rounded-lg text-ink3 hover:bg-panel hover:text-ink"
           >
@@ -90,12 +102,14 @@ export function FolderManageModal({
         </div>
 
         {/* 폼 본문 */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className={`${mobile ? 'min-h-0 overflow-y-auto p-4' : 'p-5'} space-y-4`}>
           {error && (
-            <div className="rounded-lg bg-danger/10 p-2.5 text-[12px] font-medium text-danger">
+            <div role="alert" className="rounded-lg bg-danger/10 p-2.5 text-[12px] font-medium text-danger">
               {error}
             </div>
           )}
+
+          {locationPicker}
 
           <div>
             <label className="block text-[12px] font-bold text-ink mb-1.5">
@@ -103,6 +117,8 @@ export function FolderManageModal({
             </label>
             <input
               type="text"
+              aria-label="카테고리명"
+              disabled={mobile && isSubmitting}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="예: 사내 행사, 워크숍, 제품 촬영, 일상 등"
@@ -117,6 +133,8 @@ export function FolderManageModal({
               카테고리 설명 <span className="text-[11px] font-normal text-ink3">(선택)</span>
             </label>
             <textarea
+              aria-label="카테고리 설명"
+              disabled={mobile && isSubmitting}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="이 카테고리에 등록될 사진에 대한 간단한 설명을 입력하세요."
