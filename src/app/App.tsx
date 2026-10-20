@@ -96,7 +96,9 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
 
   '/base/approval-form': lazy(() => import('@/modules/base/approvalForm/ApprovalFormScreen')),
   '/base/approval-monitor': lazy(() => import('@/modules/base/approvalMonitor/ApprovalMonitorScreen')),
-  '/base/vendor': lazy(() => import('@/modules/base/vendor/VendorScreen')),
+  // 사업관리
+  '/biz/vendor': lazy(() => import('@/modules/biz/vendor/BizVendorScreen')),
+  '/biz/project': lazy(() => import('@/modules/biz/project/BizProjectScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
   '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
   // 시스템 관리
@@ -107,9 +109,6 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/sys/env': lazy(() => import('@/modules/sys/env/EnvScreen')),
   '/sys/backup': lazy(() => import('@/modules/sys/backup/BackupScreen')),
   '/sys/interface': lazy(() => import('@/modules/sys/interface/InterfaceScreen')),
-  '/sales/quote': lazy(() => import('@/modules/sales/quote/SalesQuoteScreen')),
-  '/sales/order': lazy(() => import('@/modules/sales/order/SalesOrderScreen')),
-  '/sales/order-status': lazy(() => import('@/modules/sales/order-status/SalesOrderStatusScreen')),
 };
 
 import { useAuth } from '@/app/auth/AuthProvider';

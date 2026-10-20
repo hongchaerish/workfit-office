@@ -17,14 +17,30 @@ export const MENU_TREE: MenuNode[] = [
   },
 
 
-  /* ── 영업 관리 ── */
+  /* ── 사업관리 — 거래처와 거래처별 사업(프로젝트)을 관리 ── */
   {
-    id: 'M_SALES', name: '영업 관리', icon: '₩', order: 25, use: true, children: [
+    id: 'M_BIZ', name: '사업관리', icon: '▣', order: 25, use: true, children: [
       {
-        id: 'G_SALES_ORDER', name: '영업수주 관리', icon: '✎', order: 10, use: true, children: [
-          { id: 'S_SALES_QUOTE', name: '견적서 입력/관리', url: '/sales/quote', icon: '✎', order: 10, use: true },
-          { id: 'S_SALES_SO', name: '수주/주문서 입력', url: '/sales/order', icon: '⊞', order: 20, use: true },
-          { id: 'S_SALES_SOSTAT', name: '주문서 현황', url: '/sales/order-status', icon: '◷', order: 30, use: true },
+        id: 'G_BIZ_PARTNER', name: '거래처', icon: '▤', order: 10, use: true, children: [
+          { id: 'S_BIZ_VENDOR', name: '거래처 정보', url: '/biz/vendor', icon: '▤', order: 10, use: true },
+        ]
+      },
+      {
+        id: 'G_BIZ_PROJECT', name: '사업 관리', icon: '⊞', order: 20, use: true, children: [
+          { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', icon: '⊞', order: 10, use: true },
+        ]
+      },
+    ]
+  },
+
+  /* ── 영업 관리 — 숨김(2026-10-20, 사업관리로 대체). 라우트·권한 목록에서도 빠져 데이터와 연결되지 않는다 ── */
+  {
+    id: 'M_SALES', name: '영업 관리', icon: '₩', order: 26, use: false, children: [
+      {
+        id: 'G_SALES_ORDER', name: '영업수주 관리', icon: '✎', order: 10, use: false, children: [
+          { id: 'S_SALES_QUOTE', name: '견적서 입력/관리', url: '/sales/quote', icon: '✎', order: 10, use: false },
+          { id: 'S_SALES_SO', name: '수주/주문서 입력', url: '/sales/order', icon: '⊞', order: 20, use: false },
+          { id: 'S_SALES_SOSTAT', name: '주문서 현황', url: '/sales/order-status', icon: '◷', order: 30, use: false },
         ]
       },
     ]
@@ -40,7 +56,8 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'G_BASE_USER', name: '사용자/권한', icon: '◫', order: 10, use: true, children: [
           { id: 'S_BASE_USER', name: '사용자관리', url: '/base/user', icon: '◫', order: 10, use: true },
-          { id: 'S_BASE_VENDOR', name: '거래처관리', url: '/base/vendor', icon: '◫', order: 20, use: true },
+          // 사업관리 > 거래처 정보로 옮김(같은 vendors 데이터). 숨김.
+          { id: 'S_BASE_VENDOR', name: '거래처관리', url: '/base/vendor', icon: '◫', order: 20, use: false },
           { id: 'S_BASE_AUTH', name: '그룹권한관리', url: '/base/auth', icon: '◫', order: 30, use: true },
         ]
       },

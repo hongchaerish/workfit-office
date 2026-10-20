@@ -20,7 +20,7 @@ export const PERM_CATEGORIES = [
   { id: 'EXEC', name: '경영 & 운영 현황' },
   { id: 'BASE', name: '기준 정보 & 결재 관리' },
   { id: 'SYS', name: '시스템 관리 & 보안 감사' },
-  { id: 'SALES', name: '영업 & 수주 관리' },
+  { id: 'BIZ', name: '사업관리' },
 ] as const;
 
 export type PermCategoryId = (typeof PERM_CATEGORIES)[number]['id'];
@@ -56,12 +56,11 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   // 2. 경영 현황 (1개)
   { id: 'S_EXEC_DASH', name: '경영 대시보드', url: '/exec', category: 'EXEC', desc: '경영 지표 및 전사 KPI 요약', supportedActions: ['access', 'update'] },
 
-  // 3. 기준 정보 & 결재 관리 (8개)
+  // 3. 기준 정보 & 결재 관리 (7개) — 거래처 관리(S_BASE_VENDOR)는 사업관리 > 거래처 정보로 옮겨 뺐다
   { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', category: 'BASE', desc: '사원 등록, 계정 및 퇴사 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_DEPT', name: '부서/조직 관리', url: '/base/department', category: 'BASE', desc: '부서 생성, 트리 구조 및 부서장 지정', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_POSITION', name: '직급 관리', url: '/base/position', category: 'BASE', desc: '직급 서열 및 명칭 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_HOLIDAY', name: '공휴일 관리', url: '/base/holiday', category: 'BASE', desc: '법정 공휴일 및 회사 지정 휴일 등록/수정', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_BASE_VENDOR', name: '거래처 관리', url: '/base/vendor', category: 'BASE', desc: '협력업체 및 거래처 정보', supportedActions: ['access', 'create', 'update', 'delete'] },
 
   { id: 'S_BASE_CODE', name: '공통코드 정보', url: '/base/code', category: 'BASE', desc: '시스템 공통 코드 마스터', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BASE_APFORM', name: '결재서식 관리', url: '/base/approval-form', category: 'BASE', desc: '전자결재 양식, 입력필드 및 룰 설정', supportedActions: ['access', 'create', 'update', 'delete'] },
@@ -75,10 +74,9 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_SYS_BACKUP', name: '데이터 백업', url: '/sys/backup', category: 'SYS', desc: '데이터베이스 백업 및 복원', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', category: 'SYS', desc: '외부 시스템 연동 및 API 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
 
-  // 5. 영업 & 수주 관리 (3개)
-  { id: 'S_SALES_QUOTE', name: '견적서 관리', url: '/sales/quote', category: 'SALES', desc: '영업 견적서 작성 및 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_SALES_SO', name: '수주/주문서 입력', url: '/sales/order', category: 'SALES', desc: '수주 및 주문 등록 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
-  { id: 'S_SALES_SOSTAT', name: '주문서 현황', url: '/sales/order-status', category: 'SALES', desc: '주문서 진행 현황 및 집계', supportedActions: ['access', 'update'] },
+  // 5. 사업관리 (2개) — 영업 & 수주 관리(S_SALES_*)는 2026-10-20 숨김 처리되어 목록에서 뺐다
+  { id: 'S_BIZ_VENDOR', name: '거래처 정보', url: '/biz/vendor', category: 'BIZ', desc: '거래처 등록·수정 및 거래처별 진행 사업', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', category: 'BIZ', desc: '사업(프로젝트) 목록과 연결 거래처', supportedActions: ['access', 'update'] },
 ];
 
 /** 화면별 액션 플래그 스키마 (표준 4대 CRUD: access, create, update, delete) */

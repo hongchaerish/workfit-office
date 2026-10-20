@@ -11,6 +11,7 @@
     "migrate-pw": "tsx scripts/migrate-passwords.ts",
     "appwrite:schema": "tsx scripts/appwrite-schema.ts",
     "appwrite:schema:po": "tsx scripts/appwrite-schema.ts --only=poArchiveReplies --new-only",
+    "appwrite:schema:biz": "tsx scripts/appwrite-schema.ts --only=vendors,bizVendorProjects --new-only",
     "etl": "tsx scripts/etl-firestore-to-appwrite.ts"
   },
   "dependencies": {

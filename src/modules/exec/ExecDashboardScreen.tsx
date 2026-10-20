@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/shared/ui/Card';
 import { Sparkline } from '@/shared/ui/charts/Sparkline';
@@ -28,6 +29,11 @@ function SecHead({ children }: { children: string }) {
  * 경영 현황(Executive Cockpit) — 로그인 후 랜딩. 회사 전체를 경영자 관점 한 화면에 요약.
  * 데이터는 단일 소스 `getExecDashboardData()`(현재 데모 샘플). 계획서 §4.
  */
+/** 드릴다운 목적지가 있으면 링크, 없으면 그냥 상자. */
+function DrillLink({ to, className, children }: { to?: string; className?: string; children: ReactNode }) {
+  return to ? <Link to={to} className={className}>{children}</Link> : <div className={className}>{children}</div>;
+}
+
 export default function ExecDashboardScreen() {
   const d = getExecDashboardData();
 
@@ -60,7 +66,7 @@ export default function ExecDashboardScreen() {
           const up = t.delta.trim().startsWith('+');
           const good = up === t.goodWhenUp;
           return (
-            <Link key={t.key} to={t.to} className="group">
+            <DrillLink key={t.key} to={t.to} className="group">
               <Card className="transition-shadow group-hover:shadow-[0_6px_20px_rgba(16,24,48,0.12)]">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0">
@@ -74,7 +80,7 @@ export default function ExecDashboardScreen() {
                   <Sparkline data={t.spark} w={84} h={36} color={t.color} />
                 </div>
               </Card>
-            </Link>
+            </DrillLink>
           );
         })}
       </div>
@@ -114,7 +120,7 @@ export default function ExecDashboardScreen() {
         <Card title="경영 알림 (Exec Alerts)">
           <div className="flex flex-col divide-y divide-border">
             {d.alerts.map((a) => (
-              <Link
+              <DrillLink
                 key={a.key}
                 to={a.to}
                 className="-mx-1 flex items-center gap-3 rounded-md px-1 py-2.5 transition-colors hover:bg-panel-alt"
@@ -129,8 +135,8 @@ export default function ExecDashboardScreen() {
                 <span className="text-[13px] font-extrabold tabular-nums" style={{ color: TONE_COLOR[a.tone] }}>
                   {a.count}
                 </span>
-                <span className="text-[11px] text-ink3">›</span>
-              </Link>
+                {a.to && <span className="text-[11px] text-ink3">›</span>}
+              </DrillLink>
             ))}
           </div>
         </Card>

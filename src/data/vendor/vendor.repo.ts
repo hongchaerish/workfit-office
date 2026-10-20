@@ -52,6 +52,14 @@ export const vendorRepo = {
     await backend.save(vendorSchema.parse(vendor));
   },
 
+  /**
+   * 신규 등록 — 같은 거래처코드가 있으면 덮어쓰지 않고 `DocumentExistsError`.
+   * 컬렉션이 없을 때도 조용히 건너뛰지 않고 오류를 낸다(save 는 404 를 건너뛴다).
+   */
+  async create(vendor: Vendor): Promise<void> {
+    await backend.insert(vendorSchema.parse(vendor));
+  },
+
   async remove(code: string): Promise<void> {
     await backend.remove(code);
   },

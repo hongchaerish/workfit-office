@@ -14,6 +14,9 @@
  *   --dry-run    서버를 조회만 하고 무엇을 만들지 출력한 뒤 끝낸다(쓰기 0건).
  *   --prod       운영 프로젝트 ID·APPWRITE_API_KEY_PROD 를 쓴다.
  *
+ *   예) 사업관리(거래처-사업 연결, vendors 가 없을 때만 vendors 도) 새로 만들기:
+ *       npm run appwrite:schema:biz -- --dry-run
+ *
  *   예) 발주서 보관함 회신 컬렉션만 새로 만들기:
  *       npm run appwrite:schema:po -- --dry-run          (확인)
  *       npm run appwrite:schema:po                       (dev 적용)
@@ -593,6 +596,25 @@ const COLLECTIONS: CollectionDef[] = [
       S('grade', 16),
     ],
     indexes: [IX('type', ['type'])],
+  },
+  {
+    id: 'bizVendorProjects',
+    name: '거래처-사업 연결',
+    /*
+      사업관리 › 거래처 정보. 거래처(vendors.code) ↔ 사업(workProjects.id) 연결표.
+      $id = `${vendorCode}__${projectId}` 라 같은 연결은 두 번 생기지 않는다. role = 발주처·매입처·외주.
+      vendors·workProjects 에는 칸을 더하지 않는다 — 연결은 전부 여기에만 있다.
+    */
+    attributes: [
+      S('id', 128, true),
+      S('vendorCode', 64, true),
+      S('projectId', 64, true),
+      EN('role', ['발주처', '매입처', '외주']),
+      S('note', 200),
+      S('createdBy', 64, true),
+      S('createdAt', 40),
+    ],
+    indexes: [IX('bvpVendor', ['vendorCode']), IX('bvpProject', ['projectId'])],
   },
   {
     id: 'items',

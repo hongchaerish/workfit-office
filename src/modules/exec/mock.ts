@@ -17,8 +17,8 @@ export interface ExecKpi {
   goodWhenUp: boolean;
   color: string;
   spark: number[];
-  /** 드릴다운 목적지(원천 화면). */
-  to: string;
+  /** 드릴다운 목적지(원천 화면). 없으면 눌러도 이동하지 않는다(영업 관리 숨김으로 끊은 항목 등). */
+  to?: string;
 }
 
 export interface DeptScore {
@@ -33,7 +33,8 @@ export interface ExecAlert {
   label: string;
   count: string;
   tone: 'err' | 'warn' | 'ok' | 'info';
-  to: string;
+  /** 없으면 눌러도 이동하지 않는다. */
+  to?: string;
 }
 
 export interface ExecTrend {
@@ -94,10 +95,10 @@ const DATA: ExecDashboardData = {
     { key: 'ach', label: '생산 달성률', value: '97.8%', delta: '+1.2%p', goodWhenUp: true, color: C.teal, spark: [94, 96, 95, 97, 98, 97.8], to: '/report/prod-pva' },
     { key: 'fpy', label: '종합 수율(FPY)', value: '97.1%', delta: '+0.4%p', goodWhenUp: true, color: C.blue, spark: [96, 96.5, 96.2, 97, 97.3, 97.1], to: '/report/yield' },
     { key: 'oee', label: '평균 OEE', value: '86.6%', delta: '+0.9%p', goodWhenUp: true, color: C.navy, spark: [83, 84, 85, 84, 86, 86.6], to: '/equip/oee' },
-    { key: 'otd', label: '납기 준수율', value: '98.4%', delta: '-0.3%p', goodWhenUp: true, color: C.warn, spark: [99, 98, 99, 98.5, 98.7, 98.4], to: '/sales/order-status' },
+    { key: 'otd', label: '납기 준수율', value: '98.4%', delta: '-0.3%p', goodWhenUp: true, color: C.warn, spark: [99, 98, 99, 98.5, 98.7, 98.4] },
     { key: 'turn', label: '재고 회전율', value: '5.9회', delta: '+0.3', goodWhenUp: true, color: C.teal, spark: [5.4, 5.6, 5.5, 5.7, 5.8, 5.9], to: '/report/turnover' },
     { key: 'claim', label: '클레임 건수', value: '14건', delta: '-3건', goodWhenUp: false, color: C.err, spark: [22, 19, 17, 16, 15, 14], to: '/qual/voc' },
-    { key: 'rev', label: '월 매출', value: '32.6억', delta: '+4.1%', goodWhenUp: true, color: '#7a3f97', spark: [28.4, 29.1, 30.2, 31.0, 31.3, 32.6], to: '/sales/revenue' },
+    { key: 'rev', label: '월 매출', value: '32.6억', delta: '+4.1%', goodWhenUp: true, color: '#7a3f97', spark: [28.4, 29.1, 30.2, 31.0, 31.3, 32.6] },
     { key: 'cost', label: '원가율', value: '78.2%', delta: '-0.6%p', goodWhenUp: false, color: C.blue, spark: [80, 79.5, 79, 78.8, 78.6, 78.2], to: '/report/cost' },
   ],
   scores: [
@@ -113,10 +114,10 @@ const DATA: ExecDashboardData = {
     quality: [96, 96.5, 96.2, 97, 97.3, 97.1],
   },
   alerts: [
-    { key: 'otd', icon: '⏰', label: '납기 임박·지연 수주', count: '5건', tone: 'err', to: '/sales/order-status' },
+    { key: 'otd', icon: '⏰', label: '납기 임박·지연 수주', count: '5건', tone: 'err' },
     { key: 'safety', icon: '📦', label: '안전재고 미달 품목', count: '8건', tone: 'warn', to: '/mat/safety-stock' },
     { key: 'qalarm', icon: '⚠️', label: '미해제 품질 알람', count: '3건', tone: 'warn', to: '/qual/spc-alarm' },
-    { key: 'credit', icon: '💳', label: '여신 한도 초과 거래처', count: '2건', tone: 'err', to: '/sales/credit' },
+    { key: 'credit', icon: '💳', label: '여신 한도 초과 거래처', count: '2건', tone: 'err' },
     { key: 'eqfault', icon: '🔧', label: '설비 고장·미조치 알람', count: '1건', tone: 'warn', to: '/equip/alarm' },
   ],
   periodRows: [

@@ -21,15 +21,15 @@ const adminPermissions = () => {
   return map;
 };
 
-/** 2. 임원 (경영진) 권한 (그룹웨어 + 경영/운영 + 영업현황 + 결재모니터링 조회) */
+/** 2. 임원 (경영진) 권한 (그룹웨어 + 경영/운영 + 사업관리 + 결재모니터링 조회) */
 const execPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
     const isGw = s.category === 'GW';
     const isExec = s.category === 'EXEC';
-    const isSales = s.category === 'SALES';
+    const isBiz = s.category === 'BIZ';
     const isMon = ['/base/approval-monitor', '/base/user', '/base/department', '/base/position'].includes(s.url);
-    const canView = isGw || isExec || isSales || isMon;
+    const canView = isGw || isExec || isBiz || isMon;
 
     map[s.id] = {
       access: canView,
@@ -41,20 +41,20 @@ const execPermissions = () => {
   return map;
 };
 
-/** 3. 재무관리자 권한 (그룹웨어 + 영업/수주 전권 + 거래처/코드 + 결재모니터링) */
+/** 3. 재무관리자 권한 (그룹웨어 + 사업관리(거래처 포함) 전권 + 코드 + 결재모니터링) */
 const financeAdminPermissions = () => {
   const map: Record<string, any> = {};
   SYSTEM_SCREENS.forEach((s) => {
     const isGw = s.category === 'GW';
-    const isSales = s.category === 'SALES';
-    const isFinanceTarget = ['/base/vendor', '/base/code', '/base/approval-monitor', '/exec'].includes(s.url);
-    const canAccess = isGw || isSales || isFinanceTarget;
+    const isBiz = s.category === 'BIZ';
+    const isFinanceTarget = ['/base/code', '/base/approval-monitor', '/exec'].includes(s.url);
+    const canAccess = isGw || isBiz || isFinanceTarget;
 
     map[s.id] = {
       access: canAccess,
-      create: isGw || isSales || ['/base/vendor', '/base/code'].includes(s.url),
-      update: isGw || isSales || ['/base/vendor', '/base/code'].includes(s.url),
-      delete: isSales,
+      create: isGw || isBiz || s.url === '/base/code',
+      update: isGw || isBiz || s.url === '/base/code',
+      delete: isBiz,
     };
   });
   return map;
