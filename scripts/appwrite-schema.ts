@@ -6,6 +6,19 @@
  *
  * 실행: npm run appwrite:schema   (내부적으로 tsx scripts/appwrite-schema.ts)
  *
+ * 옵션:
+ *   --only=a,b   정의된 컬렉션 중 이것만 대상으로 한다.
+ *   --new-only   **새 컬렉션 생성만** 한다(--only 필수). 대상 컬렉션이 이미 있으면 속성·인덱스·enum
+ *                포함 아무것도 고치지 않고 건너뛰며, 데이터베이스가 없으면 만들지 않고 멈춘다.
+ *                다른 컬렉션과 문서(데이터)는 어떤 모드에서도 읽거나 쓰지 않는다.
+ *   --dry-run    서버를 조회만 하고 무엇을 만들지 출력한 뒤 끝낸다(쓰기 0건).
+ *   --prod       운영 프로젝트 ID·APPWRITE_API_KEY_PROD 를 쓴다.
+ *
+ *   예) 발주서 보관함 회신 컬렉션만 새로 만들기:
+ *       npm run appwrite:schema:po -- --dry-run          (확인)
+ *       npm run appwrite:schema:po                       (dev 적용)
+ *       npm run appwrite:schema:po -- --prod             (운영 적용)
+ *
  * 필요 env (.env.local 또는 프로세스 환경):
  *   APPWRITE_ENDPOINT     (없으면 VITE_APPWRITE_ENDPOINT)   예: https://appwrite.widdyax.com/v1
  *   APPWRITE_PROJECT_ID   (없으면 VITE_APPWRITE_PROJECT_ID) 예: 6a6bf85e002acb7f71d6
@@ -1533,8 +1546,23 @@ async function main() {
     }
   }
 
+  const newOnly = process.argv.includes('--new-only');
+  const dryRun = process.argv.includes('--dry-run');
+  if (newOnly && !only) {
+    console.error('✗ --new-only 는 --only=컬렉션 과 함께 써야 합니다(전체 컬렉션 대상 실행 방지).');
+    process.exit(1);
+  }
+
   console.log(`▶ Appwrite 스키마 적용 — ${endpoint} / project ${projectId} / db ${dbId}`);
-  console.log(only ? `  대상 한정: ${only.join(', ')}\n` : `  대상: 전체 ${targets.length}종\n`);
+  console.log(only ? `  대상 한정: ${only.join(', ')}` : `  대상: 전체 ${targets.length}종`);
+  if (newOnly) console.log('  모드: 새 컬렉션 생성만(기존 컬렉션·데이터 무변경)');
+  if (dryRun) console.log('  모드: dry-run(조회만, 쓰기 없음)');
+  console.log('');
+
+  if (newOnly || dryRun) {
+    await runGuarded(dbs, dbId, targets, { newOnly, dryRun });
+    return;
+  }
 
   await ensureDatabase(dbs, dbId);
 
@@ -1553,6 +1581,62 @@ async function main() {
   }
 
   console.log('\n✅ 스키마 적용 완료. (재실행해도 안전 — 멱등)');
+}
+
+/**
+ * 안전 모드(--new-only / --dry-run).
+ *
+ * 쓰기는 **없던 컬렉션을 만들고 그 안에 속성·인덱스를 다는 것**뿐이다. 이미 있는 컬렉션은
+ * 존재 확인(getCollection)만 하고 건너뛴다 — 기존 컬렉션에 속성을 추가하거나 enum 값을 늘리는
+ * ensureAttribute 경로를 아예 타지 않는다. 데이터베이스도 만들지 않는다.
+ */
+async function runGuarded(
+  dbs: Databases,
+  dbId: string,
+  targets: CollectionDef[],
+  opts: { newOnly: boolean; dryRun: boolean },
+) {
+  try {
+    await dbs.get(dbId);
+  } catch (e) {
+    if (isCode(e, 404)) {
+      console.error(`✗ database "${dbId}" 가 없습니다 — 안전 모드에서는 만들지 않습니다.`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  let created = 0;
+  for (const c of targets) {
+    console.log(`[${c.id}] ${c.name}`);
+    let exists = true;
+    try {
+      await dbs.getCollection(dbId, c.id);
+    } catch (e) {
+      if (!isCode(e, 404)) throw e;
+      exists = false;
+    }
+
+    if (exists) {
+      console.log(`  • 이미 존재 — ${opts.newOnly ? '안전 모드라 아무것도 바꾸지 않고 건너뜀' : '(dry-run) 일반 모드라면 빠진 속성·인덱스를 추가함'}`);
+      continue;
+    }
+
+    console.log(`  + 새로 만듦: 속성 ${c.attributes.length}개 [${c.attributes.map((a) => a.key).join(', ')}]`);
+    if (c.indexes.length) console.log(`  + 인덱스 ${c.indexes.length}개 [${c.indexes.map((i) => i.key).join(', ')}]`);
+    if (opts.dryRun) continue;
+
+    await dbs.createCollection(dbId, c.id, c.name, c.permissions ?? POC_PERMISSIONS, /* documentSecurity */ false);
+    console.log(`  ✓ collection "${c.id}" 생성`);
+    // 방금 만든 빈 컬렉션이라 기존 속성이 없다 — 그 컬렉션에만 속성·인덱스를 단다.
+    for (const a of c.attributes) await ensureAttribute(dbs, dbId, c.id, a, new Set());
+    await waitAttributesAvailable(dbs, dbId, c.id, c.attributes.map((a) => a.key));
+    for (const idx of c.indexes) await ensureIndex(dbs, dbId, c.id, idx, new Set());
+    created++;
+  }
+
+  if (opts.dryRun) console.log('\n✅ dry-run 끝 — 아무것도 쓰지 않았습니다.');
+  else console.log(created ? `\n✅ 완료 — 새 컬렉션 ${created}개만 만들었습니다.` : '\n✅ 완료 — 만들 컬렉션이 없어 아무것도 바꾸지 않았습니다.');
 }
 
 main().catch((e) => {
