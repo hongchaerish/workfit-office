@@ -535,6 +535,28 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('docType', ['docType']), IX('priority', ['priority'])],
   },
   {
+    id: 'poArchiveReplies',
+    name: '발주서 회신 문서',
+    /*
+      문서관리 > 발주서 보관함의 회신본(거래처 직인이 찍힌 최종본). 문서당 1건, $id = 결재 문서 ID.
+      보관함 목록 자체는 approvalDocs(완료·발주 서식)에서 골라 보여 주므로 여기엔 회신 메타만 있다.
+      실제 파일은 fileStorage(Garage S3) poArchive/{docId}/ 아래.
+    */
+    attributes: [
+      S('docId', 64, true),
+      S('docNo', 64, true),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 100),
+      S('uploadedBy', 64, true),
+      S('uploadedByName', 64),
+      S('uploadedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
     id: 'approvalFolders',
     name: '결재 서식 폴더',
     attributes: [S('id', 64, true), S('name', 128, true), INT('order')],

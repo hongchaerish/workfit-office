@@ -20,12 +20,14 @@ import {
   FolderPlus,
   FilePlus,
   TrendingUp,
+  PackageCheck,
 } from 'lucide-react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
+import { PurchaseOrderArchive } from './PurchaseOrderArchive';
 
 export default function DocumentScreen() {
   const { user } = useAuth();
@@ -56,7 +58,7 @@ export default function DocumentScreen() {
   const hasWriteAccess = isAdmin || canAction('S_GW_DOCUMENT', 'create') || canAction('S_GW_DOCUMENT', 'update');
 
   // 사이드바 카테고리 필터
-  const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all'>('all');
+  const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all' | 'po'>('all');
   const [isNoticeOpen, setIsNoticeOpen] = useState(true);
   const [activeSubCategory, setActiveSubCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -418,6 +420,31 @@ export default function DocumentScreen() {
           </div>
         </div>
 
+        {/* 4) 결재 보관함 — 결재 완료 문서가 서식별로 자동 보관된다 */}
+        <div className="space-y-1 pt-1">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 font-bold text-[12px] text-ink">
+            <PackageCheck size={14} className="text-teal" />
+            <span>결재 보관함</span>
+          </div>
+          <div className="pl-4.5 flex flex-col gap-0.5 border-l border-border/50 ml-2.5">
+            <button
+              onClick={() => {
+                setActiveCategory('po');
+                setActiveSubCategory('all');
+                setSelectedDocId(null);
+              }}
+              className={`flex w-full items-center gap-2 py-1 px-2 rounded text-left transition-colors text-[11px] font-semibold ${
+                activeCategory === 'po'
+                  ? 'text-teal font-extrabold bg-teal-soft/20'
+                  : 'text-ink3 hover:text-ink hover:bg-panel-alt/50'
+              }`}
+            >
+              <Folder size={13} className="shrink-0" />
+              <span>발주서 보관함</span>
+            </button>
+          </div>
+        </div>
+
         {/* 전체 보기 리셋 */}
         <button
           onClick={() => {
@@ -437,6 +464,9 @@ export default function DocumentScreen() {
       </aside>
 
       {/* ── 중앙 문서 목록 영역 ── */}
+      {activeCategory === 'po' ? (
+        <PurchaseOrderArchive me={CURRENT_USER} isManager={hasWriteAccess} />
+      ) : (
       <main className="flex-1 flex flex-col gap-4 rounded-xl border border-border bg-panel p-5 shadow-sm overflow-hidden">
         {/* 상단 액션바 */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 shrink-0">
@@ -539,6 +569,7 @@ export default function DocumentScreen() {
           </table>
         </div>
       </main>
+      )}
 
       {/* ── 우측 상세 슬라이딩 Drawer 패널 ── */}
       {selectedDocId && selectedDoc && activeDocDisplay && (
