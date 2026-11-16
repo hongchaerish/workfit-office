@@ -2,6 +2,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Pill } from '@/shared/ui/Pill';
 import { formatBizNo, type Company, type CompanyBankAccount } from '@/domain/company/schema';
+import { homepageHref } from '@/domain/company/inputFormat';
 import { useBankNames } from '@/features/company/useCompanies';
 import { bizTd, bizTh } from '../_biz';
 
@@ -25,6 +26,9 @@ export function CompanyDetailModal({
     ['사업자등록번호', formatBizNo(company.bizNo) || '-'],
     ['대표자', company.ceoName || '-'],
     ['대표번호', company.phone || '-'],
+    ['팩스', company.fax || '-'],
+    ['이메일', company.email || '-'],
+    ['홈페이지', company.homepage || '-'],
     ['주소', [company.address, company.addressDetail].filter(Boolean).join(' ') || '-', true],
     ['메모', company.note || '-', true],
   ];
@@ -42,7 +46,15 @@ export function CompanyDetailModal({
           {info.map(([k, v, wide]) => (
             <div key={k} className={`flex flex-col gap-0.5 ${wide ? 'col-span-3' : ''}`}>
               <dt className="text-[11px] font-bold text-ink3">{k}</dt>
-              <dd className={`min-w-0 whitespace-pre-wrap text-ink ${k === '사업자등록번호' ? 'font-mono' : ''}`}>{v}</dd>
+              <dd className={`min-w-0 whitespace-pre-wrap break-all text-ink ${k === '사업자등록번호' ? 'font-mono' : ''}`}>
+                {k === '이메일' && company.email ? (
+                  <a href={`mailto:${company.email}`} className="text-teal hover:underline">{v}</a>
+                ) : k === '홈페이지' && company.homepage ? (
+                  <a href={homepageHref(company.homepage)} target="_blank" rel="noopener noreferrer" className="text-teal hover:underline">{v}</a>
+                ) : (
+                  v
+                )}
+              </dd>
             </div>
           ))}
         </dl>

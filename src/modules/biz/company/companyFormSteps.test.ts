@@ -3,16 +3,16 @@ import test from 'node:test';
 import type { AccountDraft, CompanyDraft } from '@/domain/company/schema';
 import { companyFormSteps, requiredProgress } from './companyFormSteps';
 
-const blank: CompanyDraft = { name: '', bizNo: '', ceoName: '', phone: '', address: '', addressDetail: '', note: '', use: true };
+const blank: CompanyDraft = { name: '', bizNo: '', ceoName: '', phone: '', fax: '', email: '', homepage: '', address: '', addressDetail: '', note: '', use: true };
 const acc = (p: Partial<AccountDraft>): AccountDraft => ({ bankCode: '088', accountNo: '110-1', holder: '대성', isDefault: false, use: true, note: '', ...p });
 const bankName = (code: string) => (code === '088' ? '신한' : code === '004' ? '국민' : '');
-const run = (form: Partial<CompanyDraft>, accounts: AccountDraft[] = [], duplicate = false) =>
-  companyFormSteps({ form: { ...blank, ...form }, accounts, bankName, duplicate });
+const run = (form: Partial<CompanyDraft>, accounts: AccountDraft[] = [], duplicate = false, submitted = false) =>
+  companyFormSteps({ form: { ...blank, ...form }, accounts, bankName, duplicate, submitted });
 const of = (steps: ReturnType<typeof run>, key: string) => steps.find((s) => s.key === key)!;
 
 test('빈 신규 창', () => {
-  assert.deepEqual(run({}).map((s) => s.state), ['empty', 'optional', 'optional', 'optional']);
-  assert.deepEqual(run({}).map((s) => s.title), ['기본 정보', '주소', '계좌', '메모']);
+  assert.deepEqual(run({}).map((s) => s.state), ['empty', 'optional', 'optional', 'optional', 'optional']);
+  assert.deepEqual(run({}).map((s) => s.title), ['기본 정보', '연락처', '주소', '계좌', '메모']);
   assert.deepEqual(requiredProgress(blank, false), { done: 0, total: 2 });
 });
 
@@ -67,5 +67,19 @@ test('등록을 누른 뒤 남은 문제는 그 단계를 확인 필요로', () 
   assert.equal(of(before, 'basic').state, 'progress');
   assert.equal(of(before, 'account').state, 'progress');
   const okBasic = companyFormSteps({ form: { ...blank, name: '대성', bizNo: '1234567890' }, accounts: [], bankName, duplicate: false, submitted: true });
-  assert.deepEqual(okBasic.map((x) => x.state), ['done', 'optional', 'optional', 'optional']);
+  assert.deepEqual(okBasic.map((x) => x.state), ['done', 'optional', 'optional', 'optional', 'optional']);
+});
+
+test('연락처 — 선택 단계, 채운 칸을 한 줄로', () => {
+  const s = of(run({ phone: '02-1234-5678', email: 'tax@daesung.co.kr' }), 'contact');
+  assert.equal(s.state, 'done');
+  assert.equal(s.summary, '02-1234-5678 · tax@daesung.co.kr');
+  assert.equal(of(run({ ceoName: '김대성' }), 'basic').state, 'progress');
+  assert.equal(of(run({ phone: '02-1' }), 'basic').state, 'empty');
+});
+
+test('연락처 — 이메일·홈페이지 모양이 틀리면 입력 중, 등록을 누르면 확인 필요', () => {
+  assert.equal(of(run({ email: 'tax@daesung' }), 'contact').state, 'progress');
+  assert.equal(of(run({ homepage: '대성반도체' }, [], false, true), 'contact').state, 'error');
+  assert.equal(of(run({ email: 'tax@daesung' }), 'contact').summary, '');
 });

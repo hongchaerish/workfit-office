@@ -7,7 +7,9 @@ import { TextField } from '@/shared/ui/form/TextField';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import {
   bizNoDigits,
+  EMAIL_FORMAT_ERROR,
   formatBizNo,
+  HOMEPAGE_FORMAT_ERROR,
   newCompanyId,
   normalizeDefaultAccount,
   validateAccountDrafts,
@@ -16,7 +18,9 @@ import {
   type Company,
   type CompanyBankAccount,
 } from '@/domain/company/schema';
+import { formatAccountNoTyping, formatBizNoTyping, formatPhoneTyping, isValidEmail, isValidHomepage } from '@/domain/company/inputFormat';
 import { DuplicateBizNoError } from '@/data/company/company.repo';
+import { FormattedTextField } from './FormattedTextField';
 import { useBankNames, useBankOptions, useSaveCompany } from '@/features/company/useCompanies';
 import { companyFormSteps, requiredProgress } from './companyFormSteps';
 import { StepSection } from './StepRail';
@@ -26,7 +30,7 @@ let seq = 0;
 const key = () => `r${++seq}`;
 
 const blankCompany = (): Company => ({
-  id: newCompanyId(), name: '', bizNo: '', ceoName: '', phone: '', address: '', addressDetail: '', use: true, note: '',
+  id: newCompanyId(), name: '', bizNo: '', ceoName: '', phone: '', fax: '', email: '', homepage: '', address: '', addressDetail: '', use: true, note: '',
   createdBy: '', createdAt: '', updatedBy: '', updatedAt: '',
 });
 
@@ -100,6 +104,8 @@ export function CompanyFormModal({
       : shows('bizNo') && digits.length !== 10
         ? '사업자등록번호는 숫자 10자리입니다.'
         : undefined;
+  const emailError = shows('email') && !isValidEmail(form.email) ? EMAIL_FORMAT_ERROR : undefined;
+  const homepageError = shows('homepage') && !isValidHomepage(form.homepage) ? HOMEPAGE_FORMAT_ERROR : undefined;
 
   const addRow = () => setRows((rs) => [...rs, { k: key(), bankCode: '', accountNo: '', holder: form.name.trim(), isDefault: rs.every((r) => !r.use), use: true, note: '' }]);
   /** 저장 안 된 줄은 빼고, 저장된 줄은 사용 안 함으로(지우지 않음). */
@@ -121,7 +127,7 @@ export function CompanyFormModal({
     }
     try {
       const saved = await save.mutateAsync({
-        company: { ...form, ceoName: form.ceoName.trim(), phone: form.phone.trim(), address: form.address.trim(), addressDetail: form.addressDetail.trim(), note: form.note.trim() },
+        company: { ...form, ceoName: form.ceoName.trim(), phone: form.phone.trim(), fax: form.fax.trim(), email: form.email.trim(), homepage: form.homepage.trim(), address: form.address.trim(), addressDetail: form.addressDetail.trim(), note: form.note.trim() },
         isNew,
         accounts: rows.map(({ k: _k, ...d }) => d),
         existing: accounts,
@@ -139,7 +145,7 @@ export function CompanyFormModal({
     return [{ value: '', label: '은행 선택' }, ...opts];
   };
 
-  const [basic, address, account, memo] = steps;
+  const [basic, contact, address, account, memo] = steps;
   const allDone = progress.done === progress.total;
 
   return (
@@ -179,13 +185,14 @@ export function CompanyFormModal({
               />
             </Field>
             <Field label="사업자등록번호" required error={bizNoError} hint={check.warnings[0]}>
-              <TextField
+              <FormattedTextField
                 value={form.bizNo}
-                onChange={(e) => set('bizNo', e.target.value)}
-                onBlur={() => { touch('bizNo'); set('bizNo', formatBizNo(form.bizNo)); }}
+                format={formatBizNoTyping}
+                onValue={(v) => set('bizNo', v)}
+                onBlur={() => touch('bizNo')}
                 invalid={Boolean(bizNoError)}
                 aria-invalid={Boolean(bizNoError)}
-                maxLength={20}
+                inputMode="numeric"
                 placeholder="000-00-00000"
                 className="font-mono"
               />
@@ -198,13 +205,45 @@ export function CompanyFormModal({
             <Field label="대표자">
               <TextField value={form.ceoName} onChange={(e) => set('ceoName', e.target.value)} maxLength={64} />
             </Field>
+          </div>
+        </StepSection>
+
+        <StepSection index={2} step={contact}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <Field label="대표번호">
-              <TextField value={form.phone} onChange={(e) => set('phone', e.target.value)} maxLength={32} placeholder="예: 02-1234-5678" />
+              <FormattedTextField value={form.phone} format={formatPhoneTyping} onValue={(v) => set('phone', v)} maxLength={32} inputMode="tel" placeholder="예: 02-1234-5678" />
+            </Field>
+            <Field label="팩스">
+              <FormattedTextField value={form.fax} format={formatPhoneTyping} onValue={(v) => set('fax', v)} maxLength={32} inputMode="tel" placeholder="예: 02-1234-5679" />
+            </Field>
+            <Field label="이메일" error={emailError}>
+              <TextField
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                onBlur={() => touch('email')}
+                invalid={Boolean(emailError)}
+                aria-invalid={Boolean(emailError)}
+                maxLength={128}
+                placeholder="예: tax@company.co.kr"
+              />
+            </Field>
+            <Field label="홈페이지" error={homepageError}>
+              <TextField
+                value={form.homepage}
+                onChange={(e) => set('homepage', e.target.value)}
+                onBlur={() => touch('homepage')}
+                invalid={Boolean(homepageError)}
+                aria-invalid={Boolean(homepageError)}
+                maxLength={256}
+                inputMode="url"
+                placeholder="예: www.company.co.kr"
+              />
             </Field>
           </div>
         </StepSection>
 
-        <StepSection index={2} step={address}>
+        <StepSection index={3} step={address}>
           <div className="grid grid-cols-[2fr_1fr] gap-x-4">
             <Field label="주소">
               <TextField value={form.address} onChange={(e) => set('address', e.target.value)} maxLength={256} className="w-full" placeholder="도로명 주소" />
@@ -216,7 +255,7 @@ export function CompanyFormModal({
         </StepSection>
 
         <StepSection
-          index={3}
+          index={4}
           step={account}
           aside={rows.length > 0 ? <Button size="sm" onClick={addRow}><Plus size={12} /> 계좌 추가</Button> : undefined}
         >
@@ -248,7 +287,7 @@ export function CompanyFormModal({
           )}
         </StepSection>
 
-        <StepSection index={4} step={memo} last>
+        <StepSection index={5} step={memo} last>
           <textarea
             value={form.note}
             onChange={(e) => set('note', e.target.value)}
@@ -318,10 +357,12 @@ function AccountCard({
         </div>
         <div className="min-w-0 flex-1">
           <Field error={err('no')}>
-            <TextField
+            <FormattedTextField
               aria-label="계좌번호"
               value={row.accountNo}
-              onChange={(e) => onChange({ accountNo: e.target.value })}
+              format={formatAccountNoTyping}
+              onValue={(v) => onChange({ accountNo: v })}
+              inputMode="numeric"
               onBlur={() => onTouch('no')}
               invalid={Boolean(err('no'))}
               aria-invalid={Boolean(err('no'))}

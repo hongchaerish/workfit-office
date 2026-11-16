@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { bizNoDigits, formatBizNo, isValidBizNoChecksum } from '@/domain/bizVendor/schema';
+import { isValidEmail, isValidHomepage } from './inputFormat';
 
 /**
  * 기업 정보(업무 기준정보) — 도입기업·매입기업을 가리지 않는 기업 마스터.
@@ -14,17 +15,26 @@ const audit = {
   updatedAt: z.string().default(''),
 };
 
+/**
+ * 선택 글자 칸 — 없거나 null 이면 빈 값. DB에 칸을 새로 만들면 예전 문서는 그 칸이 null 로 오는데,
+ * 그대로 두면 읽기 검사에 걸려 기업이 목록에서 통째로 빠진다.
+ */
+const text = () => z.preprocess((v) => v ?? '', z.string());
+
 /** 기업. bizNo 는 숫자 10자리만 저장(표시는 formatBizNo). */
 export const companySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  bizNo: z.string().default(''),
-  ceoName: z.string().default(''),
-  phone: z.string().default(''),
-  address: z.string().default(''),
-  addressDetail: z.string().default(''),
+  bizNo: text(),
+  ceoName: text(),
+  phone: text(),
+  fax: text(),
+  email: text(),
+  homepage: text(),
+  address: text(),
+  addressDetail: text(),
   use: z.boolean().default(true),
-  note: z.string().default(''),
+  note: text(),
   ...audit,
 });
 export type Company = z.infer<typeof companySchema>;
@@ -65,7 +75,10 @@ export const newCompanyId = () => rid('CMP');
 export const newAccountId = () => rid('CBA');
 export const newCompanyFileId = () => rid('CFL');
 
-export type CompanyDraft = Pick<Company, 'name' | 'bizNo' | 'ceoName' | 'phone' | 'address' | 'addressDetail' | 'note' | 'use'>;
+export type CompanyDraft = Pick<Company, 'name' | 'bizNo' | 'ceoName' | 'phone' | 'fax' | 'email' | 'homepage' | 'address' | 'addressDetail' | 'note' | 'use'>;
+
+export const EMAIL_FORMAT_ERROR = '이메일 형식을 확인하세요. (예: tax@company.co.kr)';
+export const HOMEPAGE_FORMAT_ERROR = '홈페이지 주소를 확인하세요. (예: www.company.co.kr)';
 export interface AccountDraft {
   id?: string;
   bankCode: string;
@@ -95,6 +108,8 @@ export function validateCompanyDraft(
   if (!d) errors.push('사업자등록번호를 입력하세요.');
   else if (d.length !== 10) errors.push('사업자등록번호는 숫자 10자리입니다.');
   else if (!isValidBizNoChecksum(d)) warnings.push('사업자등록번호 검증식에 맞지 않습니다. 번호를 다시 확인하세요.');
+  if (!isValidEmail(draft.email)) errors.push(EMAIL_FORMAT_ERROR);
+  if (!isValidHomepage(draft.homepage)) errors.push(HOMEPAGE_FORMAT_ERROR);
   const duplicate = d.length === 10 ? findCompanyByBizNo(all, d, excludeId) : undefined;
   if (duplicate) {
     errors.push(

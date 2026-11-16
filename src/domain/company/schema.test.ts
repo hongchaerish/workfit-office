@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  companySchema,
   findCompanyByBizNo,
   newAccountId,
   newCompanyFileId,
@@ -14,11 +15,11 @@ import {
 } from './schema';
 
 const co = (id: string, name: string, bizNo: string, use = true): Company => ({
-  id, name, bizNo, ceoName: '', phone: '', address: '', addressDetail: '', use, note: '',
+  id, name, bizNo, ceoName: '', phone: '', fax: '', email: '', homepage: '', address: '', addressDetail: '', use, note: '',
   createdBy: '', createdAt: '', updatedBy: '', updatedAt: '',
 });
 const draft = (over: Partial<CompanyDraft> = {}): CompanyDraft => ({
-  name: '대성반도체', bizNo: '1248100998', ceoName: '', phone: '', address: '', addressDetail: '', note: '', use: true, ...over,
+  name: '대성반도체', bizNo: '1248100998', ceoName: '', phone: '', fax: '', email: '', homepage: '', address: '', addressDetail: '', note: '', use: true, ...over,
 });
 const acc = (use: boolean, isDefault: boolean) => ({ use, isDefault });
 const accDraft: AccountDraft = { bankCode: '004', accountNo: '123-456-7890', holder: '대성반도체', isDefault: true, use: true, note: '' };
@@ -67,4 +68,25 @@ test('ID 머리 — CMP·CBA·CFL', () => {
   assert.match(newAccountId(), /^CBA-[a-z0-9]+$/);
   assert.match(newCompanyFileId(), /^CFL-[a-z0-9]+$/);
   assert.notEqual(newCompanyId(), newCompanyId());
+});
+
+test('기업 검사 — 이메일·홈페이지는 비어 있어도 되지만 모양이 틀리면 오류', () => {
+  assert.deepEqual(validateCompanyDraft(draft({ email: 'tax@daesung.co.kr', homepage: 'www.daesung.co.kr' }), []).errors, []);
+  assert.deepEqual(validateCompanyDraft(draft({ email: 'tax@daesung' }), []).errors, ['이메일 형식을 확인하세요. (예: tax@company.co.kr)']);
+  assert.deepEqual(validateCompanyDraft(draft({ homepage: '대성반도체' }), []).errors, ['홈페이지 주소를 확인하세요. (예: www.company.co.kr)']);
+});
+
+test('기업 스키마 — 예전 문서(팩스·이메일·홈페이지 없음)도 빈 값으로 읽는다', () => {
+  const c = companySchema.parse({ id: 'CMP-1', name: '대성', bizNo: '1248100998' });
+  assert.equal(c.fax, '');
+  assert.equal(c.email, '');
+  assert.equal(c.homepage, '');
+});
+
+test('기업 스키마 — 칸을 새로 만든 뒤 예전 문서는 null 로 온다: 빈 값으로 읽어야 목록에서 사라지지 않는다', () => {
+  const r = companySchema.safeParse({ id: 'CMP-1', name: '대성', bizNo: '1248100998', fax: null, email: null, homepage: null, ceoName: null });
+  assert.equal(r.success, true);
+  assert.equal(r.data?.fax, '');
+  assert.equal(r.data?.email, '');
+  assert.equal(r.data?.homepage, '');
 });

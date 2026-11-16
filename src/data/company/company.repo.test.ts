@@ -27,7 +27,7 @@ function mem<T extends { id: string }>(coll: string) {
 }
 
 const company = (over: Partial<Company> = {}): Company => ({
-  id: 'CMP-1', name: '대성반도체', bizNo: '1248100998', ceoName: '', phone: '', address: '', addressDetail: '', use: true, note: '',
+  id: 'CMP-1', name: '대성반도체', bizNo: '1248100998', ceoName: '', phone: '', fax: '', email: '', homepage: '', address: '', addressDetail: '', use: true, note: '',
   createdBy: '', createdAt: '', updatedBy: '', updatedAt: '', ...over,
 });
 const row = (over: Partial<AccountDraft> = {}): AccountDraft => ({ bankCode: '004', accountNo: '1-2', holder: '대성', isDefault: false, use: true, note: '', ...over });
