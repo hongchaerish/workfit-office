@@ -171,13 +171,20 @@ export function pickerProblem(pick: LeavePick | null, from: string, to: string, 
   if (n === 0) return '휴가를 사용할 근무일이 없습니다.';
   if (!pick) return '';
   if (n > 1 && !FULL_DAY_GROUPS.has(groupOf(pick.type))) return '연속 날짜 신청은 종일 휴가만 가능합니다. 반차·반반차·반일 대휴는 하루씩 신청해 주세요.';
+  // 연차는 잔여가 모자라도 미리 당겨 쓸 수 있다(선사용 — 이후 생기는 연차에서 차감). 대체휴무만 막는다.
   const a = requestAmount(pick, from, to, holidays, bal);
-  if (a && a.amount > a.available) {
-    return a.unit === '분'
-      ? `대체휴무 잔여 ${formatMinutes(a.available)}보다 신청 ${formatMinutes(a.amount)}이(가) 많습니다.`
-      : `연차 잔여 ${a.available}일보다 신청 ${a.amount}일이 많습니다.`;
+  if (a && a.unit === '분' && a.amount > a.available) {
+    return `대체휴무 잔여 ${formatMinutes(a.available)}보다 신청 ${formatMinutes(a.amount)}이(가) 많습니다.`;
   }
   return '';
+}
+
+/** 연차 잔여보다 많이 신청할 때 미리 당겨 쓰는 일수(막지 않고 알리기만), 없으면 0 */
+export function advanceDays(pick: LeavePick | null, from: string, to: string, holidays: Holidays | undefined, bal: LeaveBalances): number {
+  if (!pick || !from || !to) return 0;
+  const a = requestAmount(pick, from, to, holidays, bal);
+  if (!a || a.unit !== '일') return 0;
+  return Math.max(0, a.amount - Math.max(0, a.available));
 }
 
 export interface LeaveDocValues {

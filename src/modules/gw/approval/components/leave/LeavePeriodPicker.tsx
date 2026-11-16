@@ -11,6 +11,7 @@ import {
   leaveRange,
   leaveTimeOptions,
   pickerProblem,
+  advanceDays,
   timeNotice,
   workDaysBetween,
   type LeaveBalances,
@@ -77,6 +78,7 @@ export function LeavePeriodPicker({
   const days = from && to ? workDaysBetween(from, to, holidays) : 0;
   const multi = days > 1;
   const problem = pickerProblem(pick, from, to, holidays, balance);
+  const advance = advanceDays(pick, from, to, holidays, balance);
   const step = !from || !to ? 1 : !group ? 2 : !pick ? 3 : 4;
   const applied = step === 4 && !problem;
 
@@ -127,7 +129,10 @@ export function LeavePeriodPicker({
     : applied && pick
       ? (() => {
         const [a, b] = leaveRange(pick, day);
-        return `${rangeLabel(from, to)} · ${LEAVE_TYPE_NAMES[pick.type]} · ${a}~${b}${days > 1 ? ` · ${days}근무일 신청` : ''}`;
+        const text = `${rangeLabel(from, to)} · ${LEAVE_TYPE_NAMES[pick.type]} · ${a}~${b}${days > 1 ? ` · ${days}근무일 신청` : ''}`;
+        return advance > 0
+          ? <>{text} <span className="font-semibold text-amber-600">· 잔여 초과 {advance}일은 미리 사용(이후 발생 연차에서 차감)</span></>
+          : text;
       })()
       : from && !to ? '종료일을 선택하세요. 같은 날짜를 두 번 누르면 1일 휴가입니다.' : '시작일 → 종료일 → 휴가 구분 → 시간 순서로 선택';
 

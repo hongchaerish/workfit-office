@@ -6,6 +6,7 @@ import {
   leaveRange,
   leaveTimeOptions,
   pickerProblem,
+  advanceDays,
   requestAmount,
   timeNotice,
   workDaysBetween,
@@ -54,7 +55,9 @@ test('막는 경우 — 근무일 없음, 여러 날 반차, 잔여 부족', () 
   const bal = { annualDays: 1, substituteMin: 300 };
   assert.equal(pickerProblem(null, '2026-11-14', '2026-11-15', holidays, bal), '휴가를 사용할 근무일이 없습니다.');
   assert.equal(pickerProblem({ type: 'am-half', start: '08:30' }, '2026-11-13', '2026-11-16', holidays, bal), '연속 날짜 신청은 종일 휴가만 가능합니다. 반차·반반차·반일 대휴는 하루씩 신청해 주세요.');
-  assert.equal(pickerProblem({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-16', holidays, bal), '연차 잔여 1일보다 신청 2일이 많습니다.');
+  // 연차는 선사용 허용 — 잔여가 모자라도 막지 않는다
+  assert.equal(pickerProblem({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-16', holidays, bal), '');
+  assert.equal(pickerProblem({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, { annualDays: 0, substituteMin: 0 }), '');
   assert.equal(pickerProblem({ type: 'comp-full', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, bal), '대체휴무 잔여 5시간보다 신청 8시간이(가) 많습니다.');
   assert.equal(pickerProblem({ type: 'comp-half', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, bal), '');
 });
@@ -94,4 +97,13 @@ test('운영 휴게 12:00~13:00 이어도 반차는 오전 08:30~13:30·오후 1
   assert.deepEqual(leaveTimeOptions('am-quarter', prod), ['08:30', '09:00', '09:30', '10:00']);
   assert.deepEqual(leaveTimeOptions('pm-quarter', prod), ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30']);
   assert.deepEqual(leaveRange({ type: 'comp-half', start: '08:30' }, prod), ['08:30', '13:30']);
+});
+
+test('연차 선사용 일수 — 잔여를 넘는 만큼만, 대체휴무는 0', () => {
+  const bal = { annualDays: 1, substituteMin: 300 };
+  assert.equal(advanceDays({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-16', holidays, bal), 1);
+  assert.equal(advanceDays({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, bal), 0);
+  assert.equal(advanceDays({ type: 'am-half', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, { annualDays: 0, substituteMin: 0 }), 0.5);
+  assert.equal(advanceDays({ type: 'full', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, { annualDays: -2, substituteMin: 0 }), 1);
+  assert.equal(advanceDays({ type: 'comp-full', start: '08:30' }, '2026-11-13', '2026-11-13', holidays, bal), 0);
 });
