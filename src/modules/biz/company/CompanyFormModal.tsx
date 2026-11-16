@@ -88,7 +88,7 @@ export function CompanyFormModal({
   const check = validateCompanyDraft(form, allCompanies, isNew ? undefined : form.id);
   const duplicate = Boolean(check.duplicate);
   const shown = useMemo(() => normalizeDefaultAccount(rows), [rows]);
-  const steps = companyFormSteps({ form, accounts: shown, bankName: (c) => bankNames.get(c) ?? '', duplicate });
+  const steps = companyFormSteps({ form, accounts: shown, bankName: (c) => bankNames.get(c) ?? '', duplicate, submitted });
   const progress = requiredProgress(form, duplicate);
 
   const digits = bizNoDigits(form.bizNo);

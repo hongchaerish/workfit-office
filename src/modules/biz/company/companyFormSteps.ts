@@ -17,17 +17,20 @@ export function companyFormSteps({
   accounts,
   bankName,
   duplicate,
+  submitted = false,
 }: {
   form: CompanyDraft;
   accounts: AccountDraft[];
   bankName: (code: string) => string;
   duplicate: boolean;
+  /** 등록(저장)을 누른 뒤 — 남은 문제를 '확인 필요'로 보인다. */
+  submitted?: boolean;
 }): StepView[] {
   const basicDone = filled(form.name) && bizNoDigits(form.bizNo).length === 10;
   const basic: StepView = {
     key: 'basic',
     title: '기본 정보',
-    state: duplicate ? 'error' : basicDone ? 'done' : [form.name, form.bizNo, form.ceoName, form.phone].some(filled) ? 'progress' : 'empty',
+    state: duplicate || (submitted && !basicDone) ? 'error' : basicDone ? 'done' : [form.name, form.bizNo, form.ceoName, form.phone].some(filled) ? 'progress' : 'empty',
     summary: basicDone ? `${form.name.trim()} · ${formatBizNo(form.bizNo)}` : '',
   };
 
@@ -40,7 +43,7 @@ export function companyFormSteps({
   const account: StepView = {
     key: 'account',
     title: '계좌',
-    state: active.length === 0 ? 'optional' : accountDone ? 'done' : 'progress',
+    state: active.length === 0 ? 'optional' : accountDone ? 'done' : submitted ? 'error' : 'progress',
     summary: accountDone ? `계좌 ${active.length}개 · 기본 ${[bankName(main.bankCode), main.accountNo.trim()].filter(Boolean).join(' ')}` : '',
   };
 

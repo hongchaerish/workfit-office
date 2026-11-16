@@ -58,3 +58,14 @@ test('메모 두 줄', () => {
   assert.equal(s.state, 'done');
   assert.equal(s.summary, '첫 줄');
 });
+
+test('등록을 누른 뒤 남은 문제는 그 단계를 확인 필요로', () => {
+  const s = companyFormSteps({ form: { ...blank, name: '대성' }, accounts: [acc({ holder: '' })], bankName, duplicate: false, submitted: true });
+  assert.equal(of(s, 'basic').state, 'error');
+  assert.equal(of(s, 'account').state, 'error');
+  const before = companyFormSteps({ form: { ...blank, name: '대성' }, accounts: [acc({ holder: '' })], bankName, duplicate: false });
+  assert.equal(of(before, 'basic').state, 'progress');
+  assert.equal(of(before, 'account').state, 'progress');
+  const okBasic = companyFormSteps({ form: { ...blank, name: '대성', bizNo: '1234567890' }, accounts: [], bankName, duplicate: false, submitted: true });
+  assert.deepEqual(okBasic.map((x) => x.state), ['done', 'optional', 'optional', 'optional']);
+});
