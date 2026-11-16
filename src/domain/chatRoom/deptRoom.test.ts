@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { chatRoomSchema, type ChatRoom } from './schema';
-import { deptIdOfRoom, deptRoomId, deptRoomName, planDeptRoomSync } from './deptRoom';
+import { deptIdOfRoom, deptRoomId, deptRoomName, isDeptRoomSyncDue, planDeptRoomSync } from './deptRoom';
 
 const NOW = '2026-10-19T09:00:00';
 const room = (over: Partial<ChatRoom> & { id: string }): ChatRoom =>
@@ -73,4 +73,13 @@ test('이름에 부서명이 들어간 일반 단체방은 부서방으로 취�
   assert.equal(r.create.length, 1);
   assert.equal(r.create[0].id, 'RM-DEPT-D240');
   assert.deepEqual(r.rename, []);
+});
+
+test('부서방 맞추기는 처음 한 번, 그 뒤 30분마다만 (방 목록을 다시 받을 때마다 부서·사용자 전체를 읽지 않게)', () => {
+  const MIN = 60_000;
+  const t0 = 1_800_000_000_000;
+  assert.equal(isDeptRoomSyncDue(0, t0), true);
+  assert.equal(isDeptRoomSyncDue(t0, t0 + 1 * MIN), false);
+  assert.equal(isDeptRoomSyncDue(t0, t0 + 29 * MIN), false);
+  assert.equal(isDeptRoomSyncDue(t0, t0 + 31 * MIN), true);
 });

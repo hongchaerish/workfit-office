@@ -7,7 +7,7 @@ import { chatRoomSchema, type ChatRoom, type ChatRoomType, type LastMessage } fr
 import { CHAT_ROOM_SEED } from '@/data/seeds/chatRoom.seed';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
-import { deptIdOfRoom, planDeptRoomSync } from '@/domain/chatRoom/deptRoom';
+import { deptIdOfRoom, isDeptRoomSyncDue, planDeptRoomSync } from '@/domain/chatRoom/deptRoom';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
 /**
@@ -177,9 +177,8 @@ export interface CreateRoomInput {
   createdBy?: string;
 }
 
-// 부서방 동기화 마지막 실행 시각 (최소 60초 간격으로 쓰기 제한하여 429 Rate Limit 원천 방지)
+// 부서방 동기화 마지막 실행 시각 — 접속 때 한 번, 그 뒤 30분마다(isDeptRoomSyncDue)
 let lastDeptSyncAt = 0;
-const DEPT_SYNC_THROTTLE_MS = 60 * 1000;
 
 export const chatRoomRepo = {
   /**
@@ -189,9 +188,9 @@ export const chatRoomRepo = {
   async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
     let rows = await backend.loadAll();
 
-    // 부서방: 방 없는 부서에 한 번 개설 + 부서명 변경 시 이름 따라가기만 (참여자는 직접 관리, 60초 쓰로틀)
+    // 부서방: 방 없는 부서에 한 번 개설 + 부서명 변경 시 이름 따라가기만 (참여자는 직접 관리, 30분 간격)
     const now = Date.now();
-    if (now - lastDeptSyncAt > DEPT_SYNC_THROTTLE_MS) {
+    if (isDeptRoomSyncDue(lastDeptSyncAt, now)) {
       lastDeptSyncAt = now;
       try {
         const depts = await departmentRepo.list();

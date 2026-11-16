@@ -4,22 +4,26 @@ import { leaveAdjustmentStore } from '@/domain/leave/adjustmentStore';
 import { substituteHolidayStore } from '@/domain/leave/substituteHolidayStore';
 import { substituteLedgerStore } from '@/data/substituteLedger/substituteLedger.repo';
 import { migrateLegacySharedSettings } from './migrateLegacySharedSettings';
+import { shouldRefreshOnFocus } from './refreshGate';
 
 /** 첫 로딩을 이보다 오래 막지 않는다 — DB가 느리거나 실패해도 화면은 뜨고, 다 읽히면 이벤트로 다시 그린다. */
 const MAX_WAIT_MS = 5000;
 const REFRESH_MS = 5 * 60 * 1000;
 
-const hydrateAll = () =>
-  Promise.allSettled([leaveAdjustmentStore.hydrate(), substituteHolidayStore.hydrate(), substituteLedgerStore.hydrate()]).then(
+let lastHydrateAt = 0;
+const hydrateAll = () => {
+  lastHydrateAt = Date.now();
+  return Promise.allSettled([leaveAdjustmentStore.hydrate(), substituteHolidayStore.hydrate(), substituteLedgerStore.hydrate()]).then(
     (results) => {
       for (const r of results) if (r.status === 'rejected') console.warn('[sharedSettings] DB 조회 실패', r.reason);
     },
   );
+};
 
 /**
  * 전 임직원 공용 설정(연차 조정·대체휴무·결재 승계)을 DB에서 읽어 캐시를 채운 뒤 화면을 그린다.
  * 이 목록들은 여러 화면이 동기로 읽으므로, 비어 있는 채로 그려지면 결재함·잔여 연차가 잠깐 틀리게 계산된다.
- * 처음 한 번은 이 브라우저에 남은 옛 값(localStorage)을 DB로 옮기고, 이후 포커스·5분마다 다시 읽는다.
+ * 처음 한 번은 이 브라우저에 남은 옛 값(localStorage)을 DB로 옮기고, 이후 포커스(1분 간격 이상)·5분마다 다시 읽는다.
  */
 export function SharedSettingsGate({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
@@ -41,7 +45,7 @@ export function SharedSettingsGate({ children }: { children: ReactNode }) {
       if (alive) setReady(true);
     })();
 
-    const onFocus = () => void hydrateAll();
+    const onFocus = () => { if (shouldRefreshOnFocus(lastHydrateAt, Date.now())) void hydrateAll(); };
     window.addEventListener('focus', onFocus);
     const interval = setInterval(() => void hydrateAll(), REFRESH_MS);
     return () => {

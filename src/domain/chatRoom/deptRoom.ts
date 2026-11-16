@@ -71,3 +71,13 @@ export function planDeptRoomSync({ depts, users, rooms, now, pickColor }: PlanIn
   }
   return plan;
 }
+
+/**
+ * 부서방 맞추기 주기 — 방 목록은 실시간·1분 주기로 자주 다시 받는데, 그때마다 맞추면
+ * 부서·사용자·인명 전체(8건)를 매번 읽는다. 부서 개설·이름 변경은 드물어 접속 때 한 번, 그 뒤 30분마다면 된다.
+ */
+export const DEPT_ROOM_SYNC_INTERVAL_MS = 30 * 60_000;
+
+export function isDeptRoomSyncDue(lastSyncAt: number, now: number): boolean {
+  return now - lastSyncAt > DEPT_ROOM_SYNC_INTERVAL_MS;
+}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { userRepo } from '@/data/user/user.repo';
-import { DEFAULT_NOTIFICATION_PREFS, parseNotificationPrefs, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
+import { DEFAULT_NOTIFICATION_PREFS, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
 
 const key = (userId: string | undefined) => ['notificationPrefs', userId];
 
@@ -9,7 +9,7 @@ export function useNotificationPrefs(userId: string | undefined) {
   const query = useQuery({
     queryKey: key(userId),
     enabled: Boolean(userId),
-    queryFn: async () => parseNotificationPrefs((await userRepo.get(userId!))?.notificationPrefs),
+    queryFn: () => userRepo.getNotificationPrefs(userId!),
   });
   return { prefs: query.data ?? DEFAULT_NOTIFICATION_PREFS, isLoading: query.isLoading };
 }

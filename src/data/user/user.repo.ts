@@ -1,7 +1,7 @@
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
-import type { NotificationPrefs } from '@/domain/notificationPrefs/schema';
+import { parseNotificationPrefs, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
-import { createCrudBackend } from '@/data/_backend/crudBackend';
+import { createCrudBackend, Query } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows, registerTestAccountSource, rememberTestAccounts } from '@/data/_backend/testAccountVisibility';
 import { hashPassword } from '@/shared/lib/crypto';
 import { nowLocalIso } from '@/shared/lib/datetime';
@@ -192,6 +192,11 @@ export const userRepo = {
     await this.save(updated);
   },
 
+  /** 최근 접속시각만 부분 저장 — 전체 목록을 읽고 문서 전체를 다시 쓰지 않는다. */
+  async touchLastLogin(userId: string, stamp: string): Promise<void> {
+    await backend.patch(userId, { lastLogin: stamp });
+  },
+
   async save(user: User): Promise<void> {
     const raw = userSchema.parse(user);
     // 계정의 소속 이름 칸은 읽지 않는 옛 사본이다. 읽을 때 채운 화면용 값(인명관리 기준)을 다시 쓰지 않고 DB 값을 그대로 둔다.
@@ -254,6 +259,12 @@ export const userRepo = {
     results.forEach((r, i) => {
       if (r.status === 'rejected') console.warn(`[push] ${stale[i].id} 계정의 이전 토큰 회수 실패`, r.reason);
     });
+  },
+
+  /** 내 알림 설정 — 그 사람 계정 한 건만 읽는다(전체 목록·인명 묶음을 읽지 않는다). */
+  async getNotificationPrefs(userId: string): Promise<NotificationPrefs> {
+    const rows = await backend.loadWithQueries([Query.equal('$id', [userId])]);
+    return parseNotificationPrefs(rows.find((u) => u.id === userId)?.notificationPrefs);
   },
 
   /** 내 알림 설정만 부분 저장한다 — 서버 푸시 함수가 이 값을 읽는다. */

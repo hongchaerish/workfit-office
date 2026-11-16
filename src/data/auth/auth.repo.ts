@@ -86,9 +86,7 @@ export const authRepo = {
   /** 로그인 성공 시 최근 접속시각 갱신(best-effort, 실패해도 로그인은 유지). */
   async touchLastLogin(userId: string): Promise<void> {
     try {
-      const users = await userRepo.listIncludingTestAccounts();
-      const user = users.find((u) => u.id === userId);
-      if (user) await userRepo.save({ ...user, lastLogin: nowStamp() });
+      await userRepo.touchLastLogin(userId, nowStamp());
     } catch {
       /* 접속시각 갱신 실패는 로그인 흐름에 영향 없음 */
     }

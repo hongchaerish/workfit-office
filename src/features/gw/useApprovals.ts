@@ -4,7 +4,7 @@ import { approvalDocRepo, type ApprovalDraftInput } from '@/data/approvalDoc/app
 import { activeSteps, byRecent, matchesBox } from '@/domain/approvalDoc/engine';
 import { APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc, type ApprovalStep } from '@/domain/approvalDoc/schema';
 import { useUsers } from '@/features/user/useUsers';
-import { departmentRepo } from '@/data/department/department.repo';
+import { useDepartments } from '@/features/department/useDepartments';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
 import { postReadDocIdsFor } from '@/domain/approvalPostRead/engine';
 import { docNoOf } from '@/domain/approvalDoc/docNo';
@@ -74,10 +74,8 @@ export interface ApprovalBoxes {
 
 /** userId 관점의 결재함 5탭 도출(대기·상신·완료·참조·임시) + 카운트. */
 export function useApprovalBoxes(userId: string | undefined): ApprovalBoxes {
-  const [depts, setDepts] = useState<any[]>([]);
-  useEffect(() => {
-    departmentRepo.list().then(setDepts);
-  }, []);
+  // 부서 목록은 공용 캐시(useDepartments)로 — 결재함을 열 때마다 따로 받지 않는다
+  const { data: depts = [] } = useDepartments();
 
   const q = useAllApprovals();
   const { data: users = [] } = useUsers();
