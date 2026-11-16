@@ -64,7 +64,7 @@ export function ScrollTopButton() {
       aria-label="맨 위로"
       title="맨 위로"
       tabIndex={visible ? 0 : -1}
-      className={`fixed bottom-6 right-6 z-[65] grid h-10 w-10 place-items-center rounded-full border border-border bg-panel text-ink2 shadow-[0_6px_20px_rgba(16,24,48,0.18)] transition-all duration-200 hover:border-teal hover:text-teal ${
+      className={`fixed bottom-6 right-6 z-40 grid h-10 w-10 place-items-center rounded-full border border-border bg-panel text-ink2 shadow-[0_6px_20px_rgba(16,24,48,0.18)] transition-all duration-200 hover:border-teal hover:text-teal ${
         visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
     >

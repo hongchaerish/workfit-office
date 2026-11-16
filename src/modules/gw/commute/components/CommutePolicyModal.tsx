@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Clock, ShieldAlert, Check, X, Info } from 'lucide-react';
 import type { CommutePolicy } from '@/domain/commutePolicy/schema';
+import { breakMinutesOf, policyTimeError } from '@/domain/commutePolicy/validate';
 
 interface Props {
   policy: CommutePolicy;
@@ -18,10 +19,15 @@ export function CommutePolicyModal({ policy, isOpen, onClose, onSave }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const timeError = policyTimeError(formData);
+    if (timeError) {
+      setError(timeError);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await onSave(formData);
+      await onSave({ ...formData, breakMin: breakMinutesOf(formData.breakStartTime, formData.breakEndTime) });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '저장에 실패했습니다.');
@@ -97,7 +103,7 @@ export function CommutePolicyModal({ policy, isOpen, onClose, onSave }: Props) {
           <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[12.5px] font-bold text-slate-800">점심 / 휴게 시간</span>
-              <span className="text-[11.5px] font-semibold text-slate-500">기본 {formData.breakMin}분 공제</span>
+              <span className="text-[11.5px] font-semibold text-slate-500">기본 {breakMinutesOf(formData.breakStartTime, formData.breakEndTime)}분 공제</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
