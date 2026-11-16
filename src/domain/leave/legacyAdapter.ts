@@ -8,7 +8,7 @@
  */
 
 import type { ApprovalDoc, DocStatus } from '@/domain/approvalDoc/schema';
-import { getDefaultTimeWindow, calculateLeaveDays, effectiveLeaveKind, type CalculateLeaveDaysOptions } from './policy';
+import { getDefaultTimeWindow, calculateLeaveDays, effectiveLeaveKind, halfDayAbsenceRange, HALF_DAY_ABSENCE, type CalculateLeaveDaysOptions } from './policy';
 
 export interface NormalizedLeaveRecord {
   docId: string;
@@ -38,26 +38,18 @@ function inferHalfDayTimeWindow(title: string = '', body: string = '', defaultFa
   
   // 오후 키워드 우선 검사
   if (combined.includes('오후') || combined.includes('pm') || combined.includes('afternoon')) {
-    return {
-      leaveType: '오후반차',
-      startTime: '13:30',
-      endTime: '17:30',
-    };
+    return { leaveType: '오후반차', ...HALF_DAY_ABSENCE.PM };
   }
 
   // 오전 키워드 검사
   if (combined.includes('오전') || combined.includes('am') || combined.includes('morning')) {
-    return {
-      leaveType: '오전반차',
-      startTime: '08:30',
-      endTime: '12:30',
-    };
+    return { leaveType: '오전반차', ...HALF_DAY_ABSENCE.AM };
   }
 
-  // 키워드가 없는 순수 '반차'인 경우 폴백 (기본값: 오전반차 08:30~12:30)
+  // 키워드가 없는 순수 '반차'인 경우 폴백 (기본값: 오전반차)
   return defaultFallback === 'PM'
-    ? { leaveType: '오후반차', startTime: '13:30', endTime: '17:30' }
-    : { leaveType: '오전반차', startTime: '08:30', endTime: '12:30' };
+    ? { leaveType: '오후반차', ...HALF_DAY_ABSENCE.PM }
+    : { leaveType: '오전반차', ...HALF_DAY_ABSENCE.AM };
 }
 
 /**
@@ -119,6 +111,9 @@ export function normalizeLegacyLeaveDoc(
       endTime = defaultWin.endTime;
     }
   }
+
+  // 예전 반차 문서(사용 4시간만 적힘)는 실제 부재 시각(점심 포함 5시간)으로 읽는다
+  ({ startTime, endTime } = halfDayAbsenceRange(effectiveLeaveKind(finalLeaveType, leaveUnit), startTime, endTime));
 
   return {
     docId: doc.id,

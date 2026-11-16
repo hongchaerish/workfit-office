@@ -328,8 +328,9 @@ function TimeChart({ day, pick }: { day: WorkDay; pick: LeavePick | null }) {
   const pos = (m: number) => `${((m - f.ws) / total) * 100}%`;
   const ticks: number[] = [];
   for (let t = f.ws; t <= f.we; t += 60) ticks.push(t);
-  // 오전반차는 근무 4시간 뒤(12:30~13:30)가 휴게, 오후반차는 휴게 없이 퇴근
-  const lunch: [number, number] | null = pick?.type === 'am-half' ? [f.ws + 240, f.we - 240] : pick?.type === 'pm-half' ? null : [f.ls, f.le];
+  // 반차·반일 대휴는 부재 5시간에 점심 1시간(출근 4시간 뒤 12:30~13:30)이 들어 있다 — 사용 4시간만 칠한다
+  const halfDay = pick?.type === 'am-half' || pick?.type === 'pm-half' || pick?.type === 'comp-half';
+  const lunch: [number, number] | null = halfDay ? [f.ws + 240, f.ws + 300] : [f.ls, f.le];
   const blocks: Array<[number, number]> = [];
   if (pick) {
     const [a, b] = leaveRange(pick, day).map(toMin);

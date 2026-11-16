@@ -25,5 +25,5 @@ test('휴가 문서 정규화 — 대체휴무 종류는 그대로, 단위·시�
   assert.equal(r.leaveUnit, '오전반차');
   assert.equal(r.days, 0.5);
   assert.equal(r.startTime, '08:30');
-  assert.equal(r.endTime, '12:30');
+  assert.equal(r.endTime, '13:30'); // 반차 부재 5시간(점심 포함)
 });

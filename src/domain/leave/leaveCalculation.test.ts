@@ -147,7 +147,7 @@ export function runLeaveCalculationTests() {
     assert(normalized!.days === 0.5, `TEST-05 Fail: DB에 1일로 저장된 반차는 정규화 시 0.5일이어야 함 (실제: ${normalized!.days})`);
     assert(normalized!.leaveType === '오전반차', `TEST-05 Fail: 시간대 미지정 반차는 오전반차로 추론되어야 함 (실제: ${normalized!.leaveType})`);
     assert(normalized!.startTime === '08:30', 'TEST-05 Fail: 시작시간은 08:30이어야 함');
-    assert(normalized!.endTime === '12:30', 'TEST-05 Fail: 종료시간은 12:30이어야 함');
+    assert(normalized!.endTime === '13:30', 'TEST-05 Fail: 종료시간은 13:30이어야 함(반차 부재 5시간, 2026-11-16 확정)');
     console.log('✅ TEST-05 통과: 운영 DB의 과거 반차 문서(AP-260812-003)가 0.5일로 정상 교정됨');
   }
 

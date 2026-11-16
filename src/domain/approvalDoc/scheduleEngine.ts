@@ -1,5 +1,5 @@
 import type { ApprovalDoc } from './schema';
-import { calculateLeaveDays } from '@/domain/leave/policy';
+import { calculateLeaveDays, effectiveLeaveKind, halfDayAbsenceRange } from '@/domain/leave/policy';
 import type { ScheduleChange } from '@/domain/scheduleChange/schema';
 
 /**
@@ -148,8 +148,8 @@ function extractRawScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | null {
   if (!endDate) endDate = startDate;
 
   // 2. 시간(startTime, endTime) 추출
-  const startTime = doc.form?.startTime || (fVals['startTime'] ? String(fVals['startTime']) : undefined);
-  const endTime = doc.form?.endTime || (fVals['endTime'] ? String(fVals['endTime']) : undefined);
+  let startTime = doc.form?.startTime || (fVals['startTime'] ? String(fVals['startTime']) : undefined);
+  let endTime = doc.form?.endTime || (fVals['endTime'] ? String(fVals['endTime']) : undefined);
 
   // 3. 목적지(destination)
   const destination = fVals['destination'] ? String(fVals['destination']) : undefined;
@@ -181,6 +181,12 @@ function extractRawScheduleInfo(doc: ApprovalDoc): StandardScheduleInfo | null {
   const leaveType = category === 'LEAVE'
     ? doc.form?.leaveType || String(fVals['leaveType'] || '연차')
     : undefined;
+
+  // 반차는 실제 부재 시각(점심 포함 5시간)으로 — 예전 문서는 사용 4시간만 적혀 있다
+  if (category === 'LEAVE') {
+    const unit = (doc.form as { leaveUnit?: string } | undefined)?.leaveUnit || (fVals['leaveUnit'] ? String(fVals['leaveUnit']) : undefined);
+    ({ startTime, endTime } = halfDayAbsenceRange(effectiveLeaveKind(leaveType, unit), startTime, endTime));
+  }
 
   // 10. 세부 구분(subType)
   let subType: string | undefined = undefined;

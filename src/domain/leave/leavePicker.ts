@@ -3,7 +3,8 @@ import { DAY_MIN, formatMinutes } from './substituteLedger';
 
 /**
  * 휴가원 사용기간 선택(화면설계서 V5.8) — 휴가 구분·시간대·신청량·막는 조건·문서 값.
- * 반차 시각은 사용자 정정이 우선: 오전반차 13:30 출근, 오후반차 12:30 퇴근(문서 표시는 오전 08:30~12:30, 오후 13:30~17:30).
+ * 반차는 점심 1시간을 포함해 5시간 부재, 사용 4시간(2026-11-16 확정): 오전반차 08:30~13:30(13:30 출근), 오후반차 12:30~17:30(12:30 퇴근).
+ * 문서에도 이 시각을 그대로 적는다 — 업무계획·캘린더는 결재 문서 시각을 쓴다.
  * 대체휴무는 종일(8시간)·반일(4시간)만.
  */
 export type LeavePickType =
@@ -90,10 +91,10 @@ export function leaveTimeOptions(type: LeavePickType, day: WorkDay): string[] {
   };
   switch (type) {
     case 'am-half': return [toClock(f.ws)];
-    case 'pm-half': return [toClock(f.we - 240)];
+    case 'pm-half': return [toClock(f.ws + 240)];
     case 'am-quarter': return steps(f.ws, f.ls - 120);
     case 'pm-quarter': return steps(f.le, f.we - 120);
-    case 'comp-half': return [toClock(f.ws), toClock(addWork(f.ws, 240, f))];
+    case 'comp-half': return [toClock(f.ws), toClock(f.ws + 240)];
     default: return [toClock(f.ws)];
   }
 }
@@ -103,12 +104,13 @@ export function leaveRange(pick: LeavePick, day: WorkDay): [string, string] {
   const f = dayFrame(day);
   const s = toMin(pick.start);
   switch (pick.type) {
-    // 반차는 점심 위치와 상관없이 오전 근무 시작 4시간 / 오후 퇴근 전 4시간(사용자 확정)
-    case 'am-half': return [toClock(f.ws), toClock(f.ws + 240)];
-    case 'pm-half': return [toClock(f.we - 240), toClock(f.we)];
+    // 반차는 점심 위치와 상관없이 부재 5시간(점심 포함): 오전 = 퇴근 4시간 전 출근, 오후 = 출근 4시간 뒤 퇴근(근태 판정과 같음)
+    case 'am-half': return [toClock(f.ws), toClock(f.we - 240)];
+    case 'pm-half': return [toClock(f.ws + 240), toClock(f.we)];
     case 'am-quarter':
     case 'pm-quarter': return [pick.start, toClock(addWork(s, 120, f))];
-    case 'comp-half': return [pick.start, toClock(Math.min(f.we, addWork(s, 240, f)))];
+    // 반일 대휴도 반차와 같은 부재 시간대(근태도 단위가 반차면 반차로 판정)
+    case 'comp-half': return s === f.ws ? [toClock(f.ws), toClock(f.we - 240)] : [toClock(f.ws + 240), toClock(f.we)];
     default: return [toClock(f.ws), toClock(f.we)];
   }
 }
@@ -219,7 +221,7 @@ export function pickOfDocValues(v: Record<string, unknown>, day: WorkDay): Leave
   const s = /^\d{2}:\d{2}$/.test(st) ? st : toClock(f.ws);
   if (lt === '연차') return { type: 'full', start: toClock(f.ws) };
   if (lt === '오전반차') return { type: 'am-half', start: toClock(f.ws) };
-  if (lt === '오후반차' || lt === '반차') return { type: 'pm-half', start: toClock(f.we - 240) };
+  if (lt === '오후반차' || lt === '반차') return { type: 'pm-half', start: toClock(f.ws + 240) };
   if (lt === '반반차') {
     const q = String(v.quarterStart ?? '') || s;
     return { type: toMin(q) < f.ls ? 'am-quarter' : 'pm-quarter', start: q };
@@ -228,7 +230,7 @@ export function pickOfDocValues(v: Record<string, unknown>, day: WorkDay): Leave
   if (lt === '공가') return { type: 'official', start: toClock(f.ws) };
   if (lt === '대체휴무') {
     if (unit === '오전반차') return { type: 'comp-half', start: toClock(f.ws) };
-    if (unit === '오후반차') return { type: 'comp-half', start: toClock(addWork(f.ws, 240, f)) };
+    if (unit === '오후반차') return { type: 'comp-half', start: toClock(f.ws + 240) };
     return { type: 'comp-full', start: toClock(f.ws) };
   }
   return null;

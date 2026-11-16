@@ -54,7 +54,7 @@ export const LEAVE_POLICIES: Record<string, LeavePolicy> = {
   AM_HALF: {
     code: 'AM_HALF',
     label: '오전 반차',
-    displayDetail: '08:30 ~ 12:30 (0.5일)',
+    displayDetail: '08:30 ~ 13:30 (0.5일, 점심 포함)',
     category: 'ANNUAL_DEDUCT',
     deductsAnnualLeave: true,
     deductDays: 0.5,
@@ -71,7 +71,7 @@ export const LEAVE_POLICIES: Record<string, LeavePolicy> = {
   PM_HALF: {
     code: 'PM_HALF',
     label: '오후 반차',
-    displayDetail: '13:30 ~ 17:30 (0.5일)',
+    displayDetail: '12:30 ~ 17:30 (0.5일, 점심 포함)',
     category: 'ANNUAL_DEDUCT',
     deductsAnnualLeave: true,
     deductDays: 0.5,
@@ -154,8 +154,8 @@ export const LEAVE_POLICIES: Record<string, LeavePolicy> = {
 /** 휴가 종류 한글 라벨 맵핑 (기존 서식 및 신규 서식 호환) */
 export const LEAVE_TYPE_OPTIONS = [
   { value: '연차', policyCode: 'ANNUAL', label: '종일 연차 (08:30~17:30 / 1.0일)', deductDays: 1.0 },
-  { value: '오전반차', policyCode: 'AM_HALF', label: '오전 반차 (08:30~12:30 / 0.5일)', deductDays: 0.5 },
-  { value: '오후반차', policyCode: 'PM_HALF', label: '오후 반차 (13:30~17:30 / 0.5일)', deductDays: 0.5 },
+  { value: '오전반차', policyCode: 'AM_HALF', label: '오전 반차 (08:30~13:30 / 0.5일)', deductDays: 0.5 },
+  { value: '오후반차', policyCode: 'PM_HALF', label: '오후 반차 (12:30~17:30 / 0.5일)', deductDays: 0.5 },
   { value: '반차', policyCode: 'AM_HALF', label: '반차 (구버전 호환 / 0.5일)', deductDays: 0.5 },
   { value: '반반차', policyCode: 'QUARTER', label: '반반차 (2시간 지정 / 0.25일)', deductDays: 0.25 },
   { value: '대체휴무', policyCode: 'SUBSTITUTE', label: '대체휴무 (휴일근무 적립분 차감)', deductDays: 1.0 },
@@ -368,17 +368,48 @@ export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
   return 1.0;
 }
 
+/**
+ * 반차 부재 시각(2026-11-16 확정) — 점심 1시간을 포함해 5시간 자리를 비우고, 사용은 4시간(0.5일).
+ * 오전반차 08:30~13:30(13:30 출근), 오후반차 12:30~17:30(12:30 퇴근).
+ */
+export const HALF_DAY_ABSENCE = {
+  AM: { startTime: '08:30', endTime: '13:30' },
+  PM: { startTime: '12:30', endTime: '17:30' },
+} as const;
+
+const HALF_USE_MIN = 240;
+const LUNCH_MIN = 60;
+const clockMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const minClock = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/**
+ * 결재 문서의 반차 시각 → 실제 부재 시각. kind 는 effectiveLeaveKind 결과(대체휴무 반일은 단위).
+ * 예전 문서는 사용 4시간만 적혀 있어(오전 08:30~12:30·오후 13:30~17:30) 점심 쪽으로 1시간 넓혀 읽는다.
+ * 문서는 고치지 않는다. 반차가 아니거나 시각이 없거나 이미 5시간이면 그대로.
+ */
+export function halfDayAbsenceRange(
+  kind: string,
+  startTime?: string,
+  endTime?: string,
+): { startTime?: string; endTime?: string } {
+  const am = kind === '오전반차' || kind === 'AM_HALF';
+  const pm = kind === '오후반차' || kind === 'PM_HALF';
+  if (!(am || pm) || !startTime || !endTime || !/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+    return { startTime, endTime };
+  }
+  const s = clockMin(startTime);
+  const e = clockMin(endTime);
+  if (e - s !== HALF_USE_MIN) return { startTime, endTime };
+  return am ? { startTime, endTime: minClock(e + LUNCH_MIN) } : { startTime: minClock(s - LUNCH_MIN), endTime };
+}
+
 /** 휴가 유형별 기본 시간대 반환 */
 export function getDefaultTimeWindow(
   leaveType: string,
   quarterSlotKey?: string,
 ): { startTime: string; endTime: string } {
-  if (leaveType === '오전반차' || leaveType === 'AM_HALF') {
-    return { startTime: '08:30', endTime: '12:30' };
-  }
-  if (leaveType === '오후반차' || leaveType === 'PM_HALF') {
-    return { startTime: '13:30', endTime: '17:30' };
-  }
+  if (leaveType === '오전반차' || leaveType === 'AM_HALF') return { ...HALF_DAY_ABSENCE.AM };
+  if (leaveType === '오후반차' || leaveType === 'PM_HALF') return { ...HALF_DAY_ABSENCE.PM };
   if (leaveType === '반반차' || leaveType === 'QUARTER') {
     if (quarterSlotKey) {
       const slot = QUARTER_LEAVE_SLOTS.find((s) => s.key === quarterSlotKey);
