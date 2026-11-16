@@ -125,3 +125,21 @@ test('외근·회의중·휴가는 직접 설정으로 인정하지 않는다 (�
     assert.equal(resolveAt(`${D} 10:00`, { stored: open(`${D} 09:59`, status, `${D} 09:00`) }).status, 'ONLINE');
   }
 });
+
+// ── 본인 메시지와 자동 상태 이름 ──
+
+test('휴가·외근·출장 중 화면 메시지는 자동 이름이지만 본인 메시지는 따로 남는다 (메뉴 입력칸·상태 변경에 쓰는 값)', () => {
+  const auto = { ...seen(`${D} 09:59`), updatedAt: '' }; // 직접 바꾼 적 없음
+  const during = resolveAt(`${D} 10:00`, { stored: auto, approvalDays: days(D, [leave('연차')]) });
+  assert.equal(during.message, '연차');
+  assert.equal(during.ownMessage, '');
+  const trip = resolveAt(`${D} 10:00`, { stored: { ...auto, message: '부산 현장' }, approvalDays: days(D, [OUTSIDE]) });
+  assert.equal(trip.message, '외근');
+  assert.equal(trip.ownMessage, '부산 현장');
+});
+
+test('창을 닫아 오프라인으로 보여도 본인 메시지는 그대로다', () => {
+  const r = resolveAt(`${D} 10:00`, { stored: { ...seen(`${D} 08:00`), message: '3시까지 미팅' } });
+  assert.equal(r.message, '');
+  assert.equal(r.ownMessage, '3시까지 미팅');
+});

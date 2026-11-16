@@ -34,11 +34,12 @@ interface MobileUserMenuSheetProps {
 export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuSheetProps) {
   const navigate = useNavigate();
   const { signOutUser, user } = useAuth();
-  const { presence, meta, updatePresence } = useMyPresence();
+  const { presence, ownMessage, meta, updatePresence } = useMyPresence();
   const textSize = useChatTextSize(user?.id ?? '');
 
   // 웹(UserMenu.tsx)과 동일한 상태 변수 및 로직
-  const [msgInput, setMsgInput] = useState(presence.message);
+  // 입력칸은 본인이 쓴 메시지로 — 화면 메시지는 휴가·외근·출장 이름일 수 있다
+  const [msgInput, setMsgInput] = useState(ownMessage);
   const [saveFeedback, setSaveFeedback] = useState(false);
 
   // 로그인 사용자 정보 (웹 Topbar/UserMenu와 동일한 변수 체계)
@@ -46,15 +47,16 @@ export default function MobileUserMenuSheet({ isOpen, onClose }: MobileUserMenuS
   const email = user?.email ?? '-';
   const initials = user?.name ? user.name.slice(-2) : 'WF';
 
-  // presence.message 변경 시 입력 필드 동기화
+  // 본인 메시지가 바뀌면 입력 필드 동기화
   useEffect(() => {
-    setMsgInput(presence.message);
-  }, [presence.message]);
+    setMsgInput(ownMessage);
+  }, [ownMessage]);
 
   if (!isOpen || !user) return null;
 
   const handleStatusClick = (status: UserPresenceStatus) => {
-    updatePresence(status, presence.message);
+    // 상태만 바꾼다 — 메시지를 넘기면 화면에 보이던 '연차'·'출장'이 저장돼 기간이 끝나도 남는다
+    updatePresence(status);
   };
 
   const handleMsgSave = () => {

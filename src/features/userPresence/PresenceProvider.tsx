@@ -10,6 +10,7 @@ import { buildApprovalDayIndex } from '@/domain/commute/approvalDayIndex';
 import { useOutsideWorks } from '@/features/outsideWork/useOutsideWorks';
 import { useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { AWAY_AFTER_MS, resolvePresence, type PresenceMeeting, type StoredPresence } from '@/domain/userPresence/resolve';
+import { presencePatch } from '@/domain/userPresence/edit';
 import { startActivityTracking } from './activityTracker';
 import {
   USER_PRESENCE_STATUSES,
@@ -88,6 +89,8 @@ async function writeMyDoc(userId: string, patch: Partial<StoredPresence>) {
 
 interface PresenceContextValue {
   presences: Record<string, UserPresence>;
+  /** 내가 직접 쓴 상태 메시지 — 화면 메시지는 휴가·외근·출장 이름일 수 있어 입력칸에는 이것을 쓴다 */
+  myOwnMessage: string;
   setMyPresence: (status: UserPresenceStatus, message?: string) => Promise<void>;
 }
 
@@ -225,11 +228,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (!myId) return;
       const current = presences[myId];
       const mine = stored[myId] ?? { status: 'ONLINE' as const, message: '', updatedAt: '', lastSeenAt: null };
-      // 지금 보이는 상태를 그대로 넘기면 메시지만 바꾼다 — 자동 상태(회의중 등)를 직접 설정으로 굳히지 않는다.
-      const messageOnly = current?.status === status && message !== undefined;
-      const patch: Partial<StoredPresence> = messageOnly
-        ? { message: message.trim() }
-        : { status, message: message !== undefined ? message.trim() : mine.message, updatedAt: new Date().toISOString() };
+      const patch = presencePatch({ shownStatus: current?.status, stored: mine, status, message, nowIso: new Date().toISOString() });
       applyStored([{ userId: myId, stored: { ...mine, ...patch } }]);
       setNow(new Date());
       try {
@@ -241,7 +240,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     [myId, presences, stored, applyStored],
   );
 
-  const value = useMemo(() => ({ presences, setMyPresence }), [presences, setMyPresence]);
+  const myOwnMessage = (myId && stored[myId]?.message) || '';
+  const value = useMemo(() => ({ presences, myOwnMessage, setMyPresence }), [presences, myOwnMessage, setMyPresence]);
   return <PresenceContext.Provider value={value}>{children}</PresenceContext.Provider>;
 }
 

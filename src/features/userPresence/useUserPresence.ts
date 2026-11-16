@@ -18,14 +18,18 @@ export function useAllUserPresences(): Record<string, UserPresence> {
   return usePresenceContext().presences;
 }
 
-/** 로그인한 사용자의 상태와 변경 함수. 지금 보이는 상태를 그대로 넘기면 메시지만 바뀐다. */
+/**
+ * 로그인한 사용자의 상태와 변경 함수. 지금 보이는 상태를 그대로 넘기면 메시지만 바뀐다.
+ * `presence.message` 는 화면용(휴가·외근·출장 중에는 그 이름), `ownMessage` 는 본인이 쓴 메시지 — 입력칸은 `ownMessage` 로 채운다.
+ */
 export function useMyPresence() {
   const { user } = useAuth();
   const userId = user?.id ?? 'guest';
-  const { presences, setMyPresence } = usePresenceContext();
+  const { presences, myOwnMessage, setMyPresence } = usePresenceContext();
   const presence = presences[userId] ?? offline(userId);
   return {
     presence,
+    ownMessage: myOwnMessage,
     meta: USER_PRESENCE_META[presence.status] ?? USER_PRESENCE_META.OFFLINE,
     updatePresence: (status: UserPresenceStatus, message?: string) => setMyPresence(status, message),
   };

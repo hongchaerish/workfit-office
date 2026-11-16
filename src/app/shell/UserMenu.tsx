@@ -26,8 +26,9 @@ function Item({ icon, label, sub, onClick }: { icon: ReactNode; label: string; s
 export function UserMenu({ onClose }: UserMenuProps) {
   const { signOutUser, user } = useAuth();
   const navigate = useNavigate();
-  const { presence, meta, updatePresence } = useMyPresence();
-  const [msgInput, setMsgInput] = useState(presence.message);
+  const { presence, ownMessage, meta, updatePresence } = useMyPresence();
+  // 입력칸은 본인이 쓴 메시지로 — 화면 메시지는 휴가·외근·출장 이름일 수 있다
+  const [msgInput, setMsgInput] = useState(ownMessage);
   const [isEditingMsg, setIsEditingMsg] = useState(false);
 
   // 로그인 사용자 정보
@@ -99,7 +100,7 @@ export function UserMenu({ onClose }: UserMenuProps) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleMsgSave();
                     if (e.key === 'Escape') {
-                      setMsgInput(presence.message);
+                      setMsgInput(ownMessage);
                       setIsEditingMsg(false);
                     }
                   }}
@@ -119,7 +120,10 @@ export function UserMenu({ onClose }: UserMenuProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => setIsEditingMsg(true)}
+                onClick={() => {
+                  setMsgInput(ownMessage);
+                  setIsEditingMsg(true);
+                }}
                 className="group flex w-full items-center justify-center gap-1 rounded-lg border border-border/80 bg-white/70 dark:bg-panel/70 px-2.5 py-1 text-[11px] text-ink2 hover:border-teal hover:bg-white transition-all shadow-2xs"
                 title="상태 메시지 편집"
               >

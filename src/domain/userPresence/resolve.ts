@@ -38,7 +38,10 @@ export type PresenceSource = 'LEAVE_APPROVAL' | 'OUTSIDE_APPROVAL' | 'MEETING' |
 
 export interface ResolvedPresence {
   status: UserPresenceStatus;
+  /** 화면에 보일 메시지 — 휴가·외근·출장·회의 중에는 그 이름이다 */
   message: string;
+  /** 본인이 직접 쓴 메시지 — 메뉴 입력칸·상태 변경에는 이것을 쓴다(자동 이름을 저장하면 기간이 끝나도 남는다) */
+  ownMessage: string;
   source: PresenceSource;
 }
 
@@ -58,7 +61,7 @@ function kstParts(d: Date): { date: string; minutes: number } {
 const kstInstant = (date: string, minutes: number) =>
   new Date(`${date}T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00+09:00`).getTime();
 
-interface AutoStatus extends ResolvedPresence {
+interface AutoStatus extends Omit<ResolvedPresence, 'ownMessage'> {
   /** 이 자동 상태가 시작된 시각 — 직접 설정이 이보다 나중이면 직접 설정이 이긴다 */
   since: number;
 }
@@ -109,6 +112,7 @@ function autoStatusAt(inputs: PresenceInputs, date: string, minutes: number): Au
 export function resolvePresence(inputs: PresenceInputs): ResolvedPresence {
   const { stored, now } = inputs;
   const { date, minutes } = kstParts(now);
+  const ownMessage = stored?.message ?? '';
 
   const connected = Boolean(
     stored?.lastSeenAt && now.getTime() - new Date(stored.lastSeenAt).getTime() <= ONLINE_WINDOW_MS,
@@ -117,7 +121,8 @@ export function resolvePresence(inputs: PresenceInputs): ResolvedPresence {
   const idle = lastActive !== null && now.getTime() - lastActive > AWAY_AFTER_MS;
   const connection: ResolvedPresence = {
     status: connected ? (idle ? 'AWAY' : 'ONLINE') : 'OFFLINE',
-    message: connected ? stored?.message ?? '' : '',
+    message: connected ? ownMessage : '',
+    ownMessage,
     source: 'CONNECTION',
   };
 
@@ -130,12 +135,12 @@ export function resolvePresence(inputs: PresenceInputs): ResolvedPresence {
     stored && manualToday
       ? stored.status === 'ONLINE' || (!connected && stored.status !== 'OFFLINE')
         ? connection
-        : { status: stored.status, message: stored.message, source: 'MANUAL' }
+        : { status: stored.status, message: stored.message, ownMessage, source: 'MANUAL' }
       : null;
 
   const auto = autoStatusAt(inputs, date, minutes);
   if (auto && !(manual && manualAt && manualAt.getTime() >= auto.since)) {
-    return { status: auto.status, message: auto.message, source: auto.source };
+    return { status: auto.status, message: auto.message, ownMessage, source: auto.source };
   }
   return manual ?? connection;
 }
