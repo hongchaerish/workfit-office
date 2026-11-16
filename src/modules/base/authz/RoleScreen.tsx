@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { nextRoleDraft } from './roleDraft';
 import { ArrowRight, Check, Plus } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -37,8 +38,15 @@ export default function RoleScreen() {
   const [tab, setTab] = useState<Tab>('work');
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // 역할 목록을 다시 받아도(저장·다른 관리자 수정 신호) 저장 안 한 수정은 지우지 않는다 — 다른 역할을 고를 때만 바꾼다
+  const prevSelected = useRef(selected);
+  const tabFor = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    setDraft(selected);
+    const prev = prevSelected.current;
+    prevSelected.current = selected;
+    setDraft((d) => nextRoleDraft(prev, selected, d));
+    if (tabFor.current === (selected?.id ?? null)) return;
+    tabFor.current = selected?.id ?? null;
     const hasWork = selected?.permissions.some((k) => !PERMISSION_BY_KEY.get(k)?.adminConsole);
     setTab(selected?.kind === 'super' || (selected && !hasWork && selected.permissions.length > 0) ? 'admin' : 'work');
   }, [selected]);

@@ -131,6 +131,7 @@ import { showTransientPushNotification, PUSH_NOTIFICATION_DURATION_MS } from '@/
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 
 import { usePermission } from '@/features/auth/usePermission';
+import { useOrgRealtime } from '@/features/org/useOrgRealtime';
 
 /** 예전 주소(/base/…, /sys/…) — 관리자 콘솔의 같은 화면으로 옮긴다(즐겨찾기·알림 링크 호환) */
 function ToAdmin() {
@@ -155,6 +156,7 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   useNotifications(user?.id);
+  useOrgRealtime(user?.id);
   const isMobilePwa = location.pathname.startsWith('/m');
 
   // 로그인 시 FCM 토큰 동기화(권한 허용된 기기 한정, 팝업 없음).

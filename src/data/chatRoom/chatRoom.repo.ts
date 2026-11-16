@@ -188,39 +188,47 @@ export const chatRoomRepo = {
   async list(memberId?: string, opts?: { includeDeleted?: boolean }): Promise<ChatRoom[]> {
     let rows = await backend.loadAll();
 
-    // 부서방: 방 없는 부서에 한 번 개설 + 부서명 변경 시 이름 따라가기만 (참여자는 직접 관리, 30분 간격)
-    const now = Date.now();
-    if (isDeptRoomSyncDue(lastDeptSyncAt, now)) {
-      lastDeptSyncAt = now;
-      try {
-        const depts = await departmentRepo.list();
-        const users = await userRepo.listIncludingTestAccounts();
-        const plan = planDeptRoomSync({
-          depts,
-          users,
-          rooms: rows,
-          now: nowLocalIso(),
-          pickColor: (id) => ROOM_COLORS[Math.abs(id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
-        });
-        for (const room of plan.create) {
-          await backend.save(room);
-          rows.push(room);
-        }
-        for (const { roomId, name } of plan.rename) {
-          if (!(await this.applyDeptRoomRename(roomId, name))) continue;
-          const idx = rows.findIndex((r) => r.id === roomId);
-          if (idx >= 0) rows[idx] = { ...rows[idx], name };
-          await appendSystemMessage(roomId, `부서명 변경으로 방 이름이 ${name}으로 바뀌었습니다`);
-        }
-      } catch (e) {
-        // Appwrite 일시적 지연이나 한도 초과 시에도 조회 목록 표시 자체는 정상 유지
-        console.warn('Background dept room sync skipped:', (e as Error)?.message || e);
-      }
-    }
+    // 부서방: 방 없는 부서에 한 번 개설 + 부서명 변경 시 이름 따라가기만 (참여자는 직접 관리).
+    // 부서를 저장한 관리자 화면이 바로 맞추고(syncDeptRooms), 여기서는 접속 때 한 번·30분마다 놓친 것만 메운다
+    if (isDeptRoomSyncDue(lastDeptSyncAt, Date.now())) rows = await this.syncDeptRooms(rows);
 
     if (!opts?.includeDeleted) rows = rows.filter((r) => !r.deletedAt);
     const scoped = memberId ? rows.filter((r) => r.members.includes(memberId)) : rows;
     return sortByRecent(scoped);
+  },
+
+  /**
+   * 부서방 맞추기 — 방 없는 부서에 방을 만들고, 부서 이름이 바뀌면 방 이름을 따라 바꾼다.
+   * 실패해도 던지지 않는다(방 목록 표시·부서 저장은 그대로). 맞춘 뒤의 방 목록을 돌려준다.
+   */
+  async syncDeptRooms(current?: ChatRoom[]): Promise<ChatRoom[]> {
+    lastDeptSyncAt = Date.now();
+    const rows = current ?? (await backend.loadAll());
+    try {
+      const depts = await departmentRepo.list();
+      const users = await userRepo.listIncludingTestAccounts();
+      const plan = planDeptRoomSync({
+        depts,
+        users,
+        rooms: rows,
+        now: nowLocalIso(),
+        pickColor: (id) => ROOM_COLORS[Math.abs(id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % ROOM_COLORS.length],
+      });
+      for (const room of plan.create) {
+        await backend.save(room);
+        rows.push(room);
+      }
+      for (const { roomId, name } of plan.rename) {
+        if (!(await this.applyDeptRoomRename(roomId, name))) continue;
+        const idx = rows.findIndex((r) => r.id === roomId);
+        if (idx >= 0) rows[idx] = { ...rows[idx], name };
+        await appendSystemMessage(roomId, `부서명 변경으로 방 이름이 ${name}으로 바뀌었습니다`);
+      }
+    } catch (e) {
+      // Appwrite 일시적 지연이나 한도 초과 시에도 조회 목록 표시 자체는 정상 유지
+      console.warn('Background dept room sync skipped:', (e as Error)?.message || e);
+    }
+    return rows;
   },
 
   async get(id: string): Promise<ChatRoom | null> {

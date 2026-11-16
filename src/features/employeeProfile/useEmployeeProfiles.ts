@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeeProfileRepo, type SelfEditableProfilePatch } from '@/data/employeeProfile/employeeProfile.repo';
 import { userRepo } from '@/data/user/user.repo';
+import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import type { EmployeeProfile, EmployeeProfileFormValues } from '@/domain/employeeProfile/schema';
 import { accountStatusOnTransition } from '@/domain/employeeProfile/lifecycle';
 import { userSchema } from '@/domain/user/schema';
@@ -95,6 +96,8 @@ export function useUpsertEmployeeProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      // 발령으로 직원이 처음 생긴 부서는 이때 부서방이 생긴다 — 저장을 기다리게 하지 않고 뒤에서 맞춘다
+      void chatRoomRepo.syncDeptRooms().then(() => queryClient.invalidateQueries({ queryKey: ['chatRooms'] }));
     },
   });
 }

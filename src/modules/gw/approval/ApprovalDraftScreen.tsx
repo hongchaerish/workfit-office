@@ -4,6 +4,7 @@ import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { shouldSeedRecipients } from './recipientSeed';
 import type { User } from '@/domain/user/schema';
 import {
   type ApprovalDoc,
@@ -1046,10 +1047,19 @@ function ApprovalDraftInner({
     }
   }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId]);
 
-  // 서식 기본 수신처/참조부서 초기값 연동
+  // 서식 기본 수신처/참조부서 초기값 연동 — 서식마다 한 번만(조직 정보가 다시 와도 사용자가 지운 수신처를 되살리지 않는다)
+  const recipientsSeededFor = useRef<string | null>(null);
   useEffect(() => {
     if (editDoc || !form) return;
-    if (recipients.length === 0) {
+    const seed = shouldSeedRecipients({
+      editing: Boolean(editDoc),
+      formCode: form.code,
+      seededFor: recipientsSeededFor.current,
+      orgReady: !org.isLoading,
+      recipientCount: recipients.length,
+    });
+    if (!org.isLoading) recipientsSeededFor.current = form.code;
+    if (seed) {
       const initialRecipients: ApprovalRecipient[] = [];
       if (form.recipientDeptId) {
         const dept = org.depts.find((d) => d.id === form.recipientDeptId);

@@ -3,6 +3,7 @@ import { db } from '@/shared/lib/firebase';
 import { databases, APPWRITE_DATABASE_ID, Query, safeDocId } from '@/shared/lib/appwrite';
 import { dbDriver } from '@/shared/lib/dbDriver';
 import { onSessionReset } from '@/shared/lib/sessionReset';
+import { registerSharedRead } from './sharedReads';
 
 /**
  * 공유 CRUD 백엔드 어댑터 — Phase 3 보존 repo 일괄 전환용.
@@ -119,6 +120,7 @@ export function createCrudBackend<T>(opts: CrudOpts<T>): PatchableCrudBackend<T>
     let inflight: Promise<T[]> | null = null;
     const forget = () => { inflight = null; };
     onSessionReset(forget);
+    registerSharedRead(coll, forget);
     return {
       async loadAll() {
         if (!inflight) {
