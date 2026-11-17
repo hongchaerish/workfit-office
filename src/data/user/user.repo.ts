@@ -1,6 +1,7 @@
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
 import { parseNotificationPrefs, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
+import { withRetry } from '@/shared/lib/retry';
 import { createCrudBackend, Query } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows, registerTestAccountSource, rememberTestAccounts } from '@/data/_backend/testAccountVisibility';
 import { hashPassword } from '@/shared/lib/crypto';
@@ -109,12 +110,10 @@ export const userRepo = {
    */
   async listIncludingTestAccounts(filter?: UserFilter): Promise<User[]> {
     const rawUsers = await backend.loadAll();
-    let profiles: EmployeeProfile[] = [];
-    try {
-      profiles = await employeeProfileRepo.listIncludingTestAccounts();
-    } catch {
-      // ignore
-    }
+    // 소속(부서·직급·직책)은 인명관리에서만 온다. 예전에는 읽기에 실패하면 조용히 빈 목록으로 넘어가
+    // 모든 사람이 '미지정'이 됐고, 로그인 정보에 그 값이 남아 기안부서가 '미지정'으로 저장됐다(2026-11-17 운영).
+    // 일시적인 실패는 잠깐 뒤 다시 읽고, 그래도 안 되면 틀린 소속 대신 오류를 낸다.
+    const profiles: EmployeeProfile[] = await withRetry(() => employeeProfileRepo.listIncludingTestAccounts());
     const profileMap = new Map(profiles.map((p) => [p.userId || p.id, p]));
     // 원본 부서가 '테스트'인데 인사 프로필 부서가 일반 부서인 경우도 테스트 계정으로 본다
     rememberTestAccounts([...rawUsers, ...profiles.map((p) => ({ id: p.userId, name: p.name, dept: p.dept }))]);
