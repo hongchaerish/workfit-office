@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useAuth } from './AuthProvider';
 import LoginScreen from './LoginScreen';
 
@@ -16,7 +16,7 @@ const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
  * VITE_AUTH_ENABLED="true" 일 때만 게이트가 활성화된다.
  */
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const { user, loading, demoMode } = useAuth();
+  const { user, loading, demoMode, reconnecting } = useAuth();
 
   if (!AUTH_ENABLED || demoMode) return <>{children}</>;
 
@@ -27,6 +27,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  // 세션은 있는데 연결 문제로 못 읽음 — 로그인 화면 대신 다시 연결(잠시 뒤 저절로 다시 시도)
+  if (!user && reconnecting) return <ReconnectScreen />;
 
   if (!user) {
     // MES 도크 경로(/exec?from=mes 또는 /dock, /widdy)는 전체화면 로그인 창 대신 StandaloneDockScreen 의 전용 안내 화면 렌더링
@@ -42,4 +45,33 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+/** 연결이 잠깐 끊겨 로그인 정보를 못 읽었을 때 — 5초마다 저절로 다시 시도, [다시 시도]·[다시 로그인] */
+export function ReconnectScreen({ className }: { className?: string }) {
+  const { retryRestore, signOutUser } = useAuth();
+  useEffect(() => {
+    const t = setInterval(retryRestore, 5000);
+    return () => clearInterval(t);
+  }, [retryRestore]);
+  return (
+    <div
+      className={`grid place-items-center px-6 ${className ?? 'bg-bg-deep'}`}
+      // 화면 전체일 때 — 글자 크기 배율(body zoom)이 높이에 곱해지므로 나눠서 실제 화면 높이에 가운데로
+      style={className ? undefined : { minHeight: 'calc(100vh / var(--font-scale, 1))' }}
+    >
+      <div className="max-w-sm space-y-3 text-center">
+        <div className="text-[15px] font-bold text-ink">연결이 잠깐 끊겼습니다</div>
+        <div className="text-[13px] leading-relaxed text-ink3">사람 정보를 읽지 못했습니다. 잠시 뒤 저절로 다시 연결합니다.</div>
+        <div className="flex justify-center gap-2 pt-1">
+          <button type="button" onClick={retryRestore} className="rounded-lg bg-teal px-4 py-2 text-[13px] font-bold text-white hover:opacity-90">
+            다시 시도
+          </button>
+          <button type="button" onClick={() => void signOutUser()} className="rounded-lg border border-border px-4 py-2 text-[13px] font-semibold text-ink2 hover:text-ink">
+            다시 로그인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

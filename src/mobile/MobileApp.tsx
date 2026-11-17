@@ -6,6 +6,7 @@ import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatN
 import { onForegroundMessage } from '@/shared/lib/messaging';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
+import { ReconnectScreen } from '@/app/auth/AuthGate';
 import MobileNotificationsScreen from './MobileNotificationsScreen';
 import MobilePushPermissionPrompt from './MobilePushPermissionPrompt';
 import MobileChatList from './MobileChatList';
@@ -40,7 +41,7 @@ import { ModalLayerProvider } from '@/shared/ui/Modal';
  * 자체 로그인 게이트 + 기존 채팅 훅 재사용. iOS 는 "홈 화면에 추가" 시 앱처럼 실행/푸시.
  */
 export default function MobileApp() {
-  const { user, loading } = useAuth();
+  const { user, loading, reconnecting } = useAuth();
 
   // 웹과 같은 테마 색 — 이 기기에 저장된 테마(없으면 웹 기본). 글씨 배율은 PWA 에서 항상 1이라 색만 적용하고,
   // 휴대폰 상단 상태바 색(안드로이드)도 상단바 색에 맞춘다.
@@ -156,6 +157,9 @@ export default function MobileApp() {
       >
         {loading ? (
           <div className="grid flex-1 place-items-center text-[13px] text-ink3">불러오는 중…</div>
+        ) : !user && reconnecting ? (
+          // 연결이 잠깐 끊겨 로그인 정보를 못 읽음 — 로그인 화면 대신 다시 연결
+          <ReconnectScreen className="flex-1" />
         ) : !user ? (
           <MobileLogin />
         ) : (
