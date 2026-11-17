@@ -173,8 +173,13 @@ self.addEventListener('notificationclick', (event) => {
     (async () => {
       const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       const focusable = list.filter((c) => 'focus' in c);
-      const desktop = focusable.find((c) => !c.url.includes('/m'));
-      const pwa = focusable.find((c) => c.url.includes('/m'));
+      // 경로로 창을 가른다 — 관리자 콘솔(/admin)은 채팅·링크를 받을 셸이 없어 알림 대상에서 뺀다.
+      // (예전엔 주소에 '/m' 이 없으면 모두 업무 창으로 봐서, 콘솔 창이 앞으로 나오기만 했다)
+      const pathOf = (c) => { try { return new URL(c.url).pathname; } catch { return ''; } };
+      const isAdmin = (p) => p === '/admin' || p.startsWith('/admin/');
+      const isPwa = (p) => p === '/m' || p.startsWith('/m/');
+      const desktop = focusable.find((c) => { const p = pathOf(c); return !isAdmin(p) && !isPwa(p); });
+      const pwa = focusable.find((c) => isPwa(pathOf(c)));
 
       /**
        * 1) 데스크톱 창이 열려 있으면: **앱에 넘겨 SPA 라우팅으로 이동한다.**
