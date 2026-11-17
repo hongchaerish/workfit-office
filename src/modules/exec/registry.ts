@@ -52,7 +52,7 @@ export const WIDGETS = {
   awayToday: { title: '오늘 휴가·외근', module: '조직도', tier: 'S', min: 'S', mini: true, Component: AwayTodayWidget },
   birthday: { title: '이달의 생일자', module: '조직도', tier: 'S', min: 'S', mini: true, Component: BirthdayWidget },
   newHires: { title: '이달의 입사자', module: '조직도', tier: 'S', min: 'S', mini: true, Component: NewHiresWidget },
-  notice: { title: '공지사항', module: '게시판', tier: 'M', min: 'M', Component: NoticeWidget },
+  notice: { title: '공지사항', module: '게시판', tier: 'M', min: 'S', Component: NoticeWidget },
   recentPosts: { title: '최근 게시글', module: '게시판', tier: 'M', min: 'M', Component: RecentPostsWidget },
   project: { title: '프로젝트', module: '프로젝트', tier: 'S', min: 'S', Component: ProjectWidget },
 } satisfies Record<string, WidgetDef>;

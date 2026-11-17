@@ -925,12 +925,13 @@ export function NoticeWidget() {
         <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
           {notices.map((p) => (
             <li key={p.id}>
-              <button type="button" onClick={() => openPost(p)} className="group grid w-full cursor-pointer grid-cols-[44px_minmax(0,1fr)] items-center gap-3 rounded-lg py-2 text-left">
+              <button type="button" onClick={() => openPost(p)} className="group grid w-full cursor-pointer grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg py-2 text-left">
                 <span className="text-[11px] tabular-nums text-ink3">{p.date.slice(5, 10).replace('-', '.')}</span>
                 <span className="flex min-w-0 items-center gap-2">
                   {p.isPinned && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold text-[#c4432f] ring-1 ring-[#f3b8a6] dark:text-red-300 dark:ring-red-400/40">필독</span>}
                   <span className="truncate text-[13px] text-ink group-hover:text-[#0876c8]">{p.title}</span>
                 </span>
+                <span className="max-w-[88px] truncate text-[11px] text-ink3">{p.author}</span>
               </button>
             </li>
           ))}
