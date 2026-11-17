@@ -225,20 +225,16 @@ test('반반차 13:00 시작이면 그 사이 2시간만 부재', () => {
 });
 
 // ── 휴가로 채운 분(leaveMin) — 그래프가 휴가 색으로 나눠 그린다 ──
-test('반차 날 leaveMin 은 휴가로 더해진 4시간, 근무 분과 합치면 totalMin', () => {
+test('반차 날 leaveMin 은 반차 4시간, workedMin 은 실제 근무', () => {
   const r = evalDay('08:30', '12:30', [leave('오후반차')]);
-  assert.equal(r.leaveMin, 240);
-  assert.equal(r.totalMin - (r.leaveMin ?? 0), 240);
+  assert.deepEqual([r.leaveMin, r.workedMin, r.totalMin], [240, 240, 480]);
   const short = evalDay('08:30', '11:30', [leave('오후반차')]);
-  assert.equal(short.leaveMin, 240);
-  assert.equal(short.totalMin, 420);
+  assert.deepEqual([short.leaveMin, short.workedMin, short.totalMin], [240, 180, 420]);
 });
 
-test('8시간 상한에 걸리면 leaveMin 은 실제로 더해진 만큼만, 휴가 없는 날·외근 날은 없음', () => {
+test('8시간 상한에 걸려도 leaveMin 은 반차 4시간 그대로(합계 totalMin 만 8시간), 휴가 없는 날·외근 날은 없음', () => {
   const r = evalDay('08:30', '15:30', [leave('오후반차')]);
-  assert.equal(r.totalMin, 480);
-  assert.equal(r.leaveMin, 480 - (r.totalMin - (r.leaveMin ?? 0)));
-  assert.ok((r.leaveMin ?? 0) < 240);
+  assert.deepEqual([r.leaveMin, r.workedMin, r.totalMin], [240, 420, 480]); // 반차 날은 점심을 빼지 않아 7시간
   assert.equal(evalDay('08:30', '17:30').leaveMin, undefined);
   assert.equal(evalDay('08:30', '10:00', [OUTSIDE]).leaveMin, undefined);
 });
