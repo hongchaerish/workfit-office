@@ -364,8 +364,11 @@ export function evaluateCommuteRecord(
   // 반차 날은 점심 없이 4시간 연속 근무 — 점심을 빼지 않는다
   const lunch: Window = segments.length === 2 && !halfDay ? [segments[0][1], segments[1][0]] : [0, 0];
   let totalMin = Math.max(0, stay[1] - stay[0] - overlap(stay, lunch));
+  const workedMin = totalMin;
   if (leaveCreditMin > 0) totalMin = Math.min(480, totalMin + leaveCreditMin);
   if (workStatus) totalMin = Math.max(totalMin, 480);
+  // 휴가로 채운 만큼(8시간 상한에 잘린 뒤 실제로 더해진 분). 외근·출장으로 8시간이 된 날은 휴가 몫이 아니다
+  const leaveMin = workStatus ? 0 : Math.max(0, totalMin - workedMin);
 
   // 야간근무(nightMin) 판정 (22:00 = 1320분 이후)
   const nightStartMin = timeToMinutes(policy.nightStartTime) ?? 1320;
@@ -379,6 +382,7 @@ export function evaluateCommuteRecord(
     nightMin,
     lateMin,
     totalMin,
+    ...(leaveMin > 0 ? { leaveMin } : {}),
     status,
     ...names,
   };

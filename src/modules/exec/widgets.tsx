@@ -432,7 +432,7 @@ const minText = (m: number) => `${Math.floor(m / 60)}시간 ${m % 60}분`;
  * 실제 출퇴근 기록이 있으면 그 시간만 근무 막대로 얹는다(외근·출장으로 인정된 8시간은 막대로 그리지 않는다).
  */
 function DayHoursColumn({ d, max, show, radius, dim, label }: {
-  d: { minutes: number; actualMin?: number; away?: AwayKind; bucket?: AttendanceBucket; late?: boolean };
+  d: { minutes: number; actualMin?: number; leaveMin?: number; away?: AwayKind; bucket?: AttendanceBucket; late?: boolean };
   max: number;
   show: boolean;
   radius: string;
@@ -440,15 +440,21 @@ function DayHoursColumn({ d, max, show, radius, dim, label }: {
   label: string;
 }) {
   const late = d.late ?? d.bucket === 'late';
-  const work = d.away ? d.actualMin ?? 0 : d.minutes;
+  // 반차·반반차 날은 휴가로 채운 시간을 휴가 색으로 근무 위에 얹는다(합계는 그대로)
+  const leave = d.away ? 0 : Math.max(0, d.leaveMin ?? 0);
+  const work = d.away ? d.actualMin ?? 0 : Math.max(0, d.minutes - leave);
   const title = d.away
     ? `${label} ${AWAY_LOOK[d.away].label}${work > 0 ? ` · 출퇴근 기록 ${minText(work)}` : ' (출퇴근 기록 없음)'}`
-    : `${label} ${minText(d.minutes)}`;
+    : `${label} ${minText(d.minutes)}${leave > 0 ? ` (근무 ${minText(work)} · 휴가 ${minText(leave)})` : ''}`;
+  const pct = (m: number) => `${(Math.min(m, max) / max) * 100}%`;
   return (
     <div className="group relative flex h-full flex-1 items-end" title={title}>
       {show && d.away && <div className={`absolute inset-0 ${radius}`} style={{ background: AWAY_LOOK[d.away].stripe }} />}
-      {show && work > 0 && (
-        <div className={`relative w-full ${radius} ${late && !d.away ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'} ${dim ? 'opacity-80 group-hover:opacity-100' : ''}`} style={{ height: `${(Math.min(work, max) / max) * 100}%` }} />
+      {show && (work > 0 || leave > 0) && (
+        <div className={`relative flex w-full flex-col-reverse overflow-hidden ${radius} ${dim ? 'opacity-80 group-hover:opacity-100' : ''}`} style={{ height: pct(work + leave) }}>
+          {work > 0 && <div className={`w-full shrink-0 ${late && !d.away ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(work / (work + leave)) * 100}%` }} />}
+          {leave > 0 && <div className="w-full shrink-0" style={{ height: `${(leave / (work + leave)) * 100}%`, background: BUCKET_STROKE.leave }} />}
+        </div>
       )}
     </div>
   );
@@ -468,7 +474,7 @@ function HoursLegend({ days, late = true }: { days: Array<{ away?: AwayKind }>; 
   );
 }
 
-function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; actualMin?: number; away?: AwayKind; bucket: AttendanceBucket }>; today: string }) {
+function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; actualMin?: number; leaveMin?: number; away?: AwayKind; bucket: AttendanceBucket }>; today: string }) {
   const MAX = 12 * 60;
   return (
     <div className="pl-[26px]">
@@ -586,7 +592,7 @@ function useMyCommuteDays(month: string) {
       */
       const away: AwayKind = rec.status === 'outside' || rec.status === 'trip' ? rec.status : null;
       const actualMin = away ? (raw?.inAt && raw?.outAt ? evaluate({ empId: myEmpId ?? 0, date, inAt: raw.inAt, outAt: raw.outAt }, NO_APPROVALS).totalMin ?? 0 : 0) : rec.totalMin ?? 0;
-      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, actualMin, away, inAt: rec.inAt, outAt: rec.outAt };
+      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, leaveMin: rec.leaveMin ?? 0, actualMin, away, inAt: rec.inAt, outAt: rec.outAt };
     });
   }, [month, myMonthQuery.data, evaluate, approvalDaysOf, me?.id, me?.name, myEmpId, today]);
   return { myDays, myEmpId, settled: boot.isSettled };
