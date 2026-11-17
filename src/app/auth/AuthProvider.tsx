@@ -25,6 +25,10 @@ interface AuthState {
   user: User | null;
   /** 세션 복원 등 초기 로딩 중. */
   loading: boolean;
+  /** 저장된 세션은 있는데 연결 문제로 복원하지 못함 — 로그인 화면 대신 '다시 연결하는 중'을 보인다 */
+  reconnecting: boolean;
+  /** 세션 복원을 다시 시도한다 */
+  retryRestore: () => void;
   /** 자체 로그인은 항상 동작하므로 데모 통과 개념은 없음(하위호환용, 항상 false). */
   demoMode: boolean;
   /** 사번(empNo) 또는 이메일 + 비밀번호로 로그인. 실패 시 AuthError throw. */
@@ -44,6 +48,9 @@ const SESSION_KEY = 'mes.auth.uid';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reconnecting, setReconnecting] = useState(false);
+  /** 늘리면 세션 복원을 다시 한다 */
+  const [restoreTick, setRestoreTick] = useState(0);
 
   // 초기 마운트 시 저장된 세션 복원 또는 MES SSO 자동 로그인
   useEffect(() => {
@@ -91,9 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem(SESSION_KEY);
           }
         }
+        if (alive) setReconnecting(false);
       } catch (err) {
         console.error('[AuthProvider] 세션 복원 오류:', err);
-        /* 복원 실패 시 미로그인으로 처리 */
+        // 세션이 있는데 연결 문제로 못 읽음 — 로그아웃시키지 않고 다시 연결하는 중으로(세션은 지우지 않는다).
+        // 세션이 없으면 원래대로 미로그인
+        if (alive && localStorage.getItem(SESSION_KEY)) setReconnecting(true);
       } finally {
         if (alive) setLoading(false);
       }
@@ -101,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [restoreTick]);
 
   async function signIn(loginId: string, password: string, platform: 'Web' | 'Mobile' = 'Web') {
     const u = await authRepo.authenticate(loginId, password);
@@ -114,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOutUser() {
+    setReconnecting(false);
     // 이 기기로 이 계정 알림이 계속 오지 않게 기기 목록에서 뺀다(기다리지 않음)
     if (user?.id) void releasePushTokenOnSignOut(user.id);
     localStorage.removeItem(SESSION_KEY);
@@ -151,7 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, demoMode: false, signIn, signOutUser, changePassword, updateProfile }}>
+    <AuthContext.Provider
+      value={{ user, loading, reconnecting, retryRestore: () => setRestoreTick((n) => n + 1), demoMode: false, signIn, signOutUser, changePassword, updateProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

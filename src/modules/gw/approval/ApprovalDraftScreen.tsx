@@ -152,7 +152,7 @@ export default function ApprovalDraftScreen() {
 }
 
 function ApprovalDraftInner({
-  me,
+  me: sessionMe,
   editDoc,
   cancelTargetDoc,
   fixedType,
@@ -176,6 +176,16 @@ function ApprovalDraftInner({
 
   const { data: forms = [] } = useActiveApprovalForms();
   const org = useOrgTree();
+  // 기안자 소속은 로그인 때 읽어 둔 값이 아니라 최신 조직 정보로 — 로그인 때 소속 읽기가 실패했거나 그 뒤 발령이 나도
+  // 기안부서·결재선 규칙·문서 머리가 지금 소속을 쓰게 한다. 조직 정보에 아직 없으면 로그인 때 값
+  const orgMe = org.userById(sessionMe.id);
+  const me = useMemo<User>(
+    () =>
+      orgMe && orgMe.dept && orgMe.dept !== '미지정'
+        ? { ...sessionMe, dept: orgMe.dept, position: orgMe.position || sessionMe.position, jobTitle: orgMe.jobTitle ?? sessionMe.jobTitle }
+        : sessionMe,
+    [sessionMe, orgMe]
+  );
   const bal = useLeave(me.id);
   const userDeptId = useMemo(() => {
     return org.depts.find((d) => d.name === me.dept)?.id;
@@ -1203,6 +1213,10 @@ function ApprovalDraftInner({
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+    // 기안부서를 모르면 상신하지 않는다 — 문서함·공개범위·결재선 규칙이 부서로 움직인다(임시저장은 된다)
+    if (forSubmit && (!me.dept || me.dept === '미지정')) {
+      return '기안자 소속 부서를 확인하지 못했습니다. 화면을 새로고침한 뒤 다시 상신해 주세요. 계속되면 관리자에게 인명관리의 소속 부서를 확인해 달라고 해 주세요.';
+    }
 
     if (isPostApprovalSystemEnabled && isPostApproval) {
       if (!postApprovalActionTaken.trim() && !postApprovalReason.trim()) {
