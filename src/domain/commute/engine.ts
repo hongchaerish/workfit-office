@@ -367,8 +367,9 @@ export function evaluateCommuteRecord(
   const workedMin = totalMin;
   if (leaveCreditMin > 0) totalMin = Math.min(480, totalMin + leaveCreditMin);
   if (workStatus) totalMin = Math.max(totalMin, 480);
-  // 휴가로 채운 만큼(8시간 상한에 잘린 뒤 실제로 더해진 분). 외근·출장으로 8시간이 된 날은 휴가 몫이 아니다
-  const leaveMin = workStatus ? 0 : Math.max(0, totalMin - workedMin);
+  // 그래프용 — 휴가 몫은 상한과 무관하게 반차 4시간·반반차 2시간 그대로(차감과 같은 양), 근무 몫은 실제 근무.
+  // 외근·출장으로 8시간이 된 날은 따로 그리므로 넣지 않는다
+  const leaveMin = workStatus ? 0 : leaveCreditMin;
 
   // 야간근무(nightMin) 판정 (22:00 = 1320분 이후)
   const nightStartMin = timeToMinutes(policy.nightStartTime) ?? 1320;
@@ -382,7 +383,7 @@ export function evaluateCommuteRecord(
     nightMin,
     lateMin,
     totalMin,
-    ...(leaveMin > 0 ? { leaveMin } : {}),
+    ...(leaveMin > 0 ? { leaveMin, workedMin } : {}),
     status,
     ...names,
   };

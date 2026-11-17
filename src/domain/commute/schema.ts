@@ -70,8 +70,10 @@ export const commuteRecordSchema = z.object({
   nightMin: z.number().int(),
   lateMin: z.number().int(),
   totalMin: z.number().int(),
-  /** totalMin 중 휴가(반차·반반차)로 채운 분 — 화면에서 휴가 색으로 나눠 그린다. 없으면 0 */
+  /** 반차·반반차가 인정하는 분(반차 240·반반차 120) — 그래프가 휴가 색으로 그린다. 차감과는 무관(차감은 결재 문서 기준) */
   leaveMin: z.number().int().optional(),
+  /** leaveMin 이 있는 날의 실제 근무 분(8시간 상한 전) — 그래프의 근무 몫 */
+  workedMin: z.number().int().optional(),
   status: z.enum(COMMUTE_STATUS),
   leaveName: z.string().optional(),
   outsideName: z.string().optional(),
