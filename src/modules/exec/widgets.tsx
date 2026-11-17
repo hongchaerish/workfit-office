@@ -498,39 +498,61 @@ function HoursBars({ days, today }: { days: Array<{ date: string; minutes: numbe
   );
 }
 
-/** 연차 막대 — 사용·신청 중·남음 */
+/** 연차·대체휴무 — 한 줄 두 칸 요약과 휴가원 작성 바로가기 */
 function LeaveBar({ standalone = false }: { standalone?: boolean }) {
   const navigate = useGo();
   const { user: me } = useAuth();
   const leave = useLeave(me?.id);
   if (leave.isLoading) return null;
-  const total = Math.max(leave.grant, leave.used + leave.pending, 0.5);
-  const remain = Math.max(0, leave.grant - leave.used - leave.pending);
-  const seg = [
-    { key: 'used', label: '사용', value: leave.used, cls: 'bg-[#0876c8]' },
-    { key: 'pending', label: '신청 중', value: leave.pending, cls: 'bg-[#7cc4ec]' },
-    { key: 'remain', label: '남음', value: remain, cls: 'bg-[#dfe6ef] dark:bg-white/15' },
-  ].filter((s) => s.value > 0);
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  const sub = leave.substituteHoliday;
+  const subRemain = Math.max(0, sub.remainingMin);
+  const over = leave.remaining < 0;
+  const cells = [
+    {
+      key: 'annual',
+      label: '연차',
+      value: <><b className={over ? 'text-[#c4432f] dark:text-red-300' : 'text-ink'}>{fmt(leave.remaining)}</b><span className="ml-0.5 text-[10.5px] text-ink3">/{fmt(leave.grant)}일</span></>,
+      total: Math.max(leave.grant, leave.used + leave.pending),
+      used: leave.used,
+      pending: leave.pending,
+      // 파스텔 하늘 — 사용 / 신청 중
+      colors: ['#9cc5f2', '#d3e6fa'],
+    },
+    {
+      key: 'sub',
+      label: '대체휴무',
+      value: <b className="text-ink">{subRemain ? formatMinutes(subRemain) : '0시간'}</b>,
+      total: Math.max(sub.totalMin, sub.usedMin + sub.pendingMin),
+      used: sub.usedMin,
+      pending: sub.pendingMin,
+      // 파스텔 민트 — 사용 / 신청 중
+      colors: ['#9ed9c3', '#d4efe5'],
+    },
+  ];
   return (
-    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-3 border-t border-border pt-3'}`}>
-      <div className="mb-2.5 flex items-baseline justify-between">
-        <span className={`font-bold text-ink group-hover:text-[#0876c8] ${standalone ? 'text-[15px] font-extrabold' : 'text-[12.5px]'}`}>연차</span>
-        <span className="text-[11.5px] text-ink3">
-          남은 연차 <strong className={`text-[15px] tabular-nums ${leave.remaining < 0 ? 'text-[#c4432f] dark:text-red-300' : 'text-ink'}`}>{fmt(leave.remaining)}</strong>일 / {fmt(leave.grant)}일
-        </span>
+    <div className={standalone ? '' : 'mt-3 border-t border-border pt-3'}>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <span className={`font-bold text-ink ${standalone ? 'text-[15px] font-extrabold' : 'text-[12.5px]'}`}>휴가</span>
+        <button type="button" onClick={() => navigate(`/gw/approval/new?type=휴가&date=${todayKst()}`)} className="cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">
+          휴가원 작성
+        </button>
       </div>
-      <div className="flex h-2.5 gap-[2px] overflow-hidden rounded-full">
-        {seg.map((s) => (
-          <div key={s.key} className={`${s.cls} first:rounded-l-full last:rounded-r-full`} style={{ width: `${(s.value / total) * 100}%` }} title={`${s.label} ${fmt(s.value)}일`} />
+      <div className="grid grid-cols-2 divide-x divide-border rounded-xl border border-border">
+        {cells.map((c) => (
+          <button key={c.key} type="button" onClick={() => navigate('/gw/leave')} className="min-w-0 cursor-pointer px-3 py-2.5 text-left first:rounded-l-xl last:rounded-r-xl hover:bg-panel-alt">
+            <span className="flex items-baseline justify-between gap-2 whitespace-nowrap">
+              <span className="text-[11px] font-bold text-ink3">{c.label}</span>
+              <span className="text-[15px] tabular-nums">{c.value}</span>
+            </span>
+            <span className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-[#eef1f5] dark:bg-white/10">
+              {c.total > 0 && <span style={{ width: `${(c.used / c.total) * 100}%`, background: c.colors[0] }} />}
+              {c.total > 0 && <span style={{ width: `${(c.pending / c.total) * 100}%`, background: c.colors[1] }} />}
+            </span>
+          </button>
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink2">
-        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#0876c8]" />사용 <strong className="tabular-nums text-ink">{fmt(leave.used)}</strong></span>
-        {leave.pending > 0 && <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#7cc4ec]" />신청 중 <strong className="tabular-nums text-ink">{fmt(leave.pending)}</strong></span>}
-        {leave.substituteHoliday.remainingMin > 0 && <span>대체휴무 <strong className="tabular-nums text-ink">{formatMinutes(leave.substituteHoliday.remainingMin)}</strong></span>}
-      </div>
-    </button>
+    </div>
   );
 }
 
@@ -607,7 +629,7 @@ export function AttendanceWidget() {
             <div className="grid grid-cols-3 gap-1.5">
               {stats.map((t) => (
                 <div key={t.label} className="rounded-xl bg-panel-alt px-2 py-2.5 text-center">
-                  <div className={`text-[22px] leading-none font-black tabular-nums ${t.warn ? 'text-[#e0703f]' : 'text-ink'}`}>
+                  <div className={`text-[20px] leading-none font-black tabular-nums ${t.warn ? 'text-[#e0703f]' : 'text-ink'}`}>
                     {t.value}<span className="ml-0.5 text-[11px] font-bold text-ink3">{t.unit}</span>
                   </div>
                   <div className="mt-1.5 text-[10.5px] font-bold text-ink3">{t.label}</div>
@@ -649,9 +671,9 @@ export function AttendanceWidget() {
               <Donut counts={counts} centerTop={`${counts.work + counts.late}일`} centerBottom="출근한 날" />
               <TodayClock rec={nowRec} />
             </div>
-            {/* 도넛 색 설명 — 작게 한 줄 */}
+            {/* 도넛 색 설명 — 작게 한 줄(휴무/기타는 회색 칸이라 설명하지 않는다) */}
             <ul className="m-0 -mt-1 mb-3 flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
-              {ATTENDANCE_BUCKETS.map((k) => (
+              {ATTENDANCE_BUCKETS.filter((k) => k !== 'pending').map((k) => (
                 <li key={k} className="flex items-center gap-1 whitespace-nowrap text-[10.5px] text-ink3">
                   <i className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: BUCKET_STROKE[k] }} />
                   {ATTENDANCE_LABELS[k]}
@@ -689,7 +711,6 @@ export function AttendanceWidget() {
               </span>
             </div>
             <HoursBars days={myDays} today={today} />
-            <HoursLegend days={myDays.filter((d) => d.date <= today)} />
             <LeaveBar />
           </div>
         </div>
@@ -751,7 +772,7 @@ export function ApprovalWidget() {
               onClick={() => setBoxKey(t.key)}
               className={`cursor-pointer rounded-xl px-2 py-2.5 text-center transition-colors ${on ? 'bg-[#0876c8] text-white' : 'bg-panel-alt text-ink hover:bg-[#e6eef8] dark:hover:bg-white/10'}`}
             >
-              <div className="text-[22px] leading-none font-black tabular-nums">{t.value}</div>
+              <div className="text-[20px] leading-none font-black tabular-nums">{t.value}</div>
               <div className={`mt-1.5 text-[10.5px] font-bold whitespace-nowrap ${on ? 'text-white/85' : 'text-ink3'}`}>{t.label}</div>
             </button>
           );
