@@ -25,6 +25,7 @@ import { WorkPlanEventModal } from './event/WorkPlanEventModal';
 import type { EventTarget } from './event/eventFormMapping';
 import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
+import { WorkPlanTeamWeekTable } from './components/WorkPlanTeamWeekTable';
 import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
@@ -273,6 +274,29 @@ export default function WorkPlanScreen() {
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
   }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster, departments]);
 
+  /**
+   * 주간 표 인원 — 부서 묶음에 겸직자도 나오게 겸직 행을 더한다(전체 부서일 때만. 특정 부서는 위에서 이미 겸직을 더했다).
+   * 같은 사람(userId)이라 칸·상세는 똑같다.
+   */
+  const weekTableMembers = useMemo(() => {
+    if (deptFilter !== 'all' && departments.includes(deptFilter)) return scopedMembers;
+    const kw = searchKeyword.trim().toLowerCase();
+    const shown = new Set(scopedMembers.map((u) => u.id));
+    const extra: User[] = [];
+    for (const dm of departmentMembers) {
+      if (dm.isPrimary) continue;
+      const deptName = dm.deptName || org.depts.find((d) => d.id === dm.deptId)?.name;
+      const base = users.find((u) => u.id === dm.userId);
+      if (!deptName || !base || !shown.has(base.id) || base.dept === deptName) continue;
+      if (kw && !base.name.toLowerCase().includes(kw) && !deptName.toLowerCase().includes(kw)) continue;
+      extra.push({ ...base, dept: deptName, jobTitle: dm.jobTitle || base.jobTitle });
+    }
+    return [...scopedMembers, ...extra];
+  }, [deptFilter, departments, scopedMembers, departmentMembers, org, users, searchKeyword]);
+
+  /** 칸 옆 상세 창 — 누른 칸 */
+  const [cellPopover, setCellPopover] = useState<{ member: User; date: string; anchor: HTMLElement } | null>(null);
+
   const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
     setViewState(next);
@@ -461,10 +485,31 @@ export default function WorkPlanScreen() {
           onMoveItem={actorActive ? handleMoveItem : undefined}
         />
       )}
-      {(view === 'team' || view === 'teamWeek') && (
+      {view === 'teamWeek' && (
+        <WorkPlanTeamWeekTable
+          actor={actor}
+          todayStr={today}
+          weekStart={weekStart}
+          onWeekChange={setWeekStart}
+          members={weekTableMembers}
+          cellOf={cellOf}
+          workPlans={workPlans}
+          viewSwitch={viewSwitch}
+          filters={filters}
+          forceOpen={deptFilter !== 'all' || searchKeyword.trim() !== ''}
+          onOpenConfig={() => setIsConfigOpen(true)}
+          onOpenCompanySchedule={(date, content, planId) => setCompanyScheduleModal({ isOpen: true, date, content, planId })}
+          onOpenCell={(member, date, anchor) => setCellPopover({ member, date, anchor })}
+          onOpenPerson={() => undefined /* 한 주 서랍은 다음 단계 */}
+          onCreate={actorActive ? handleCreate : undefined}
+          onMoveItem={actorActive ? handleMoveItem : undefined}
+          selected={cellPopover ? { userId: cellPopover.member.id, date: cellPopover.date } : null}
+        />
+      )}
+      {view === 'team' && (
       <WorkPlanTeamMonthlyMatrix
         viewSwitch={viewSwitch}
-        weekStart={view === 'teamWeek' ? weekStart : null}
+        weekStart={null}
         onWeekChange={setWeekStart}
         actor={actor}
         todayStr={initialDate ?? today}

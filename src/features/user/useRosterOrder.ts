@@ -58,5 +58,5 @@ export function useRosterOrder() {
   );
 
   const compare = useCallback((a: RosterPerson, b: RosterPerson) => compareRoster(a, b, ctx), [ctx]);
-  return { compare, isExecutive: ctx.isExecutive };
+  return { compare, isExecutive: ctx.isExecutive, deptOrder: ctx.deptOrder };
 }

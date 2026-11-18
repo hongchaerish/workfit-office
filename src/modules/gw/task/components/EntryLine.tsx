@@ -44,7 +44,8 @@ export function EntryLine({ entry, onOpen, className = '' }: { entry: DayEntry; 
   );
   if (!openable) {
     return (
-      <div title={title} className={cls} onClick={(e) => e.stopPropagation()}>
+      // 결재 휴가처럼 열 상세가 없는 줄은 칸 누르기로 넘기지 않는다. onOpen 이 없으면(주간 표) 칸이 누르기를 받는다
+      <div title={title} className={cls} onClick={onOpen ? (e) => e.stopPropagation() : undefined}>
         {body}
       </div>
     );
