@@ -26,16 +26,20 @@ export function lineTitleOf(entry: DayEntry): string {
   return chipLook(entry).label.replace(/^\[[^\]]*\]\s*/, '');
 }
 
-export function EntryLine({ entry, onOpen, className = '' }: { entry: DayEntry; onOpen?: (entry: DayEntry) => void; className?: string }) {
+/**
+ * wrap — 제목이 길면 두 줄까지 접어 보인다(주간 표). 없으면 한 줄 말줄임.
+ * 반복 업무는 제목을 옅게 — 매일 같은 일이 외근·휴가 같은 일정과 같은 무게로 보이지 않게.
+ */
+export function EntryLine({ entry, onOpen, className = '', wrap = false }: { entry: DayEntry; onOpen?: (entry: DayEntry) => void; className?: string; wrap?: boolean }) {
   const { hint } = chipLook(entry);
   const range = timeRangeOf(entry);
   const title = range ? `${hint} (${range})` : hint;
   const openable = !!onOpen && !(entry.source === 'APPROVAL' && !entry.outside);
-  const cls = `flex w-full min-w-0 items-center gap-1 border-l-2 pl-1.5 text-left text-[11.5px] leading-[1.45] ${LINE_TONE_CLASS[lineToneOf(entry)]} ${className}`;
+  const cls = `flex w-full min-w-0 ${wrap ? 'items-start' : 'items-center'} gap-1 border-l-2 pl-1.5 text-left text-[11.5px] leading-[1.45] ${LINE_TONE_CLASS[lineToneOf(entry)]} ${className}`;
   const body = (
     <>
       <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{timeOf(entry)}</span>
-      <span className="min-w-0 flex-1 truncate">{lineTitleOf(entry)}</span>
+      <span className={`min-w-0 flex-1 ${wrap ? 'line-clamp-2 [overflow-wrap:anywhere]' : 'truncate'} ${entry.item?.routine ? 'font-normal text-ink3' : ''}`}>{lineTitleOf(entry)}</span>
       {entry.roomStatus === 'PENDING' && <span className="shrink-0 text-[9px] text-amber">대기</span>}
       {entry.roomStatus === 'REJECTED' && <span className="shrink-0 text-[9px] text-danger">회의실 반려</span>}
       {entry.outside?.source === 'APPROVAL' && <Check size={10} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />}

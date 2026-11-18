@@ -67,6 +67,8 @@ interface EventFieldsProps {
 /** 일정 창 왼쪽 입력 — 종류(일반·회의·외근·출장)마다 칸이 다르다. */
 export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true, recentTitles = [], busyAt }: EventFieldsProps) {
   const { state, set, readOnly } = form;
+  // 빈 제목으로 저장하려 했으면 제목 칸 자체를 빨갛게 — 창 아래 오류 줄만으로는 놓치기 쉽다
+  const titleMissing = !!form.error && !readOnly && !state.title.trim() && (state.kind === 'ITEM' || state.kind === 'MEETING');
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
@@ -96,7 +98,8 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         <Row label="제목">
           <input
             aria-label="제목"
-            className={titleClass}
+            aria-invalid={titleMissing || undefined}
+            className={`${titleClass} ${titleMissing ? '!border-danger' : ''}`}
             value={state.title}
             maxLength={100}
             placeholder={isMeeting ? '회의 제목' : '제목'}
@@ -104,6 +107,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
             autoFocus={autoFocusTitle && !readOnly}
             onChange={(e) => set('title', e.target.value)}
           />
+          {titleMissing && <p role="alert" className="mt-1 text-[11px] font-semibold text-danger">제목을 입력하세요</p>}
           {state.kind === 'ITEM' && !readOnly && recentTitles.length > 0 && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
               <span className="mr-0.5 text-[11px] text-ink3">최근</span>
@@ -564,7 +568,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         workDay ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
       }`}
     >
-      종일 {policy.workStartTime}~{policy.workEndTime}
+      근무시간 전체 {policy.workStartTime}~{policy.workEndTime}
     </button>
   );
 

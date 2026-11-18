@@ -107,12 +107,12 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
       }),
     [weekStart, cellOf, actor.id],
   );
-  const hasToday = days.some((d) => d.date === today);
 
   useLayoutEffect(() => {
     const anchor = startAnchorRef.current;
     if (!anchor) return;
-    const top = hasToday ? Math.max(nowMinute - 60, 0) : INITIAL_TOP;
+    // 늘 아침(08:00)부터 — 지금 시각으로 내려가면 오전 일정이 화면 밖이라 '일정이 없다'고 착각하기 쉽다
+    const top = INITIAL_TOP;
     anchor.style.top = `${(top / DAY_END) * 100}%`;
     anchor.style.scrollMarginTop = `${(stickyRef.current?.offsetHeight ?? 0) + 8}px`;
     anchor.scrollIntoView({ block: 'start' });

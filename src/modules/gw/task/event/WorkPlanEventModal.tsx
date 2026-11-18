@@ -250,7 +250,8 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
         </div>
 
         {/* 저장 실패 이유 — 왼쪽 스크롤과 상관없이 바닥 바로 위에 늘 보이게 */}
-        {form.error && (
+        {/* 빈 제목은 제목 칸 바로 아래에 이미 보인다 — 같은 글을 두 번 띄우지 않는다 */}
+        {form.error && !(!state.title.trim() && (state.kind === 'ITEM' || state.kind === 'MEETING')) && (
           <p role="alert" className="border-t border-danger/20 bg-danger/5 px-5 py-2 text-[11px] font-semibold text-danger">
             {form.error}
           </p>

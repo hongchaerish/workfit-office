@@ -275,6 +275,8 @@ export default function WorkPlanScreen() {
   const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
     setViewState(next);
+    // 보기를 바꾸면 맨 위부터 — 이전 보기의 스크롤 위치로 들어가지 않게
+    window.scrollTo({ top: 0 });
     writeStored(VIEW_STORAGE_KEY, next);
   };
   /** 주간·내 주간이 보고 있는 주의 월요일 */
@@ -319,7 +321,7 @@ export default function WorkPlanScreen() {
     const base = createTarget(date, member, actor, today, new Date());
     const people = [member.id, ...(opts.attendeeIds ?? [])];
     const busy = (id: string) => cellOf(id, date).entries.map(busyRangeOf).filter((r): r is MinuteRange => r !== null);
-    const free = opts.range ? null : firstFreeStart([...new Set(people)].map(busy), 60, date === today ? { notBefore: nowMinute, lunch } : { lunch });
+    const free = opts.range ? null : firstFreeStart([...new Set(people)].map(busy), 60, { lunch }); // 오늘이어도 하루의 첫 빈 시각(지금 이후로 밀지 않는다 — 오전·오후 초반 업무를 적기 쉽게)
     const range = opts.range ?? (free !== null ? { start: free, end: free + 60 } : undefined);
     openEventModal({
       ...base,

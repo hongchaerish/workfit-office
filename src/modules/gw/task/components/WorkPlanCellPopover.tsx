@@ -243,7 +243,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
                   {memo && <div className="mt-1 whitespace-pre-line rounded-md bg-panel-alt/70 px-2 py-1 text-[11px] text-ink2">{memo}</div>}
                   {isMine && leave && <div className="mt-0.5 text-[10.5px] text-ink3">휴가는 휴가원으로만 바꿀 수 있어요</div>}
                 </div>
-                <div className="flex shrink-0 items-start gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 focus-within:opacity-100">
+                <div className="flex shrink-0 items-start gap-1">
                   {isMine && !leave && (
                     <button type="button" onClick={() => { onClose(); onOpenEntry(entry); }} className="rounded px-1.5 py-0.5 text-[11px] text-ink2 hover:bg-panel hover:text-ink">
                       수정
