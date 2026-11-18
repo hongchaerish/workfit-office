@@ -6,6 +6,7 @@ import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmen
 import { assignDeptHead, departmentDeleteBlocker } from '@/data/orgSync/orgSync';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
+import { moveSibling } from '@/domain/department/reorder';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
@@ -33,6 +34,22 @@ export default function DepartmentScreen() {
   const refreshPeople = () => { for (const key of ['users', 'employeeProfiles', DEPARTMENT_MEMBERS_KEY]) qc.invalidateQueries({ queryKey: [key] }); };
   const [sel, setSel] = useState<Department | null>(null);
   const [msg, setMsg] = useState('');
+  const [moving, setMoving] = useState(false);
+
+  /** 같은 상위 부서 안에서 한 칸 위/아래로 — 번호가 바뀐 부서만 저장한다. 조직도·업무계획·근태 줄 순서가 이 값을 따른다 */
+  const move = async (id: string, dir: -1 | 1) => {
+    const changes = moveSibling(rows.map((d) => ({ ...d, parentId: d.parentId || null })), id, dir);
+    if (changes.length === 0) return;
+    setMoving(true);
+    try {
+      for (const c of changes) {
+        const row = rows.find((d) => d.id === c.id);
+        if (row) await upsert.mutateAsync({ ...row, order: c.order });
+      }
+    } finally {
+      setMoving(false);
+    }
+  };
 
   const nameOf = (id: string | null) => users.find((u) => u.id === id)?.name ?? '—';
 
@@ -45,7 +62,7 @@ export default function DepartmentScreen() {
       arr.push(d);
       byParent.set(pKey, arr);
     }
-    for (const arr of byParent.values()) arr.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    for (const arr of byParent.values()) arr.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ko'));
     const out: { d: Department; depth: number }[] = [];
     const visited = new Set<string>();
     const walk = (parent: string | null, depth: number) => {
@@ -167,7 +184,7 @@ export default function DepartmentScreen() {
       <div className="grid grid-cols-[1.5fr_1fr] items-start gap-3.5">
         {/* 트리 목록 */}
         <div className="overflow-hidden rounded-xl border border-border bg-panel">
-          <div className="grid grid-cols-[1fr_70px_90px_70px] border-b border-border bg-panel-alt px-3.5 py-2 text-[10.5px] font-bold text-ink2">
+          <div className="grid grid-cols-[1fr_70px_90px_96px] border-b border-border bg-panel-alt px-3.5 py-2 text-[10.5px] font-bold text-ink2">
             <span>부서명</span><span>유형</span><span>부서장</span><span className="text-right">관리</span>
           </div>
           {isLoading && <div className="py-8 text-center text-[12px] text-ink3">불러오는 중…</div>}
@@ -177,11 +194,17 @@ export default function DepartmentScreen() {
             </div>
           )}
           {ordered.map(({ d, depth }) => (
-            <div key={d.id} onClick={() => { setSel(d); setMsg(''); }} className={`grid grid-cols-[1fr_70px_90px_70px] items-center border-b border-border px-3.5 py-2.5 text-[12.5px] ${sel?.id === d.id ? 'bg-teal-soft/60' : 'cursor-pointer hover:bg-panel-alt'}`}>
+            <div key={d.id} onClick={() => { setSel(d); setMsg(''); }} className={`grid grid-cols-[1fr_70px_90px_96px] items-center border-b border-border px-3.5 py-2.5 text-[12.5px] ${sel?.id === d.id ? 'bg-teal-soft/60' : 'cursor-pointer hover:bg-panel-alt'}`}>
               <span className="truncate font-semibold text-ink" style={{ paddingLeft: depth * 16 }}>{depth > 0 && <span className="text-ink3">└ </span>}{d.name}</span>
               <span className={`text-[11px] font-bold ${TYPE_TONE[d.deptType] ?? 'text-ink3'}`}>{d.deptType}</span>
               <span className="truncate text-[11.5px] text-ink2">{nameOf(d.headUserId)}</span>
-              <span className="text-right">
+              <span className="flex items-center justify-end gap-1">
+                {canUpdate && (
+                  <>
+                    <button type="button" aria-label="위로" title="위로" disabled={moving} onClick={(e) => { e.stopPropagation(); void withAlert(() => move(d.id, -1))(); }} className="rounded px-1 text-[11px] text-ink3 hover:bg-panel-alt hover:text-ink disabled:opacity-40">▲</button>
+                    <button type="button" aria-label="아래로" title="아래로" disabled={moving} onClick={(e) => { e.stopPropagation(); void withAlert(() => move(d.id, 1))(); }} className="rounded px-1 text-[11px] text-ink3 hover:bg-panel-alt hover:text-ink disabled:opacity-40">▼</button>
+                  </>
+                )}
                 {canDelete && (
                   <button onClick={(e) => { e.stopPropagation(); void withAlert(() => del(d.id))(); }} className="text-[11.5px] text-ink3 hover:text-red-500">삭제</button>
                 )}
@@ -213,12 +236,6 @@ export default function DepartmentScreen() {
                   {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.dept} · {u.position}</option>)}
                 </select>
               </Field>
-              <div className="rounded-lg border border-border bg-panel-alt/60 px-3 py-2 text-[11px] text-ink2 flex items-center justify-between">
-                <span className="font-bold">정렬 순서</span>
-                <span className="font-mono text-teal font-extrabold text-[11px]">
-                  배치 순서에 따라 시스템 자동 관리
-                </span>
-              </div>
               {msg && <p className="text-[11.5px] font-semibold text-teal">{msg}</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setSel(null)} className="rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-ink3 hover:bg-panel-alt">취소</button>
