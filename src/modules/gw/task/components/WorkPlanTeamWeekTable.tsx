@@ -65,6 +65,8 @@ export interface WorkPlanTeamWeekTableProps {
   onMoveItem?: (item: WorkPlanItem, date: string) => void;
   /** 상세 창이 열린 칸 */
   selected: { userId: string; date: string } | null;
+  /** 날짜 머리 누르기 — 그날 모두의 일정 */
+  onOpenDay?: (date: string) => void;
 }
 
 interface Hover {
@@ -93,6 +95,7 @@ export function WorkPlanTeamWeekTable({
   onCreate,
   onMoveItem,
   selected,
+  onOpenDay,
 }: WorkPlanTeamWeekTableProps) {
   const { compare, isExecutive, deptOrder } = useRosterOrder();
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => plusDays(weekStart, i)), [weekStart]);
@@ -247,7 +250,9 @@ export function WorkPlanTeamWeekTable({
     return (
       <th
         key={date}
-        className={`border-b border-[#e4e8ee] px-2 py-1.5 text-left text-[11.5px] font-semibold ${isToday ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' : holiday ? 'text-rose-600' : 'text-ink2'}`}
+        onClick={onOpenDay ? () => onOpenDay(date) : undefined}
+        title={onOpenDay ? '그날 모두의 일정 보기' : undefined}
+        className={`border-b border-[#e4e8ee] px-2 py-1.5 text-left text-[11.5px] font-semibold ${isToday ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' : holiday ? 'text-rose-600' : 'text-ink2'} ${onOpenDay ? 'cursor-pointer hover:bg-panel-alt' : ''}`}
       >
         {WEEKDAYS[i]} {Number(date.slice(8))}
         {isToday && <span className="font-normal"> · 오늘</span>}
@@ -392,7 +397,13 @@ export function WorkPlanTeamWeekTable({
             <tr>
               <th className="border-b border-[#e4e8ee] px-2.5 py-1.5 text-[11px] font-semibold text-ink3">이름</th>
               {weekdays.map((d, i) => dayHead(d, i))}
-              <th className={`border-b border-[#e4e8ee] px-1 py-1.5 text-center text-[11px] font-semibold ${weekend.includes(todayStr) ? 'bg-sky-50 text-sky-700' : 'text-ink3'}`}>토·일</th>
+              <th
+                onClick={onOpenDay ? () => onOpenDay(weekend[0]) : undefined}
+                title={onOpenDay ? '토요일 모두의 일정 보기' : undefined}
+                className={`border-b border-[#e4e8ee] px-1 py-1.5 text-center text-[11px] font-semibold ${weekend.includes(todayStr) ? 'bg-sky-50 text-sky-700' : 'text-ink3'} ${onOpenDay ? 'cursor-pointer hover:bg-panel-alt' : ''}`}
+              >
+                토·일
+              </th>
             </tr>
           </thead>
           <tbody>

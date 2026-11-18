@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { moveSibling } from './reorder';
+import { moveSibling, saveOrdersAllOrNothing } from './reorder';
 
 const D = [
   { id: 'a', parentId: null, order: 1, name: '경영지원팀' },
@@ -39,4 +39,23 @@ test('moveSibling: 이미 번호가 맞는 형제는 돌려주지 않는다', ()
     { id: 'c', order: 2 },
     { id: 'b', order: 3 },
   ]);
+});
+
+test('saveOrdersAllOrNothing: 중간에 실패하면 이미 바꾼 부서를 원래 번호로 되돌리고 오류를 낸다', async () => {
+  const db = new Map([['a', 1], ['b', 2], ['c', 3]]);
+  const save = async (id: string, order: number) => {
+    if (id === 'c' && order === 1) throw new Error('저장 실패');
+    db.set(id, order);
+  };
+  await assert.rejects(
+    saveOrdersAllOrNothing([{ id: 'a', order: 3 }, { id: 'b', order: 2 }, { id: 'c', order: 1 }], new Map([['a', 1], ['b', 2], ['c', 3]]), save),
+    /저장 실패/,
+  );
+  assert.deepEqual([...db], [['a', 1], ['b', 2], ['c', 3]]);
+});
+
+test('saveOrdersAllOrNothing: 모두 되면 그대로 저장', async () => {
+  const db = new Map([['a', 1], ['b', 2]]);
+  await saveOrdersAllOrNothing([{ id: 'a', order: 2 }, { id: 'b', order: 1 }], new Map([['a', 1], ['b', 2]]), async (id, o) => void db.set(id, o));
+  assert.deepEqual([...db], [['a', 2], ['b', 1]]);
 });

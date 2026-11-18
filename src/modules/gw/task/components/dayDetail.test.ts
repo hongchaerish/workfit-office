@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
-import { busyRangeOf, dayStatusOf, freeSlotsOfDay, nowLineOf, recentItemTitles } from './dayDetail';
+import { busyRangeOf, dayStatusOf, freeSlotsOfDay, nowLineOf, recentItemTitles, escClosesPopover } from './dayDetail';
 
 const entry = (over: Partial<DayEntry>): DayEntry => ({
   key: over.key ?? 'k',
@@ -82,4 +82,13 @@ test('freeSlotsOfDay: 오늘이면 지금 이후만', () => {
 test('recentItemTitles: 업무만, 같은 제목은 하나로', () => {
   const t = (title: string, source: DayEntry['source'] = 'ITEM') => entry({ title, source });
   assert.deepEqual(recentItemTitles([t('A'), t('B'), t('A'), t('회의', 'MEETING'), t('C')]), ['A', 'B', 'C']);
+});
+
+test('escClosesPopover: 그냥 Esc 는 닫고, 이미 처리했거나 글 쓰는 중이면 닫지 않는다', () => {
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'DIV' } }), true);
+  assert.equal(escClosesPopover({ key: 'Enter', defaultPrevented: false, target: null }), false);
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: true, target: null }), false);
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'TEXTAREA' } }), false);
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'INPUT' } }), false);
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'DIV', isContentEditable: true } }), false);
 });

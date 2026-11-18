@@ -27,6 +27,8 @@ export interface ChatRichEditorHandle {
   /** 보낼 문서와 아직 올리지 않은 사진들 */
   getDraft: () => { doc: RichNode; pendingImages: Map<string, File> };
   clear: () => void;
+  /** 입력창 내용을 이 문서로 바꾼다(다른 화면이 채운 임시 글) */
+  setDoc: (doc: RichNode) => void;
   focus: () => void;
   isEmpty: () => boolean;
 }
@@ -288,6 +290,9 @@ export const ChatRichEditor = forwardRef<ChatRichEditorHandle, ChatRichEditorPro
       editor?.commands.clearContent(true);
       pendingRef.current.forEach((v) => URL.revokeObjectURL(v.url));
       pendingRef.current.clear();
+    },
+    setDoc: (doc) => {
+      editor?.commands.setContent(doc.content?.length ? doc : '', { emitUpdate: true });
     },
     focus: () => editor?.commands.focus('end'),
     isEmpty: () => !editor || editor.isEmpty,

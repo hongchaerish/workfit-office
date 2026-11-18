@@ -17,6 +17,8 @@ export type ChatDrafts = Record<string, ChatDraft>;
 
 const keyOf = (me: string) => `workfit-chat-drafts-${me}`;
 const CHANGE_EVENT = 'workfit-chat-drafts-change';
+/** 다른 화면이 방의 임시 글을 채웠을 때 — 그 방 입력창이 이미 열려 있으면 이 신호로 다시 읽는다. detail: { me, roomId } */
+export const CHAT_DRAFT_FILL_EVENT = 'workfit-chat-draft-fill';
 
 function withoutImages(node: RichNode): RichNode {
   const out: RichNode = { ...node };

@@ -9,7 +9,7 @@ import { WORK_DAY } from '@/domain/workPlan/freeSlots';
 import { CellMemo } from './CellMemo';
 import { LINE_TONE_CLASS, LINE_TONE_FILL, lineTitleOf } from './EntryLine';
 import { ENTRY_KIND_LABEL, entryKindOf, isLeave, lineToneOf } from './entryKind';
-import { busyRangeOf, dayStatusOf, freeSlotsOfDay, nowLineOf, type DayStatus } from './dayDetail';
+import { busyRangeOf, dayStatusOf, escClosesPopover, freeSlotsOfDay, nowLineOf, type DayStatus } from './dayDetail';
 import { timeOf } from './entryChipLook';
 
 /* 칸 옆 그날 상세 — 내 칸은 고치기, 남의 칸은 지금·빈 시간·회의 잡기·메시지. 스크롤해도 닫히지 않고 칸을 따라간다. */
@@ -86,6 +86,11 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
   // 자리 — 칸 오른쪽(모자라면 왼쪽), 페이지 기준 좌표라 스크롤하면 칸과 같이 움직인다
   // body 에 글자 배율(zoom)이 걸려 있다 — 화면 좌표(배율 적용)를 body 좌표로 나눠 쓴다
   const place = () => {
+    // 표가 다시 그려져 누른 칸이 사라졌으면(묶음 접기 등) 왼쪽 위로 튀지 않게 닫는다
+    if (!anchor.isConnected) {
+      onClose();
+      return;
+    }
     const z = parseFloat(getComputedStyle(document.body).zoom) || 1;
     const r = anchor.getBoundingClientRect();
     const h = (ref.current?.offsetHeight ?? 0) * z;
@@ -103,6 +108,15 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
   });
+  // 칸이 표에서 빠지면(묶음 접기·주 바꾸기 등) 닫는다 — 상세 창 자신의 변화와 상관없이 표를 지켜본다
+  useEffect(() => {
+    const root = anchor.closest('table') ?? document.body;
+    const obs = new MutationObserver(() => {
+      if (!anchor.isConnected) onClose();
+    });
+    obs.observe(root.parentElement ?? root, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, [anchor, onClose]);
 
   // 바깥 누르기·Esc 로 닫기 — 스크롤로는 닫지 않는다
   useEffect(() => {
@@ -112,7 +126,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (escClosesPopover({ key: e.key, defaultPrevented: e.defaultPrevented, target: e.target as HTMLElement | null })) onClose();
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);

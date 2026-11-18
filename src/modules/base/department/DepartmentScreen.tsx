@@ -6,7 +6,7 @@ import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmen
 import { assignDeptHead, departmentDeleteBlocker } from '@/data/orgSync/orgSync';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
-import { moveSibling } from '@/domain/department/reorder';
+import { moveSibling, saveOrdersAllOrNothing } from '@/domain/department/reorder';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
@@ -42,10 +42,13 @@ export default function DepartmentScreen() {
     if (changes.length === 0) return;
     setMoving(true);
     try {
-      for (const c of changes) {
-        const row = rows.find((d) => d.id === c.id);
-        if (row) await upsert.mutateAsync({ ...row, order: c.order });
-      }
+      await saveOrdersAllOrNothing(changes, new Map(rows.map((d) => [d.id, d.order])), async (rid, order) => {
+        const row = rows.find((d) => d.id === rid);
+        if (row) await upsert.mutateAsync({ ...row, order });
+      });
+    } catch (err) {
+      window.alert(`순서를 바꾸지 못했습니다. 원래 순서로 되돌렸습니다.
+${err instanceof Error ? err.message : ''}`);
     } finally {
       setMoving(false);
     }

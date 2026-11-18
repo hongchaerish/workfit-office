@@ -1,7 +1,7 @@
 import type { CreateRoomInput } from '@/data/chatRoom/chatRoom.repo';
 import type { RichNode } from '@/domain/chatMessage/richBody';
 import type { User } from '@/domain/user/schema';
-import { saveChatDraft } from './chatDrafts';
+import { CHAT_DRAFT_FILL_EVENT, saveChatDraft } from './chatDrafts';
 
 /** 다른 화면이 메신저 도크에서 대화방을 열 때 쓰는 창 이벤트 — AppShell 이 받는다 */
 export const OPEN_DOCK_CHAT_EVENT = 'workfit-open-dock-chat';
@@ -29,6 +29,10 @@ export async function openDirectChat(input: {
 }): Promise<void> {
   const { me, other, text, createRoom } = input;
   const room = await createRoom({ name: `${me.name}, ${other.name}`, type: 'direct', members: [me.id, other.id], createdBy: me.id });
-  if (text) saveChatDraft(me.id, room.id, plainTextDoc(text));
+  if (text) {
+    saveChatDraft(me.id, room.id, plainTextDoc(text));
+    // 그 방 입력창이 이미 열려 있으면 처음에만 임시 글을 읽으므로 다시 채우라고 알린다
+    window.dispatchEvent(new CustomEvent(CHAT_DRAFT_FILL_EVENT, { detail: { me: me.id, roomId: room.id } }));
+  }
   window.dispatchEvent(new CustomEvent(OPEN_DOCK_CHAT_EVENT, { detail: { roomId: room.id } }));
 }

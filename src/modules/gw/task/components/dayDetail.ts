@@ -107,3 +107,12 @@ export function recentItemTitles(entriesNewestFirst: DayEntry[], limit = 5): str
   }
   return out;
 }
+
+/** 상세 창을 Esc 로 닫을까 — 메모·입력칸이 먼저 처리한 Esc(취소)나 글 쓰는 중의 Esc 는 상세 창까지 닫지 않는다 */
+export function escClosesPopover(e: { key: string; defaultPrevented: boolean; target: { tagName?: string; isContentEditable?: boolean } | null }): boolean {
+  if (e.key !== 'Escape' || e.defaultPrevented) return false;
+  const t = e.target;
+  if (!t) return true;
+  if (t.isContentEditable) return false;
+  return !['INPUT', 'TEXTAREA', 'SELECT'].includes((t.tagName ?? '').toUpperCase());
+}

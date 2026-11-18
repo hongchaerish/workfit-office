@@ -604,6 +604,10 @@ export default function WorkPlanScreen() {
           onCreate={actorActive ? handleCreate : undefined}
           onMoveItem={actorActive ? handleMoveItem : undefined}
           selected={cellPopover ? { userId: cellPopover.member.id, date: cellPopover.date } : null}
+          onOpenDay={(date) => {
+            setCellPopover(null);
+            setPanelDate(date);
+          }}
         />
       )}
       {view === 'team' && (
