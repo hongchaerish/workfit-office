@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, CalendarDays, Check, ChevronDown, Repeat, UserRound, MoreHorizontal } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Repeat, UserRound } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
@@ -12,7 +12,7 @@ import { EventFields, type EventForm } from './EventFields';
 import { FIXED_KINDS, dotClassOf, eventWhenLabel, generalTagOf, isOutsideKind, ownerOf, useEventActions, useEventBlocks } from './eventShared';
 import { kindEnabled } from './entryRouting';
 import { RoutineFields, RoutineScopeFields } from './RoutineFields';
-import { defaultRoutineRule } from '@/domain/workPlan/routine';
+import { defaultRoutineRule, type RoutineFreq } from '@/domain/workPlan/routine';
 import { TimeGrid } from './TimeGrid';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
@@ -217,18 +217,32 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
   const routineAllowed = !readOnly && target.mode === 'create' && state.kind === 'ITEM';
 
   const segClass = (active: boolean) =>
-    `inline-flex items-center gap-1.5 border-r border-border px-3 py-1.5 text-[11.5px] font-semibold transition-colors last:border-r-0 disabled:cursor-not-allowed disabled:opacity-45 ${
+    `inline-flex items-center gap-1.5 whitespace-nowrap border-r border-border px-3 py-1.5 text-[11.5px] font-semibold transition-colors last:border-r-0 disabled:cursor-not-allowed disabled:opacity-45 ${
       active ? 'bg-blue-soft text-blue' : 'text-ink2 hover:bg-panel-alt'
     }`;
 
+  const isItem = state.kind === 'ITEM';
+  const isEtc = isItem && state.tagId === ETC_TAG_ID;
   const currentTag = generalTagOf(tags, state.kind, state.tagId);
-  const isEtc = state.kind === 'ITEM' && state.tagId === ETC_TAG_ID;
+  // 첫 일반 태그(기본)면 '업무', 다른 태그·기타를 고르면 그 이름을 버튼에
+  const defaultTagId = generalTags[0]?.id;
+  const itemLabel = !isItem ? null : isEtc ? { name: '기타', dot: 'bg-slate-400' } : currentTag && state.tagId && state.tagId !== defaultTagId ? { name: currentTag.name, dot: dotClassOf(currentTag.colorId) } : null;
 
   const pickTag = (tagId: string) => {
     form.set('tagId', tagId);
     form.setKind('ITEM');
     setMenuOpen(false);
   };
+
+  // 반복 — 새 일반 업무만. 고른 날짜 기준 요일·날짜를 글에 넣는다
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][new Date(`${state.date}T00:00:00Z`).getUTCDay()];
+  const repeatOptions: Array<{ value: RoutineFreq | ''; label: string }> = [
+    { value: '', label: '반복 안 함' },
+    { value: 'DAILY', label: '매일' },
+    { value: 'WEEKDAYS', label: '평일마다' },
+    { value: 'WEEKLY', label: `매주 ${dow}요일` },
+    { value: 'MONTHLY', label: `매월 ${Number(state.date.slice(8))}일` },
+  ];
 
   return (
     <div className="flex items-center gap-1.5 border-b border-border bg-panel-alt px-5 py-2">
@@ -243,7 +257,22 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
         }}
       >
         <div className="inline-flex overflow-hidden rounded-md border border-border bg-panel" role="radiogroup" aria-label="일정 종류">
-          {FIXED_KINDS.map(({ kind, label, Icon }) => (
+          {/* 업무 — 이미 업무면 다시 눌러 태그 메뉴, 다른 종류에서 누르면 업무로만 */}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isItem}
+            aria-haspopup="listbox"
+            aria-expanded={menuOpen}
+            disabled={!enabled('ITEM')}
+            className={segClass(isItem)}
+            onClick={() => (isItem ? setMenuOpen((v) => !v) : form.setKind('ITEM'))}
+          >
+            {itemLabel ? <span className={`h-2 w-2 rounded-full ${itemLabel.dot}`} /> : <span className="h-3 w-[3px] rounded-sm bg-[#d6dbe3]" aria-hidden />}
+            {itemLabel?.name ?? '업무'}
+            <ChevronDown size={13} />
+          </button>
+          {FIXED_KINDS.map(({ kind, label }) => (
             <button
               key={kind}
               type="button"
@@ -251,89 +280,68 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
               aria-checked={state.kind === kind}
               disabled={!enabled(kind)}
               className={segClass(state.kind === kind)}
-              onClick={() => form.setKind(kind)}
+              onClick={() => {
+                setMenuOpen(false);
+                form.setKind(kind);
+              }}
             >
-              <Icon size={13} />
+              <span className={`h-3 w-[3px] rounded-sm ${kind === 'MEETING' ? 'bg-[#b6a2f2]' : 'bg-[#8cc8ee]'}`} aria-hidden />
               {label}
             </button>
           ))}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={isEtc}
-            disabled={!enabled('ITEM')}
-            className={segClass(isEtc)}
-            onClick={() => pickTag(ETC_TAG_ID)}
-          >
-            <MoreHorizontal size={13} />
-            기타
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={state.kind === 'ITEM' && !isEtc}
-            aria-haspopup="listbox"
-            aria-expanded={menuOpen}
-            disabled={!enabled('ITEM')}
-            className={segClass(state.kind === 'ITEM' && !isEtc)}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            {currentTag && <span className={`h-2 w-2 rounded-full ${dotClassOf(currentTag.colorId)}`} />}
-            {currentTag?.name ?? '일반'}
-            <ChevronDown size={13} />
-          </button>
         </div>
 
         {menuOpen && (
           <div
             role="listbox"
-            aria-label="일반 태그"
-            className="absolute right-0 top-full z-30 mt-1 max-h-64 w-44 overflow-y-auto rounded-lg border border-border bg-panel p-1 shadow-lg"
+            aria-label="업무 태그"
+            className="absolute left-0 top-full z-30 mt-1 max-h-64 w-44 overflow-y-auto rounded-lg border border-border bg-panel p-1 shadow-lg"
           >
-            {generalTags.length === 0 ? (
-              <div className="px-2 py-2 text-[11px] text-ink3">고를 수 있는 태그가 없습니다.</div>
-            ) : (
-              generalTags.map((tag) => {
-                const active = state.kind === 'ITEM' && state.tagId === tag.id;
-                return (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => pickTag(tag.id)}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11.5px] font-semibold ${
-                      active ? 'bg-blue-soft text-blue' : 'text-ink2 hover:bg-panel-alt'
-                    }`}
-                  >
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${dotClassOf(tag.colorId)}`} />
-                    <span className="min-w-0 flex-1 truncate">{tag.name}</span>
-                    {active && <Check size={13} className="shrink-0" />}
-                  </button>
-                );
-              })
-            )}
+            {[...generalTags.map((tag) => ({ id: tag.id, name: tag.name, dot: dotClassOf(tag.colorId) })), { id: ETC_TAG_ID, name: '기타', dot: 'bg-slate-400' }].map((tag) => {
+              const active = isItem && (state.tagId === tag.id || (!state.tagId && tag.id === defaultTagId));
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => pickTag(tag.id)}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11.5px] font-semibold ${
+                    active ? 'bg-blue-soft text-blue' : 'text-ink2 hover:bg-panel-alt'
+                  }`}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${tag.dot}`} />
+                  <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+                  {active && <Check size={13} className="shrink-0" />}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
 
       <span className="flex-1" />
-      <Button variant="ghost" size="sm" disabled>
-        <Bell size={12} />
-        리마인드
-      </Button>
-      {/* 루틴 — 새 일반 업무만(회의·외근·출장은 아직) */}
-      <Button
-        variant={form.routineRule ? 'accent' : 'ghost'}
-        size="sm"
-        disabled={!routineAllowed}
-        aria-pressed={Boolean(form.routineRule)}
-        title={routineAllowed ? '반복 일정으로 만들기' : '새 일반 업무만 반복할 수 있습니다'}
-        onClick={() => form.setRoutineRule(form.routineRule ? null : defaultRoutineRule(state.date))}
-      >
-        <Repeat size={12} />
-        루틴
-      </Button>
+      {/* 반복 — 새 일반 업무만(회의·외근·출장은 아직) */}
+      {routineAllowed && (
+        <label className="flex items-center gap-1.5 text-[11.5px] text-ink2">
+          <Repeat size={12} className="text-ink3" />
+          반복
+          <select
+            value={form.routineRule?.freq ?? ''}
+            onChange={(e) => {
+              const freq = e.target.value as RoutineFreq | '';
+              form.setRoutineRule(freq ? { ...defaultRoutineRule(state.date), freq } : null);
+            }}
+            className="h-7 rounded-md border border-border bg-panel px-1.5 text-[11.5px] text-ink outline-none focus:border-teal/50"
+          >
+            {repeatOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
 }
