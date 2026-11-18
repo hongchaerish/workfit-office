@@ -537,10 +537,10 @@ export default function WorkPlanScreen() {
         <div role="complementary" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-30 w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
           <h3 className="mb-2 text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
           <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
-            <li><b className="text-ink">내 칸 위쪽</b>을 누르면 새 일정</li>
-            <li><b className="text-ink">칸 아래 메모</b>를 누르면 그 자리에서 메모</li>
-            <li><b className="text-ink">날짜·남의 칸</b>을 누르면 그날 전체 일정</li>
-            <li><b className="text-ink">루틴</b>으로 반복 업무를 한 번에</li>
+            <li><b className="text-ink">칸</b>을 누르면 옆에 그날 일정 — 내 칸은 고치기·메모, 남의 칸은 빈 시간·회의 잡기·메시지</li>
+            <li><b className="text-ink">내 빈 칸</b>을 누르면 바로 새 일정</li>
+            <li><b className="text-ink">이름</b>을 누르면 그 사람의 한 주</li>
+            <li>새 업무의 <b className="text-ink">반복</b>으로 반복 업무를 한 번에</li>
           </ul>
           <div className="mt-3 flex justify-end">
             <button type="button" onClick={closeGuide} className="rounded-lg bg-teal px-3 py-1.5 text-[12px] font-bold text-white">
