@@ -133,7 +133,7 @@ export function DraftFormSelectModal({
     onClose();
   };
 
-  // 모든 칸 — 워크핏 서식마다 한 칸, 루미팹 겸용 서식(지출결의서·품의서·법인카드 사용 내역서·채용 품의서·외근 신청서 — isLumefabForm)은 바로 뒤에 [루미팹] 칸을 하나 더
+  // 모든 칸 — 워크핏 서식마다 한 칸, 루미팹 겸용 서식(지출결의서·품의서·법인카드 사용 내역서·채용 품의서·외근 신청서·휴가원·개인 경비 사용 신청서 — isLumefabForm)은 바로 뒤에 [루미팹] 칸을 하나 더
   const entries = useMemo<FormEntry[]>(
     () =>
       forms.flatMap((form) => {
