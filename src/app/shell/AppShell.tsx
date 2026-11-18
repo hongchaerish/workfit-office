@@ -9,6 +9,7 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { QuickDock, requestOpenChatRoom } from './QuickDock';
+import { OPEN_DOCK_CHAT_EVENT } from '@/features/chat/openDirectChat';
 import { ToastFeed } from './ToastFeed';
 import { ScrollTopButton } from './ScrollTopButton';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
@@ -143,6 +144,18 @@ export default function AppShell({ routes }: { routes: ReactNode }) {
     };
     navigator.serviceWorker.addEventListener('message', onMsg);
     return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
+
+  // 앱 안 다른 화면(업무계획 '메시지' 등)이 도크에서 대화방을 연다
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const roomId = (e as CustomEvent<{ roomId?: string }>).detail?.roomId;
+      if (!roomId) return;
+      setDockOpen('msg');
+      requestOpenChatRoom(roomId);
+    };
+    window.addEventListener(OPEN_DOCK_CHAT_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_DOCK_CHAT_EVENT, onOpen);
   }, []);
 
   // 콜드 클릭(데스크톱) 및 외부 연동(MES): view=groupware, view=messenger 또는 ?openChat=<roomId> 로 도크를 연다.

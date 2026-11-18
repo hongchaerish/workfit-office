@@ -1,6 +1,6 @@
 import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
-import { useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
+import { useCreateWorkPlanItem, useRemoveWorkPlanItem, useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
 import { movedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
@@ -26,6 +26,10 @@ import type { EventTarget } from './event/eventFormMapping';
 import { createTarget, routeEntry } from './event/entryRouting';
 import { WorkPlanTeamMonthlyMatrix } from './components/WorkPlanTeamMonthlyMatrix';
 import { WorkPlanTeamWeekTable } from './components/WorkPlanTeamWeekTable';
+import { WorkPlanCellPopover } from './components/WorkPlanCellPopover';
+import { WorkPlanPersonWeekDrawer } from './components/WorkPlanPersonWeekDrawer';
+import { useCreateRoom } from '@/features/chat/useChatRooms';
+import { openDirectChat } from '@/features/chat/openDirectChat';
 import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
@@ -79,6 +83,14 @@ function writeStored(key: string, value: string) {
 }
 /** 저장 알림 토스트가 떠 있는 시간(ms) */
 const NOTICE_MS = 3000;
+/** 되돌리기가 붙은 알림이 떠 있는 시간(ms) */
+const UNDO_MS = 4000;
+
+/** 지금 시각(분) — 상세 창의 '지금'·빈 시간에 쓴다 */
+const minuteOfNow = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
@@ -117,14 +129,25 @@ export default function WorkPlanScreen() {
   const [calendarEvent, setCalendarEvent] = useState<CalendarEvent | null>(null);
   /** 결재 완료 외근·출장과 동행 외근 상세 — 수정은 등록 본인이 일정 창으로 */
   const [outsideDetail, setOutsideDetail] = useState<{ view: OutsideScheduleView; entry: DayEntry } | null>(null);
-  const [notice, setNotice] = useState('');
+  /** 화면 아래 알림 — 되돌리기가 붙을 수 있다 */
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
+  const notify = (text: string) => setNotice(text ? { text } : null);
   const updateItem = useUpdateWorkPlanItem();
+  const createItem = useCreateWorkPlanItem();
+  const removeItem = useRemoveWorkPlanItem();
+  const createRoom = useCreateRoom();
   // 저장 알림은 화면 아래 토스트 — 잠깐 보였다 사라진다
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(''), NOTICE_MS);
+    const timer = window.setTimeout(() => setNotice(null), notice.undo ? UNDO_MS : NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notice]);
+  /** 지금 시각(분) — 1분마다 */
+  const [nowMinute, setNowMinute] = useState(minuteOfNow);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMinute(minuteOfNow()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   // 전사 공통 중요 일정 모달 상태
@@ -296,6 +319,8 @@ export default function WorkPlanScreen() {
 
   /** 칸 옆 상세 창 — 누른 칸 */
   const [cellPopover, setCellPopover] = useState<{ member: User; date: string; anchor: HTMLElement } | null>(null);
+  /** 이름을 누르면 여는 한 주 서랍 */
+  const [personDrawer, setPersonDrawer] = useState<User | null>(null);
 
   const [view, setViewState] = useState<WorkPlanView>(() => readStored(VIEW_STORAGE_KEY, ['teamWeek', 'team', 'week'], 'teamWeek'));
   const setView = (next: WorkPlanView) => {
@@ -304,6 +329,14 @@ export default function WorkPlanScreen() {
   };
   /** 주간·내 주간이 보고 있는 주의 월요일 */
   const [weekStart, setWeekStart] = useState(() => mondayOf(initialDate ?? today));
+  /** 주간 표가 보고 있는 월~일 */
+  const teamWeekDates = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => {
+      const [y, m, d] = weekStart.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + i)).toISOString().slice(0, 10);
+    }),
+    [weekStart],
+  );
   /** 하루 상세 팝업의 날짜(닫혀 있으면 null) */
   const [panelDate, setPanelDate] = useState<string | null>(null);
 
@@ -333,6 +366,35 @@ export default function WorkPlanScreen() {
     openEventModal(range ? { ...target, initialRange: range } : target);
   };
 
+  /** 상세 창에서 내 일반 업무 바로 지우기 — 4초 동안 되돌리기(같은 내용으로 다시 만든다) */
+  const handleRemoveItem = (item: WorkPlanItem) => {
+    if (!actor) return;
+    const who = { userId: actor.id, active: actorActive };
+    removeItem.mutate(
+      { actor: who, id: item.id },
+      {
+        onSuccess: () =>
+          setNotice({
+            text: `"${item.title}" 일정을 지웠어요`,
+            undo: () =>
+              createItem.mutate(
+                { actor: who, ownerUserId: item.ownerUserId, draft: movedDraft(item, item.date) },
+                { onSuccess: () => notify('되돌렸어요.'), onError: (e) => notify(e instanceof Error ? e.message : '되돌리지 못했습니다.') },
+              ),
+          }),
+        onError: (e) => notify(e instanceof Error ? e.message : '지우지 못했습니다.'),
+      },
+    );
+  };
+
+  /** 메신저 1:1 대화 — 글이 있으면 입력창에 미리 채운다 */
+  const handleMessage = (member: User, text?: string) => {
+    if (!actor) return;
+    openDirectChat({ me: actor, other: member, text, createRoom: (i) => createRoom.mutateAsync(i) }).catch((e) =>
+      notify(`대화방을 열지 못했습니다: ${e instanceof Error ? e.message : String(e)}`),
+    );
+  };
+
   /** 내 칸 메모 저장 — 비우면 지우고, 있으면 고치고, 없으면 만든다 */
   const handleSaveMemo = async (date: string, memoPlan: MemoPlanRef | null, text: string) => {
     if (!actor) return;
@@ -345,8 +407,8 @@ export default function WorkPlanScreen() {
     updateItem.mutate(
       { actor: { userId: actor.id, active: actorActive }, id: item.id, draft: movedDraft(item, date, range) },
       {
-        onSuccess: () => setNotice(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${range ? ` ${toHHmm(range.start)}` : ''}(으)로 옮겼습니다.`),
-        onError: (e) => setNotice(e instanceof Error ? e.message : '옮기지 못했습니다.'),
+        onSuccess: () => notify(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${range ? ` ${toHHmm(range.start)}` : ''}(으)로 옮겼습니다.`),
+        onError: (e) => notify(e instanceof Error ? e.message : '옮기지 못했습니다.'),
       },
     );
   };
@@ -468,7 +530,22 @@ export default function WorkPlanScreen() {
       {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">
         {notice && (
-          <div className="rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">{notice}</div>
+          <div className="pointer-events-auto flex items-center gap-3 rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">
+            {notice.text}
+            {notice.undo && (
+              <button
+                type="button"
+                onClick={() => {
+                  const undo = notice.undo;
+                  setNotice(null);
+                  undo?.();
+                }}
+                className="text-sky-300 hover:text-sky-200"
+              >
+                되돌리기
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -500,7 +577,7 @@ export default function WorkPlanScreen() {
           onOpenConfig={() => setIsConfigOpen(true)}
           onOpenCompanySchedule={(date, content, planId) => setCompanyScheduleModal({ isOpen: true, date, content, planId })}
           onOpenCell={(member, date, anchor) => setCellPopover({ member, date, anchor })}
-          onOpenPerson={() => undefined /* 한 주 서랍은 다음 단계 */}
+          onOpenPerson={setPersonDrawer}
           onCreate={actorActive ? handleCreate : undefined}
           onMoveItem={actorActive ? handleMoveItem : undefined}
           selected={cellPopover ? { userId: cellPopover.member.id, date: cellPopover.date } : null}
@@ -533,6 +610,41 @@ export default function WorkPlanScreen() {
       />
       )}
 
+      {/* 칸 옆 그날 상세 — 주간 표에서 칸을 누르면 */}
+      {view === 'teamWeek' && cellPopover && (
+        <WorkPlanCellPopover
+          actor={actor}
+          member={cellPopover.member}
+          date={cellPopover.date}
+          anchor={cellPopover.anchor}
+          today={today}
+          nowMinute={nowMinute}
+          cellOf={cellOf}
+          weekDates={teamWeekDates}
+          onDateChange={(date) => setCellPopover((prev) => (prev ? { ...prev, date } : prev))}
+          onClose={() => setCellPopover(null)}
+          onOpenEntry={handleOpenEntry}
+          onCreate={actorActive ? (date, member, opts) => handleCreate(date, member, opts?.range) : undefined}
+          onRemoveItem={actorActive ? handleRemoveItem : undefined}
+          onSaveMemo={actorActive ? handleSaveMemo : undefined}
+          onOpenWeek={(member) => {
+            setCellPopover(null);
+            setPersonDrawer(member);
+          }}
+          onMessage={handleMessage}
+        />
+      )}
+      {view === 'teamWeek' && personDrawer && (
+        <WorkPlanPersonWeekDrawer
+          member={personDrawer}
+          weekDates={teamWeekDates}
+          today={today}
+          cellOf={cellOf}
+          onClose={() => setPersonDrawer(null)}
+          onOpenEntry={handleOpenEntry}
+        />
+      )}
+
       {/* 하루 상세 팝업 — 주간·월간에서 날짜 머리나 남의 칸을 누르면 */}
       {panelDate && view !== 'week' && (
         <WorkPlanDayPanel
@@ -558,7 +670,7 @@ export default function WorkPlanScreen() {
           users={users}
           cellOf={cellOf}
           onClose={() => setEventModal(null)}
-          onSaved={setNotice}
+          onSaved={notify}
         />
       )}
 
@@ -578,11 +690,11 @@ export default function WorkPlanScreen() {
           onClose={() => setCalendarEvent(null)}
           onSaved={() => {
             setCalendarEvent(null);
-            setNotice('일정을 저장했습니다.');
+            notify('일정을 저장했습니다.');
           }}
           onRemoved={() => {
             setCalendarEvent(null);
-            setNotice('일정을 삭제했습니다.');
+            notify('일정을 삭제했습니다.');
           }}
         />
       )}
@@ -618,7 +730,7 @@ export default function WorkPlanScreen() {
           if (!content.trim()) {
             if (planId) {
               await remove.mutateAsync({ actor: actorParam, id: planId });
-              setNotice('전사 주요 일정을 삭제했습니다.');
+              notify('전사 주요 일정을 삭제했습니다.');
             }
             return;
           }
@@ -627,12 +739,12 @@ export default function WorkPlanScreen() {
           } else {
             await create.mutateAsync({ actor: actorParam, draft: { date, content, ownerUserId: '__COMPANY__' } });
           }
-          setNotice('전사 주요 일정을 저장했습니다.');
+          notify('전사 주요 일정을 저장했습니다.');
         }}
         onDelete={async (planId, _date) => {
           if (!actor) return;
           await remove.mutateAsync({ actor: { userId: actor.id, active: actor.status === '사용' }, id: planId });
-          setNotice('전사 주요 일정을 삭제했습니다.');
+          notify('전사 주요 일정을 삭제했습니다.');
         }}
       />
     </div>

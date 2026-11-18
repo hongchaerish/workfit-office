@@ -152,7 +152,8 @@ export function WorkPlanTeamWeekTable({
   useEffect(() => {
     const el = barRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setBarHeight(el.getBoundingClientRect().height));
+    // offsetHeight — body 글자 배율(zoom) 전 값이라 sticky top 에 그대로 쓴다
+    const ro = new ResizeObserver(() => setBarHeight(el.offsetHeight));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -278,7 +279,11 @@ export function WorkPlanTeamWeekTable({
     return (
       <td
         key={key}
-        onMouseMove={(e) => setHover({ member, date, count, x: e.clientX, y: e.clientY })}
+        onMouseMove={(e) => {
+          // body 글자 배율(zoom) — fixed 좌표도 배율로 나눈다
+          const z = parseFloat(getComputedStyle(document.body).zoom) || 1;
+          setHover({ member, date, count, x: e.clientX / z, y: e.clientY / z });
+        }}
         onMouseLeave={() => setHover(null)}
         onClick={(e) => {
           // 내 빈 칸은 바로 새 일정, 나머지는 칸 옆 상세
@@ -304,8 +309,8 @@ export function WorkPlanTeamWeekTable({
               }
             : undefined
         }
-        className={`${tdBase} cursor-pointer ${tint} hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300 ${
-          isSelected ? 'outline outline-2 -outline-offset-2 outline-sky-500' : ''
+        className={`${tdBase} cursor-pointer ${tint} ${
+          isSelected ? 'outline outline-2 -outline-offset-2 outline-sky-500' : 'hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300'
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
         <div className="min-h-[34px]">{renderLines(member, dates, key)}</div>
@@ -316,7 +321,7 @@ export function WorkPlanTeamWeekTable({
   return (
     <div className="space-y-2">
       {/* 상단 바 — 스크롤해도 위에 붙는다 */}
-      <div ref={barRef} className="sticky top-[var(--shell-top)] z-40 space-y-1.5 bg-[var(--page-bg,transparent)] pb-1">
+      <div ref={barRef} className="sticky top-[var(--shell-top)] z-40">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel px-2.5 py-1.5 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             {viewSwitch}
@@ -348,7 +353,8 @@ export function WorkPlanTeamWeekTable({
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
           <div className="flex flex-wrap items-center gap-1" role="group" aria-label="종류 거르기">
             {KIND_FILTERS.map((k) => {
               const off = hiddenTones.has(k.tone);
@@ -377,7 +383,6 @@ export function WorkPlanTeamWeekTable({
               </button>
             </div>
           )}
-        </div>
       </div>
 
       <div className="rounded-xl border border-[#e4e8ee] bg-panel [overflow-x:clip] dark:border-border">
