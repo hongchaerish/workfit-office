@@ -9,10 +9,10 @@ import {
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
 import { canMoveEntry, hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
-import { WORK_PLAN_MEMO_MAX, toggleMemoTask } from '@/domain/workPlan/memo';
-import { WorkPlanMemoEditor } from './memo/WorkPlanMemoEditor';
-import { WorkPlanMemoView } from './memo/WorkPlanMemoView';
-import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
+import { chipLook } from './entryChipLook';
+import { EntryLine, LINE_TONE_CLASS } from './EntryLine';
+import { CellMemo } from './CellMemo';
+import { lineToneOf } from './entryKind';
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,8 +21,6 @@ import {
   Calendar as CalendarIcon,
   Settings,
   LocateFixed,
-  StickyNote,
-  Repeat,
   PanelRightOpen,
 } from 'lucide-react';
 
@@ -707,7 +705,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                   {barLanes > 0 && <div className="shrink-0" style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
                                   <div className="min-h-[36px] flex-1 space-y-1">
                                     {entries.map((entry) => {
-                                      const chip = <EntryChip entry={entry} onOpen={onOpenEntry} look={look} />;
+                                      const chip = <EntryLine entry={entry} onOpen={onOpenEntry} />;
                                       const item = entry.item;
                                       if (!onMoveItem || !item || !canMoveEntry(entry, actor.id)) return <Fragment key={entry.key}>{chip}</Fragment>;
                                       return (
@@ -759,181 +757,9 @@ const SPAN_LANE_HEIGHT = 20;
 /** 칸 안쪽 여백(p-2)과 같은 값 */
 const CELL_PADDING = 8;
 
-/** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
-function EntryChip({ entry, onOpen, look }: { entry: DayEntry; onOpen: (entry: DayEntry) => void; look: DensityLook }) {
-  const { label, badgeClass, dotClass, hint } = chipLook(entry);
-  const openable = !(entry.source === 'APPROVAL' && !entry.outside);
-  const body = (
-    <>
-      {/* 시각 칸 폭·숫자 폭 고정 — 11:00 처럼 좁은 숫자도 점·제목 열이 맞게 */}
-      <span className={`w-[2.8em] shrink-0 ${look.time} font-normal tabular-nums opacity-80`}>{timeOf(entry)}</span>
-      {/* 작은 원은 확대 배율에서 픽셀 반올림으로 찌그러진다 — 크게 그려 축소(변형은 반올림하지 않는다) */}
-      {dotClass && <span className={`-mx-0.5 h-2 w-2 shrink-0 scale-50 rounded-full ${dotClass}`} aria-hidden />}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {entry.roomStatus === 'PENDING' && (
-        <span className="shrink-0 rounded bg-amber-soft px-1 text-[8px] font-bold text-amber">대기</span>
-      )}
-      {entry.roomStatus === 'REJECTED' && (
-        <span className="shrink-0 rounded bg-danger/10 px-1 text-[8px] font-bold text-danger">회의실 반려</span>
-      )}
-      {entry.outside?.source === 'APPROVAL' && (
-        <Check size={look.mark} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
-      )}
-      {entry.item?.routine && <Repeat size={look.mark} strokeWidth={3} className="shrink-0 opacity-40" aria-label="반복" />}
-    </>
-  );
-  const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 text-left ${look.chip} font-bold shadow-2xs ${badgeClass}`;
-  if (!openable) {
-    return (
-      // 누를 상세가 없는 칩 — 칸 누르기(새 일정 창)로 넘기지 않는다
-      <div title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint} className={chipClass} onClick={(e) => e.stopPropagation()}>
-        {body}
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen(entry);
-      }}
-      title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint}
-      className={`${chipClass} cursor-pointer hover:brightness-95`}
-    >
-      {body}
-    </button>
-  );
-}
-
-/**
- * 칸 아래쪽 메모 칸 — 서식 없는 글. 기본 높이는 같고, 글이 길면 그만큼 늘어난다(칸·행도 같이). 점선 위는 일정, 아래는 메모.
- * `onSave`가 있으면(내 칸) 메모 칸을 눌러 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
- */
-function CellMemo({
-  text,
-  label,
-  onSave,
-  look,
-}: {
-  text: string | null;
-  label: string;
-  onSave?: (text: string) => Promise<void>;
-  look: DensityLook;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const startEdit = () => {
-    if (!onSave || draft !== null) return;
-    setError('');
-    setDraft(text ?? '');
-  };
-
-  const finish = async () => {
-    if (draft === null || saving || !onSave) return;
-    if (draft.trim() === (text ?? '').trim()) {
-      setDraft(null);
-      return;
-    }
-    if (draft.length > WORK_PLAN_MEMO_MAX) {
-      setError(`메모는 ${WORK_PLAN_MEMO_MAX.toLocaleString()}자까지 쓸 수 있습니다(서식 포함).`);
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave(draft);
-      setDraft(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // 칸에서 체크박스 누르기 — 고치기 창을 열지 않고 바로 저장
-  const toggleTask = async (taskIndex: number) => {
-    if (!onSave || !text || saving) return;
-    setSaving(true);
-    setError('');
-    try {
-      await onSave(toggleMemoTask(text, taskIndex));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      role={onSave && draft === null ? 'button' : undefined}
-      tabIndex={onSave && draft === null ? 0 : undefined}
-      aria-label={onSave && draft === null ? `${label} ${text ? '고치기' : '쓰기'}` : undefined}
-      title={onSave && draft === null ? '눌러서 메모 쓰기' : undefined}
-      // 내 칸 메모 칸 누르기는 메모 고치기 — 칸 누르기(새 일정 창)로 넘기지 않는다
-      onClick={
-        onSave
-          ? (e) => {
-              e.stopPropagation();
-              startEdit();
-            }
-          : undefined
-      }
-      onKeyDown={
-        onSave && draft === null
-          ? (e) => {
-              if (e.key === 'Enter') startEdit();
-            }
-          : undefined
-      }
-      // 기본 높이(두 줄)는 늘 같고 글이 길면 늘어난다 — 옆 칸 때문에 행이 늘 때는 위 일정 칸이 늘어난다(shrink-0)
-      // 옅은 바탕으로 위 일정 칸과 구분한다
-      className={`-mx-1 mt-1.5 min-h-[2.5rem] shrink-0 rounded border-t border-dashed border-border bg-panel-alt/50 px-1 pt-1 ${
-        onSave && draft === null ? 'cursor-text hover:bg-panel-alt' : ''
-      }`}
-    >
-      {draft !== null ? (
-        <>
-          {/* 서식 메모 편집기 — 위에 서식 버튼이 뜬다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소 */}
-          <WorkPlanMemoEditor
-            label={label}
-            value={draft}
-            disabled={saving}
-            onChange={setDraft}
-            onBlur={() => void finish()}
-            onSave={() => void finish()}
-            onCancel={() => {
-              setError('');
-              setDraft(null);
-            }}
-            className={`min-h-[3.5rem] rounded border border-sky-300 bg-panel px-1.5 py-1 ${look.memo} leading-relaxed text-ink focus-within:border-sky-400 dark:border-sky-700`}
-          />
-          {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
-        </>
-      ) : text ? (
-        <WorkPlanMemoView
-          memo={text}
-          onToggle={onSave ? (i) => void toggleTask(i) : undefined}
-          className={`${look.memo} leading-relaxed text-ink2 ${saving ? 'opacity-60' : ''}`}
-        />
-      ) : (
-        onSave && (
-          // 비어 있는 내 메모 칸 — 흐린 '메모' 글자를 늘 보인다
-          <span className={`flex items-center gap-1 ${look.memo} text-ink3/60`}>
-            <StickyNote size={look.mark + 1} />
-            메모
-          </span>
-        )
-      )}
-    </div>
-  );
-}
-
 /** 여러 날 외근·출장 막대 — 결재 완료 건은 끝에 옅은 체크, 누르면 상세. */
 function OutsideSpanBar({ bar, entry, onOpen, look }: { bar: WeekBar; entry: DayEntry; onOpen: (entry: DayEntry) => void; look: DensityLook }) {
-  const { label, badgeClass } = chipLook(entry);
+  const { label } = chipLook(entry);
   const view = entry.outside;
   const range = view ? `${view.startDate.slice(5).replace('-', '/')}~${view.endDate.slice(5).replace('-', '/')}` : '';
   const time = !entry.allDay && entry.startTime && entry.endTime ? `${entry.startTime}~${entry.endTime}` : '';
@@ -945,9 +771,9 @@ function OutsideSpanBar({ bar, entry, onOpen, look }: { bar: WeekBar; entry: Day
         onOpen(entry);
       }}
       title={`${label} (${range}${time ? ` · ${time}` : ''})`}
-      className={`absolute z-10 flex items-center justify-between gap-1 border px-1.5 ${look.bar} font-bold shadow-2xs cursor-pointer hover:brightness-95 ${badgeClass} ${
-        bar.continuesBefore ? 'rounded-l-none border-l-0' : 'rounded-l'
-      } ${bar.continuesAfter ? 'rounded-r-none border-r-0' : 'rounded-r'}`}
+      className={`absolute z-10 flex items-center justify-between gap-1 bg-panel/90 pl-1.5 pr-1 ${look.bar} font-normal cursor-pointer hover:bg-panel-alt ${LINE_TONE_CLASS[lineToneOf(entry)]} ${
+        bar.continuesBefore ? 'border-l-0' : 'border-l-2'
+      }`}
       style={{
         top: CELL_PADDING + bar.lane * SPAN_LANE_HEIGHT,
         left: bar.continuesBefore ? 0 : CELL_PADDING / 2,
