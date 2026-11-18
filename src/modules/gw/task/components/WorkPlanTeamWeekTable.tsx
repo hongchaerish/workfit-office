@@ -341,14 +341,14 @@ export function WorkPlanTeamWeekTable({
           className={`cursor-pointer border-b border-[#eef0f3] px-2 py-1 text-left align-top font-normal dark:border-border ${edge}`}
         >
           <div className="flex items-center gap-1">
-            <span className="truncate text-[11.5px] text-ink">{displayName(member)}</span>
+            {/* 이번 주 미작성 — 이름을 진한 주황으로(글자를 덧붙이지 않는다) */}
+            <span className={`truncate text-[11.5px] ${unwritten ? 'text-orange-700 dark:text-orange-300' : 'text-ink'}`} title={unwritten ? '이번 주 미작성' : undefined}>
+              {displayName(member)}
+            </span>
             <BirthdayMark userId={member.id} />
             {isMe && <span className="rounded bg-teal-soft/60 px-1 text-[9px] font-bold text-teal">나</span>}
           </div>
-          <div className="truncate text-[10px] leading-tight text-ink3">
-            {displayRank(member)}
-            {unwritten && <span className="ml-1 text-amber-600/70">미작성</span>}
-          </div>
+          <div className="truncate text-[10px] leading-tight text-ink3">{displayRank(member)}</div>
         </th>
         {weekdays.map((d) => renderCell(member, [d], `${todayTint(d)} ${edge}`, o.key))}
         {renderCell(member, weekend, `${weekend.includes(todayStr) ? 'bg-sky-50/60 dark:bg-sky-950/20' : ''} ${edge}`, o.key)}
@@ -480,7 +480,6 @@ export function WorkPlanTeamWeekTable({
                     </div>
                     {opened && <div className="mt-0.5 space-y-px pl-3 text-[10px] leading-tight">
                       <div className="text-ink3">{group.members.length}명</div>
-                      {sum.unwritten > 0 && <div className="text-amber-600">미작성 {sum.unwritten}</div>}
                       {sum.leave > 0 && <div className="text-[#6f630f] dark:text-yellow-300">휴가 {sum.leave}</div>}
                       {sum.outside > 0 && <div className="text-[#155f8d] dark:text-sky-300">외근·출장 {sum.outside}</div>}
                     </div>}
@@ -488,7 +487,6 @@ export function WorkPlanTeamWeekTable({
                 </th>
               );
               if (!opened) {
-                const names = group.members.map(displayName);
                 return (
                   <tr key={group.key} className="bg-panel-alt/40">
                     {deptCell(1)}
@@ -498,12 +496,16 @@ export function WorkPlanTeamWeekTable({
                       className="cursor-pointer border-b border-t-2 border-[#d9dee6] px-2 py-1.5 align-top text-[11px] text-ink3 dark:border-border"
                     >
                       <span className="text-ink2">{group.members.length}명</span>
-                      {sum.unwritten > 0 && <span className="ml-2 text-amber-600">미작성 {sum.unwritten}</span>}
                       {sum.leave > 0 && <span className="ml-2 text-[#6f630f] dark:text-yellow-300">휴가 {sum.leave}</span>}
                       {sum.outside > 0 && <span className="ml-2 text-[#155f8d] dark:text-sky-300">외근·출장 {sum.outside}</span>}
                       <span className="ml-3">
-                        {names.slice(0, 6).join(', ')}
-                        {names.length > 6 ? ` 외 ${names.length - 6}명` : ''}
+                        {group.members.slice(0, 6).map((m, i) => (
+                          <Fragment key={m.id}>
+                            {i > 0 && ', '}
+                            <span className={isUnwrittenWeek(m.id, cellOf, todayStr, weekDates) ? 'text-orange-700 dark:text-orange-300' : ''}>{displayName(m)}</span>
+                          </Fragment>
+                        ))}
+                        {group.members.length > 6 ? ` 외 ${group.members.length - 6}명` : ''}
                       </span>
                     </td>
                   </tr>
