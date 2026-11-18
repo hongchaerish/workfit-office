@@ -12,6 +12,9 @@ export interface RosterGroup {
 
 export const NONE_GROUP_KEY = '__NONE__';
 
+/** 업무계획 한정 — 대표이사 계정은 '위원장'으로 보인다 */
+export const isChairAccount = (m: User) => m.name === '대표이사' || m.position === '대표이사' || m.jobTitle === '대표이사';
+
 /** 업무계획에서 위원장(대표이사 계정)이 들어갈 부서 */
 export const CHAIR_DEPT = '기술경영전략위원회';
 

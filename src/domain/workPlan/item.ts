@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { routineSchema } from './routine';
-import { toHHmm, type MinuteRange } from './timeGrid';
+import { toHHmm, toMinutes, type MinuteRange } from './timeGrid';
 
 // calendarEvent의 timeSchema와 같은 식 — 24:00은 받지 않는다.
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '시각은 HH:mm 형식이어야 합니다.');
@@ -50,4 +50,15 @@ export function movedDraft(item: WorkPlanItem, date: string, range?: MinuteRange
   const { allDay, startTime, endTime, tagId, title, memo } = item;
   if (!range) return { date, allDay, startTime, endTime, tagId, title, memo };
   return { date, allDay, startTime: toHHmm(range.start), endTime: endTime === null ? null : toHHmm(range.end), tagId, title, memo };
+}
+
+/**
+ * 복사한 업무를 붙여넣을 내용 — 시각(startMinute)을 골랐으면 원래 길이를 지켜 그 시각으로(끝이 없으면 1시간 자리),
+ * 안 골랐거나 시각 없는 업무(미정·종일)면 원래 시각 그대로.
+ */
+export function pastedDraft(item: WorkPlanItem, date: string, startMinute?: number): WorkPlanItemDraft {
+  if (startMinute === undefined || item.allDay || !item.startTime) return movedDraft(item, date);
+  const from = toMinutes(item.startTime);
+  const to = item.endTime ? toMinutes(item.endTime) : null;
+  return movedDraft(item, date, { start: startMinute, end: startMinute + (to !== null && to > from ? to - from : 60) });
 }

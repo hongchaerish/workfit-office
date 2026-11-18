@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Settings, StickyNote, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, StickyNote, Plus } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
@@ -9,7 +9,7 @@ import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { EntryLine } from './EntryLine';
-import { chairToCommittee, groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
+import { chairToCommittee, groupRoster, isChairAccount, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
 
 /* 주간 보기 — 부서별로 접히는 조용한 표. 칸 안은 C 모양 줄 글, 칸을 누르면 칸 옆 상세 창(화면이 띄운다). */
 
@@ -25,7 +25,7 @@ const mondayOfDate = (date: string) => plusDays(date, -((new Date(`${date}T00:00
 const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
 
 /** 업무계획 한정 — 대표이사 계정은 '위원장 / 위원회'로 */
-const isChair = (m: User) => m.name === '대표이사' || m.position === '대표이사' || m.jobTitle === '대표이사';
+const isChair = isChairAccount;
 const displayName = (m: User) => (isChair(m) ? '위원장' : m.name);
 const displayRank = (m: User) => (isChair(m) ? '위원회' : m.position || m.jobTitle || '');
 
@@ -47,7 +47,6 @@ export interface WorkPlanTeamWeekTableProps {
   filters: ReactNode;
   /** 부서 필터나 검색어가 있으면 모든 묶음을 편다 */
   forceOpen: boolean;
-  onOpenConfig?: () => void;
   onOpenCompanySchedule?: (date: string, text?: string, planId?: string) => void;
   onOpenCell: (member: User, date: string, anchor: HTMLElement) => void;
   onOpenPerson: (member: User) => void;
@@ -81,7 +80,6 @@ export function WorkPlanTeamWeekTable({
   viewSwitch,
   filters,
   forceOpen,
-  onOpenConfig,
   onOpenCompanySchedule,
   onOpenCell,
   onOpenPerson,
@@ -413,12 +411,6 @@ export function WorkPlanTeamWeekTable({
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {filters}
-            {onOpenConfig && (
-              <button type="button" onClick={onOpenConfig} className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt">
-                <Settings size={12} className="text-ink3" />
-                태그 관리
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -492,7 +484,7 @@ export function WorkPlanTeamWeekTable({
                 zebra: false,
                 last: true,
                 lead: (
-                  <th className="border-b-2 border-r border-[#d9dee6] border-r-[#eef0f3] bg-sky-50/50 px-2 py-1 text-left align-top text-[11px] font-bold text-sky-700 dark:border-border dark:bg-sky-950/20 dark:text-sky-300">
+                  <th className="border-b-2 border-r border-[#d9dee6] border-r-[#eef0f3] bg-sky-50/50 px-2 py-1 text-left align-top text-[11px] font-semibold text-sky-700 dark:border-border dark:bg-sky-950/20 dark:text-sky-300">
                     내 일정
                   </th>
                 ),
@@ -510,7 +502,7 @@ export function WorkPlanTeamWeekTable({
                 >
                   {/* 긴 부서는 내려도 부서명이 날짜 머리 아래에 붙어 따라온다 */}
                   <div className="sticky" style={{ top: `calc(var(--shell-top) + ${barHeight + headHeight + 4}px)` }}>
-                    <div className="flex items-start gap-0.5 text-[11.5px] font-bold leading-tight text-ink [word-break:keep-all] [overflow-wrap:anywhere]">
+                    <div className="flex items-start gap-0.5 text-[11.5px] font-medium leading-tight text-ink2 [word-break:keep-all] [overflow-wrap:anywhere]">
                       <span className="w-2.5 shrink-0 text-[10px] text-ink3">{opened ? '▾' : '▸'}</span>
                       <span className="min-w-0">{group.label}</span>
                     </div>

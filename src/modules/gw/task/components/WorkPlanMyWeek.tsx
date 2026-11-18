@@ -57,6 +57,8 @@ interface WorkPlanMyWeekProps {
   onCreate?: (date: string, member: User, range?: MinuteRange) => void;
   /** 내 일반 업무를 끌어서 옮긴다(range 는 시간표에서 옮겼을 때). 없으면(사용 중이 아닌 계정) 끌 수 없다 */
   onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange) => void;
+  /** 복사한 업무가 있으면 — 시간표를 누르면 그 시각에, 종일 줄을 누르면 원래 시각으로 붙여넣는다 */
+  onPaste?: (date: string, startMinute?: number) => void;
 }
 
 /**
@@ -65,7 +67,7 @@ interface WorkPlanMyWeekProps {
  * 빈 시간을 누르면 그 30분 칸으로 새 일정(끌어 옮기면 10분 단위), 블록을 누르면 상세.
  * 내 일반 업무는 끌어서 시간·요일을 옮긴다(길이는 그대로, 놓을 때 저장, 이번 주 안에서만).
  */
-export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem }: WorkPlanMyWeekProps) {
+export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem, onPaste }: WorkPlanMyWeekProps) {
   /** 위에 남는 주차·요일·종일 줄 */
   const stickyRef = useRef<HTMLDivElement>(null);
   /** 처음 보일 시각 표시 — 이 자리로 페이지를 스크롤한다 */
@@ -124,12 +126,13 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
   const [, em, ed] = end.split('-').map(Number);
 
   const createAt = (date: string) => (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!onCreate) return;
+    if (!onCreate && !onPaste) return;
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.height === 0) return;
     const minute = ((e.clientY - rect.top) / rect.height) * DAY_END;
     const start = Math.min(Math.floor(minute / SLOT_MINUTES) * SLOT_MINUTES, DAY_END - SLOT_MINUTES);
-    onCreate(date, actor, { start, end: start + SLOT_MINUTES });
+    if (onPaste) onPaste(date, start);
+    else onCreate?.(date, actor, { start, end: start + SLOT_MINUTES });
   };
 
   /** 끌 수 있는 항목이면 원본을 돌려준다 */
@@ -227,7 +230,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
         {days.map((d) => (
           <div
             key={d.date}
-            onClick={onCreate ? () => onCreate(d.date, actor) : undefined}
+            onClick={onPaste ? () => onPaste(d.date) : onCreate ? () => onCreate(d.date, actor) : undefined}
             onDragOver={untimedItem ? (e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';

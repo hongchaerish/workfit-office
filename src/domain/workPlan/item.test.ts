@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { movedDraft } from './item';
+import { movedDraft, pastedDraft } from './item';
 import test from 'node:test';
 import { workPlanItemSchema } from './item';
 
@@ -53,4 +53,22 @@ test('시간표에서 옮기면 시각도 바뀌고, 종료 미정은 그대로 
 test('옮기면 날짜만 바뀌고 시각·태그·제목·메모는 그대로다', () => {
   const draft = movedDraft({ id: 'WI-20261102-0001', ownerUserId: 'U1', date: '2026-11-02', allDay: false, startTime: '09:00', endTime: '10:00', tagId: 't', title: '보고서', memo: '메모', createdBy: 'U1', createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' }, '2026-11-05');
   assert.deepEqual(draft, { date: '2026-11-05', allDay: false, startTime: '09:00', endTime: '10:00', tagId: 't', title: '보고서', memo: '메모' });
+});
+
+test('pastedDraft: 시각을 고르면 원래 길이를 지켜 그 시각으로, 안 고르면 원래 시각 그대로', () => {
+  const item = { id: 'WI-1', ownerUserId: 'U1', date: '2026-11-02', allDay: false, startTime: '09:00', endTime: '10:30', tagId: 't', title: '보고서', memo: '', createdBy: 'U1', createdAt: '', updatedAt: '' };
+  const at = pastedDraft(item, '2026-11-05', 14 * 60);
+  assert.equal(at.date, '2026-11-05');
+  assert.equal(at.startTime, '14:00');
+  assert.equal(at.endTime, '15:30');
+  const same = pastedDraft(item, '2026-11-06');
+  assert.equal(same.startTime, '09:00');
+  assert.equal(same.endTime, '10:30');
+});
+
+test('pastedDraft: 시각 없는 업무는 시각을 골라도 시각 없이', () => {
+  const item = { id: 'WI-2', ownerUserId: 'U1', date: '2026-11-02', allDay: false, startTime: null, endTime: null, tagId: 't', title: '정리', memo: '', createdBy: 'U1', createdAt: '', updatedAt: '' };
+  const d = pastedDraft(item, '2026-11-05', 600);
+  assert.equal(d.startTime, null);
+  assert.equal(d.endTime, null);
 });

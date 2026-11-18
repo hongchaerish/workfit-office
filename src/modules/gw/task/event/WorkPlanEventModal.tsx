@@ -5,6 +5,7 @@ import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
+import type { WorkPlanItem } from '@/domain/workPlan/item';
 import { selectableGeneralTags, ETC_TAG_ID } from '@/domain/workPlan/tag';
 import { useWorkPlanTags } from '@/features/workPlan/useWorkPlanItems';
 import { Button } from '@/shared/ui/Button';
@@ -30,6 +31,8 @@ interface WorkPlanEventModalProps {
   onSaved: (message: string) => void;
   /** 최근 적은 업무 제목 — 새 업무 제목 아래 */
   recentTitles?: string[];
+  /** 내 일반 업무 복사 — 창을 닫고, 그 뒤 내 칸·날짜를 누르면 붙여넣는다 */
+  onCopyItem?: (item: WorkPlanItem) => void;
   /** 태그 편집 권한 — 있으면 태그 메뉴 맨 아래에 '태그 편집' */
   canEditTags?: boolean;
   /** '저장하고 이어서 적기' — 저장 뒤 같은 날 새 일정 창 */
@@ -41,7 +44,7 @@ interface WorkPlanEventModalProps {
  * 위 도구 막대에서 종류(회의·외근·출장·일반 태그)를 고르고, 왼쪽에 입력, 오른쪽 세로 시간표로 시간을 고른다.
  * 다른 칸·일정을 열 때는 호출부가 `key`를 바꿔 다시 마운트한다(훅 규칙).
  */
-export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, recentTitles, onSavedAndNext, canEditTags = false }: WorkPlanEventModalProps) {
+export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, recentTitles, onSavedAndNext, canEditTags = false, onCopyItem }: WorkPlanEventModalProps) {
   const form = useWorkPlanEventForm(target, actor, deptId);
   const { state, readOnly } = form;
   const owner = useMemo(() => ownerOf(target, users), [target, users]);
@@ -59,6 +62,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     const date = state.date;
     void save(canContinue && continueNext ? () => onSavedAndNext!(date) : undefined);
   };
+  const copyable = !!onCopyItem && target.mode === 'edit' && entry?.source === 'ITEM' && entry.item?.ownerUserId === actor.id;
   const invites = target.mode === 'create' && state.kind === 'MEETING' && state.attendeeIds.some((id) => id !== owner.id);
 
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
@@ -78,14 +82,28 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     </>
   ) : (
     <>
-      {form.remove && (
-        <div className="mr-auto">
-          {confirmingDelete ? (
-            <Button variant="dangerSolid" disabled={form.saving} onClick={() => void remove()}>
-              {form.editingRoutine && form.routineScope === 'following' ? '이후 모두 삭제' : '삭제 확인'}
+      {(form.remove || copyable) && (
+        <div className="mr-auto flex items-center gap-2">
+          {form.remove &&
+            (confirmingDelete ? (
+              <Button variant="dangerSolid" disabled={form.saving} onClick={() => void remove()}>
+                {form.editingRoutine && form.routineScope === 'following' ? '이후 모두 삭제' : '삭제 확인'}
+              </Button>
+            ) : (
+              <Button variant="danger" disabled={form.saving} onClick={() => setConfirmingDelete(true)}>삭제</Button>
+            ))}
+          {copyable && (
+            <Button
+              variant="secondary"
+              disabled={form.saving}
+              title="같은 일을 다른 날에 또 — 복사한 뒤 내 칸이나 날짜를 누르면 붙여넣어요"
+              onClick={() => {
+                onCopyItem!(entry!.item!);
+                onClose();
+              }}
+            >
+              복사
             </Button>
-          ) : (
-            <Button variant="danger" disabled={form.saving} onClick={() => setConfirmingDelete(true)}>삭제</Button>
           )}
         </div>
       )}

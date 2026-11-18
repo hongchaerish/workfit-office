@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { chairToCommittee, groupRoster, summarizeGroup } from './teamWeekGroups';
+import { chairToCommittee, groupRoster, isChairAccount, summarizeGroup } from './teamWeekGroups';
 
 const u = (id: string, name: string, dept: string) => ({ id, name, dept }) as User;
 const DEPTS = ['경영지원팀', '개발팀', '기획팀'];
@@ -66,4 +66,10 @@ test('chairToCommittee: 위원장(대표이사 계정)은 업무계획에서 기
   assert.equal(out[1], A);
   const g = groupRoster(out, opts(null));
   assert.ok(!g.some((x) => x.label === '대표이사'));
+});
+
+test('isChairAccount: 이름·직위·직책 중 하나가 대표이사면 위원장 계정', () => {
+  assert.equal(isChairAccount({ id: 'x', name: '대표이사', dept: '대표이사' } as User), true);
+  assert.equal(isChairAccount({ id: 'y', name: '홍길동', dept: '대표이사', jobTitle: '대표이사' } as User), true);
+  assert.equal(isChairAccount(A), false);
 });

@@ -1,8 +1,9 @@
 import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
 import { useCreateWorkPlanItem, useRemoveWorkPlanItem, useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
-import { movedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
+import { movedDraft, pastedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
 import { useLunchRange } from '@/features/workPlan/useLunchRange';
+import { chairToCommittee, isChairAccount } from './components/teamWeekGroups';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -37,18 +38,13 @@ import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { firstFreeStart } from '@/domain/workPlan/freeSlots';
 import { busyRangeOf, recentItemTitles } from './components/dayDetail';
 import type { EventKind } from './event/useWorkPlanEventForm';
-import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { resolveDeptId } from '@/domain/department/engine';
 import { useDepartments } from '@/features/department/useDepartments';
-import { useDepartmentMembers } from '@/features/departmentMember/useDepartmentMembers';
-import type { DepartmentMember } from '@/domain/departmentMember/schema';
 
-/** 조회 전 빈 값 — 매 렌더 새 배열이 되어 아래 memo(인원 목록 → 칸 조립)를 깨지 않게 한 개만 둔다 */
-const NO_DEPARTMENT_MEMBERS: DepartmentMember[] = [];
 
 /** 보기 — 주간(기본, 전원 한 주) / 월간 표 / 내 주간 시간표 */
 type WorkPlanView = 'teamWeek' | 'team' | 'week';
@@ -105,8 +101,9 @@ export default function WorkPlanScreen() {
   const org = useOrgTree();
   const usersQuery = useUsers();
   // 실제 회사 운영 원칙: 퇴사자(status === '미사용' 또는 resignedAt)는 업무계획 로스터/부서원/일정에서 100% 원천 배제
+  // 업무계획 한정: 위원장(대표이사 계정)은 기술경영전략위원회 소속으로 — 부서 필터·주간·월간이 모두 따른다
   const users = useMemo(() => {
-    return (usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt);
+    return chairToCommittee((usersQuery.data ?? []).filter((u) => u.status === '사용' && !u.resignedAt), isChairAccount);
   }, [usersQuery.data]);
   const [demoUserId, setDemoUserId] = useState('U009');
   const actor = authenticatedUser
@@ -152,7 +149,6 @@ export default function WorkPlanScreen() {
     const timer = window.setInterval(() => setNowMinute(minuteOfNow()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   // 전사 공통 중요 일정 모달 상태
   const [companyScheduleModal, setCompanyScheduleModal] = useState<{
@@ -213,7 +209,6 @@ export default function WorkPlanScreen() {
       .sort(compareRoster);
   }, [users, actor, actorScope, org, compareRoster]);
 
-  const departmentMembers = useDepartmentMembers().data ?? NO_DEPARTMENT_MEMBERS;
 
   /** 고유 부서 목록 (소속 인원이 1명 이상 있는 부서만 자동 표시 & 조직도 배치순 정렬) */
   const departments = useMemo(() => {
@@ -222,16 +217,6 @@ export default function WorkPlanScreen() {
     // A. 본직 인원 카운트
     roster.forEach((u) => {
       memberCountByDept.set(u.dept, (memberCountByDept.get(u.dept) ?? 0) + 1);
-    });
-
-    // B. 겸직 인원 카운트
-    departmentMembers.forEach((dm) => {
-      if (dm.deptName) {
-        const baseUser = users.find((u) => u.id === dm.userId && u.status === '사용');
-        if (baseUser) {
-          memberCountByDept.set(dm.deptName, (memberCountByDept.get(dm.deptName) ?? 0) + 1);
-        }
-      }
     });
 
     // 소속 인원이 없는(0명) 부서는 자동으로 숨김처리
@@ -244,15 +229,15 @@ export default function WorkPlanScreen() {
       const orderB = deptOrderMap.get(b) ?? 9999;
       return orderA - orderB || a.localeCompare(b, 'ko');
     });
-  }, [roster, departmentMembers, users, deptOrderMap, actor]);
+  }, [roster, deptOrderMap]);
 
-  /** 부서 및 검색어 필터가 적용된 최종 열람 인원 (본직 + 겸직 부서 동시 지원) */
+  /** 부서 및 검색어 필터가 적용된 최종 열람 인원 — 겸직자는 본직 부서로만 */
   const scopedMembers = useMemo(() => {
     if (!actor) return [];
 
     const kw = searchKeyword.trim().toLowerCase();
 
-    // 1. 특정 부서 필터 선택 시 (본직 소속자 + 해당 부서 겸직자 모두 취합). 기억해 둔 부서가 없어졌으면 전체
+    // 1. 특정 부서 필터 선택 시 — 본직 소속자만(겸직은 업무계획에 본직으로만 나온다). 기억해 둔 부서가 없어졌으면 전체
     if (deptFilter !== 'all' && departments.includes(deptFilter)) {
       const matchedUsers: User[] = [];
       const seenUserIds = new Set<string>();
@@ -267,28 +252,6 @@ export default function WorkPlanScreen() {
           seenUserIds.add(u.id);
         });
 
-      // B. 해당 부서에 '겸직(departmentMembers)'으로 소속된 사용자 (손승원 상무, 대표이사 등)
-      departmentMembers
-        .filter(
-          (dm) =>
-            !dm.isPrimary &&
-            (dm.deptName === deptFilter || org.depts.find((d) => d.id === dm.deptId)?.name === deptFilter),
-        )
-        .forEach((dm) => {
-          if (seenUserIds.has(dm.userId)) return;
-          const baseUser = users.find((u) => u.id === dm.userId);
-          if (!baseUser || baseUser.status !== '사용') return;
-
-          // 겸직 소속 인원 추가 (겸직 플래그 및 해당 부서 직책 반영)
-          matchedUsers.push({
-            ...baseUser,
-            dept: deptFilter,
-            jobTitle: dm.jobTitle || baseUser.jobTitle,
-            isConcurrent: true,
-          } as User & { isConcurrent: boolean });
-          seenUserIds.add(dm.userId);
-        });
-
       const sorted = matchedUsers.sort(compareRoster);
 
       return sorted.filter((u) => {
@@ -299,27 +262,10 @@ export default function WorkPlanScreen() {
 
     // 2. 전체(all) 필터
     return roster.filter((user) => !kw || user.name.toLowerCase().includes(kw) || user.dept.toLowerCase().includes(kw));
-  }, [users, roster, deptFilter, searchKeyword, departmentMembers, org, actor, compareRoster, departments]);
+  }, [users, roster, deptFilter, searchKeyword, actor, compareRoster, departments]);
 
-  /**
-   * 주간 표 인원 — 부서 묶음에 겸직자도 나오게 겸직 행을 더한다(전체 부서일 때만. 특정 부서는 위에서 이미 겸직을 더했다).
-   * 같은 사람(userId)이라 칸·상세는 똑같다.
-   */
-  const weekTableMembers = useMemo(() => {
-    if (deptFilter !== 'all' && departments.includes(deptFilter)) return scopedMembers;
-    const kw = searchKeyword.trim().toLowerCase();
-    const shown = new Set(scopedMembers.map((u) => u.id));
-    const extra: User[] = [];
-    for (const dm of departmentMembers) {
-      if (dm.isPrimary) continue;
-      const deptName = dm.deptName || org.depts.find((d) => d.id === dm.deptId)?.name;
-      const base = users.find((u) => u.id === dm.userId);
-      if (!deptName || !base || !shown.has(base.id) || base.dept === deptName) continue;
-      if (kw && !base.name.toLowerCase().includes(kw) && !deptName.toLowerCase().includes(kw)) continue;
-      extra.push({ ...base, dept: deptName, jobTitle: dm.jobTitle || base.jobTitle });
-    }
-    return [...scopedMembers, ...extra];
-  }, [deptFilter, departments, scopedMembers, departmentMembers, org, users, searchKeyword]);
+  // 겸직자도 본직 부서에만 — 주간 표는 걸러진 인원 그대로
+  const weekTableMembers = scopedMembers;
 
   /** 칸 옆 상세 창 — 누른 칸 */
   const [cellPopover, setCellPopover] = useState<{ member: User; date: string; anchor: HTMLElement } | null>(null);
@@ -401,11 +347,11 @@ export default function WorkPlanScreen() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [clipboard]);
-  const handlePaste = (date: string) => {
+  const handlePaste = (date: string, startMinute?: number) => {
     if (!actor || !clipboard) return;
     const who = { userId: actor.id, active: actorActive };
     createItem.mutate(
-      { actor: who, ownerUserId: actor.id, draft: movedDraft(clipboard, date) },
+      { actor: who, ownerUserId: actor.id, draft: pastedDraft(clipboard, date, startMinute) },
       {
         onSuccess: (created) =>
           setNotice({
@@ -584,9 +530,9 @@ export default function WorkPlanScreen() {
 
       {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4">
-        {clipboard && view === 'teamWeek' && (
+        {clipboard && (
           <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-teal/40 bg-panel px-4 py-2 text-[12px] font-semibold text-ink shadow-lg">
-            <span className="max-w-[22rem] truncate">"{clipboard.title}" 복사함 — 붙여넣을 내 칸을 누르세요</span>
+            <span className="max-w-[22rem] truncate">"{clipboard.title}" 복사함 — 붙여넣을 {view === 'week' ? '날짜나 시간' : '내 칸'}을 누르세요</span>
             <button type="button" onClick={() => setClipboard(null)} className="text-ink3 hover:text-ink">
               그만 (Esc)
             </button>
@@ -623,6 +569,7 @@ export default function WorkPlanScreen() {
           onOpenEntry={handleOpenEntry}
           onCreate={actorActive ? handleCreate : undefined}
           onMoveItem={actorActive ? handleMoveItem : undefined}
+          onPaste={clipboard && actorActive ? handlePaste : undefined}
         />
       )}
       {view === 'teamWeek' && (
@@ -637,7 +584,6 @@ export default function WorkPlanScreen() {
           viewSwitch={viewSwitch}
           filters={filters}
           forceOpen={deptFilter !== 'all' || searchKeyword.trim() !== ''}
-          onOpenConfig={() => setIsConfigOpen(true)}
           onOpenCompanySchedule={(date, content, planId) => setCompanyScheduleModal({ isOpen: true, date, content, planId })}
           onOpenCell={(member, date, anchor) => setCellPopover({ member, date, anchor })}
           onOpenPerson={setPersonDrawer}
@@ -664,10 +610,10 @@ export default function WorkPlanScreen() {
         cellOf={cellOf}
         workPlans={workPlans}
         onCreate={actorActive ? handleCreate : undefined}
+        onPaste={clipboard && actorActive ? handlePaste : undefined}
         onOpenEntry={handleOpenEntry}
         onMoveItem={actorActive ? handleMoveItem : undefined}
         onSaveMemo={actorActive ? handleSaveMemo : undefined}
-        onOpenConfig={() => setIsConfigOpen(true)}
         // 부서 필터·검색 — 상단 고정 바에 함께 놓인다
         filters={filters}
         onOpenCompanySchedule={(date, content, planId) =>
@@ -742,6 +688,7 @@ export default function WorkPlanScreen() {
           onSaved={notify}
           recentTitles={recentTitles}
           canEditTags={canManageWorkPlan}
+          onCopyItem={actorActive ? setClipboard : undefined}
           onSavedAndNext={(date) => handleCreate(date, actor)}
         />
       )}
@@ -782,12 +729,6 @@ export default function WorkPlanScreen() {
         />
       )}
 
-      {/* 업무계획 태그 관리 모달 */}
-      <WorkPlanConfigModal
-        isOpen={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
-        canEdit={canManageWorkPlan}
-      />
 
       {/* 전사 공통 중요 일정 등록/수정 모달 */}
       <WorkPlanCompanyScheduleModal

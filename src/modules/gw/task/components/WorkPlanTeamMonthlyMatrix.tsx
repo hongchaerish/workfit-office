@@ -19,7 +19,6 @@ import {
   Plus,
   Check,
   Calendar as CalendarIcon,
-  Settings,
   LocateFixed,
   PanelRightOpen,
 } from 'lucide-react';
@@ -71,6 +70,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   members: User[];
   /** 칸 더블클릭·[+] → 그 날짜·그 사람으로 새 일정. 없으면(사용 중이 아닌 계정) 진입점도 없다. */
   onCreate?: (date: string, member: User) => void;
+  /** 복사한 업무가 있으면 — 내 칸을 누르면 그날에 붙여넣는다 */
+  onPaste?: (date: string) => void;
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
   /** 내 일반 업무를 끌어서 다른 날로 옮긴다. 없으면(사용 중이 아닌 계정) 끌 수 없다 */
@@ -85,7 +86,6 @@ interface WorkPlanTeamMonthlyMatrixProps {
   /** 예전 글 원본 — 전사 공통 일정 줄에 쓴다 */
   workPlans: WorkPlan[];
   onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
-  onOpenConfig?: () => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
   /** 날짜 머리 누르기 → 하루 상세 팝업 */
@@ -121,11 +121,11 @@ export function WorkPlanTeamMonthlyMatrix({
   cellOf,
   workPlans: monthlyPlans,
   onCreate,
+  onPaste,
   onOpenEntry,
   onMoveItem,
   onSaveMemo,
   onOpenCompanySchedule,
-  onOpenConfig,
   filters,
   onOpenDay,
   selectedDate,
@@ -465,16 +465,6 @@ export function WorkPlanTeamMonthlyMatrix({
         {/* 필터·검색 및 액션 버튼 */}
         <div className="flex flex-wrap items-center gap-1.5">
           {filters}
-          {onOpenConfig && (
-            <button
-              type="button"
-              onClick={onOpenConfig}
-              className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
-            >
-              <Settings size={12} className="text-ink3" />
-              <span>태그 관리</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -651,7 +641,7 @@ export function WorkPlanTeamMonthlyMatrix({
                             const cellBorderClass = dayColBorderClass(d.isToday);
                             // 내 칸을 누르면 새 일정, 남의 칸을 누르면 그날 상세(팝업)
                             const onCellClick = isMe
-                              ? onCreate ? () => onCreate(dayStr, member) : undefined
+                              ? onPaste ? () => onPaste(dayStr) : onCreate ? () => onCreate(dayStr, member) : undefined
                               : onOpenDay ? () => onOpenDay(dayStr) : undefined;
                             // 끌고 있는 업무는 내 칸에만 놓을 수 있다
                             const droppable = isMe && draggedItem !== null;
