@@ -113,11 +113,12 @@ export function useEventBlocks(
 export function useEventActions(form: EventForm, onSaved: (message: string) => void, onClose: () => void) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const save = async () => {
+  /** after 를 주면(저장하고 이어서 적기) 닫는 대신 그것을 부른다 */
+  const save = async (after?: () => void) => {
     const kind = form.state.kind;
     if (await form.save()) {
       onSaved(SAVED_MESSAGE[kind]);
-      onClose();
+      (after ?? onClose)();
     }
   };
 

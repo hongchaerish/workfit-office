@@ -21,7 +21,8 @@ export type EventKind = 'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP';
 
 export type EventTarget =
   // 남의 칸이면 allowed = ['MEETING']. initialRange = 처음 시간 구간(주면 종일 아님으로 시작)
-  | { mode: 'create'; date: string; owner: User; allowed: EventKind[]; initialRange?: MinuteRange }
+  // initialKind·initialAttendeeIds = 상세 창 '회의 잡기'처럼 처음 종류·참석자를 정해 열 때
+  | { mode: 'create'; date: string; owner: User; allowed: EventKind[]; initialRange?: MinuteRange; initialKind?: EventKind; initialAttendeeIds?: string[] }
   | { mode: 'edit'; entry: DayEntry } // ITEM·MEETING·OUTSIDE(본인 등록)
   | { mode: 'view'; entry: DayEntry };
 
@@ -93,7 +94,10 @@ export function initialCreateState(
   actorId: string,
   firstTagId: string,
 ): EventFormState {
-  const kind: EventKind = target.allowed.includes('ITEM') ? 'ITEM' : target.allowed[0] ?? 'ITEM';
+  const kind: EventKind =
+    target.initialKind && target.allowed.includes(target.initialKind)
+      ? target.initialKind
+      : target.allowed.includes('ITEM') ? 'ITEM' : target.allowed[0] ?? 'ITEM';
   const base = blankState(target.date);
   const start: EventFormState = {
     ...base,
@@ -101,7 +105,7 @@ export function initialCreateState(
     tagId: firstTagId,
     allDay: isOutsideKind(kind),
     subType: isOutsideKind(kind) ? OUTSIDE_WORK_SUBTYPES[kind][0] : '',
-    attendeeIds: target.owner.id !== actorId ? [target.owner.id] : [],
+    attendeeIds: target.initialAttendeeIds ? [...target.initialAttendeeIds] : target.owner.id !== actorId ? [target.owner.id] : [],
   };
   return target.initialRange ? applyRangeChange(start, { ...target.initialRange }) : start;
 }

@@ -477,3 +477,14 @@ test('종료 미정 — 시간표로 시간을 바꾸면 풀리고, 회의로 �
   assert.equal(allDay.startTime, null);
   assert.equal(allDay.endTime, null);
 });
+
+test('새 일정 — 처음 종류·참석자를 주면(상세 창의 회의 잡기) 회의로, 그 참석자로 시작한다', () => {
+  const s = initialCreateState(
+    { mode: 'create', date: D, owner: SELF, allowed: ['ITEM', 'MEETING', 'OUTSIDE', 'TRIP'], initialKind: 'MEETING', initialAttendeeIds: ['U2'] },
+    ME,
+    'WT-0001',
+  );
+  assert.equal(s.kind, 'MEETING');
+  assert.deepEqual(s.attendeeIds, ['U2']);
+  assert.equal(s.allDay, false);
+});

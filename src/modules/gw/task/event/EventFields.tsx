@@ -58,10 +58,14 @@ interface EventFieldsProps {
   part?: 'all' | 'main' | 'more';
   /** 제목(행선지) 칸에 처음 포커스 — 기본 켬(PC). 모바일은 새 일정일 때만(키보드가 바로 뜨므로) */
   autoFocusTitle?: boolean;
+  /** 최근 적은 업무 제목 — 새 업무 제목 아래 버튼 */
+  recentTitles?: string[];
+  /** 고른 시간에 바쁜 사람 — 참석자 검색에 '이 시간 바쁨' */
+  busyAt?: (userId: string) => boolean;
 }
 
 /** 일정 창 왼쪽 입력 — 종류(일반·회의·외근·출장)마다 칸이 다르다. */
-export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true }: EventFieldsProps) {
+export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true, recentTitles = [], busyAt }: EventFieldsProps) {
   const { state, set, readOnly } = form;
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
@@ -100,12 +104,27 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
             autoFocus={autoFocusTitle && !readOnly}
             onChange={(e) => set('title', e.target.value)}
           />
+          {state.kind === 'ITEM' && !readOnly && recentTitles.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[11px] text-ink3">최근</span>
+              {recentTitles.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => set('title', t)}
+                  className="max-w-[12rem] truncate rounded-full border border-border px-2 py-0.5 text-[11px] text-ink2 hover:bg-panel-alt"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
         </Row>
       )}
 
       {main && isMeeting && (
         <Row icon={<Users size={15} />} label="참석자">
-          <AttendeeField form={form} actor={actor} users={users} />
+          <AttendeeField form={form} actor={actor} users={users} busyAt={busyAt} />
         </Row>
       )}
 
@@ -576,7 +595,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
 }
 
 /** 회의 참석자 — 이름·부서 검색 칩(캘린더 회의 창과 같은 후보 규칙) */
-function AttendeeField({ form, actor, users }: { form: EventForm; actor: User; users: User[] }) {
+function AttendeeField({ form, actor, users, busyAt }: { form: EventForm; actor: User; users: User[]; busyAt?: (userId: string) => boolean }) {
   const { state, set, readOnly } = form;
   const { canDesignate } = useCanDesignate();
   const [keyword, setKeyword] = useState('');
@@ -666,6 +685,7 @@ function AttendeeField({ form, actor, users }: { form: EventForm; actor: User; u
               >
                 <span className="font-bold text-ink">{u.name}</span>
                 <span className="text-[10.5px] text-ink3">{u.position}</span>
+                {busyAt?.(u.id) && <span className="text-[10px] text-amber-600">이 시간 바쁨</span>}
                 <span className="ml-auto rounded bg-panel-alt px-1.5 text-[10px] text-ink3">{u.dept}</span>
               </button>
             ))

@@ -14,6 +14,7 @@ import { kindEnabled } from './entryRouting';
 import { RoutineFields, RoutineScopeFields } from './RoutineFields';
 import { defaultRoutineRule, type RoutineFreq } from '@/domain/workPlan/routine';
 import { TimeGrid } from './TimeGrid';
+import { EventAssist, useEventConflicts } from './EventAssist';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
 interface WorkPlanEventModalProps {
@@ -25,6 +26,10 @@ interface WorkPlanEventModalProps {
   cellOf: (userId: string, date: string) => DayCell;
   onClose: () => void;
   onSaved: (message: string) => void;
+  /** 최근 적은 업무 제목 — 새 업무 제목 아래 */
+  recentTitles?: string[];
+  /** '저장하고 이어서 적기' — 저장 뒤 같은 날 새 일정 창 */
+  onSavedAndNext?: (date: string) => void;
 }
 
 /**
@@ -32,13 +37,23 @@ interface WorkPlanEventModalProps {
  * 위 도구 막대에서 종류(회의·외근·출장·일반 태그)를 고르고, 왼쪽에 입력, 오른쪽 세로 시간표로 시간을 고른다.
  * 다른 칸·일정을 열 때는 호출부가 `key`를 바꿔 다시 마운트한다(훅 규칙).
  */
-export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved }: WorkPlanEventModalProps) {
+export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, recentTitles, onSavedAndNext }: WorkPlanEventModalProps) {
   const form = useWorkPlanEventForm(target, actor, deptId);
   const { state, readOnly } = form;
   const owner = useMemo(() => ownerOf(target, users), [target, users]);
   const entry = target.mode === 'create' ? null : target.entry;
   const blocks = useEventBlocks(form, target, actor, users, cellOf, owner);
   const { save, join, leave, remove, confirmingDelete, setConfirmingDelete } = useEventActions(form, onSaved, onClose);
+  const conflicts = useEventConflicts(form, target, owner.id, actor.id, users, cellOf);
+  /** 저장하고 이어서 적기 — 새 일정만 */
+  const [continueNext, setContinueNext] = useState(false);
+  const canContinue = target.mode === 'create' && Boolean(onSavedAndNext);
+  const saveNow = () => {
+    if (form.saving) return;
+    const date = state.date;
+    void save(canContinue && continueNext ? () => onSavedAndNext!(date) : undefined);
+  };
+  const invites = target.mode === 'create' && state.kind === 'MEETING' && state.attendeeIds.some((id) => id !== owner.id);
 
   const heading = target.mode === 'create' ? '새 일정' : target.mode === 'edit' ? '일정 수정' : '일정 보기';
   const when = eventWhenLabel(state.date, isOutsideKind(state.kind) ? state.endDate : undefined);
@@ -68,9 +83,16 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
           )}
         </div>
       )}
+      {canContinue && (
+        <label className="mr-auto flex items-center gap-1.5 text-[12px] text-ink2">
+          <input type="checkbox" checked={continueNext} onChange={(e) => setContinueNext(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
+          저장하고 이어서 적기
+        </label>
+      )}
+      <span className="text-[11px] text-ink3">Ctrl+Enter 저장</span>
       <Button disabled={form.saving} onClick={onClose}>취소</Button>
-      <Button variant="primary" disabled={form.saving} onClick={() => void save()}>
-        {form.saving ? '저장 중…' : '저장'}
+      <Button variant="primary" disabled={form.saving} onClick={saveNow}>
+        {form.saving ? '저장 중…' : invites ? '저장하고 초대 보내기' : '저장'}
       </Button>
     </>
   );
@@ -80,7 +102,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       open
       // 저장·삭제 중에는 ESC·바깥 클릭·X로 닫히지 않게
       onClose={form.saving ? () => {} : onClose}
-      width={760}
+      width={820}
       flush
       title={(
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -110,7 +132,16 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       )}
       footer={footer}
     >
-      <div className="flex flex-col">
+      <div
+        className="flex flex-col"
+        onKeyDown={(e) => {
+          // 창 어디서든 Ctrl/⌘+Enter = 저장
+          if (!readOnly && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            saveNow();
+          }
+        }}
+      >
         <KindToolbar form={form} target={target} />
 
         {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
@@ -164,8 +195,11 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
                   ownerName={owner.name}
                   outsideSelfId={entry?.outside?.self?.id ?? null}
                   onJoin={(meeting) => void join(meeting)}
+                  recentTitles={target.mode === 'create' ? recentTitles : undefined}
+                  busyAt={conflicts.busyAt}
                 />
               </fieldset>
+              {!readOnly && <EventAssist form={form} conflicts={conflicts} />}
             </div>
           </div>
 
@@ -180,6 +214,13 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
               openEnd={state.kind === 'ITEM' && state.openEnd}
               allDayLabel={state.kind === 'ITEM' ? '미정' : '종일'}
               onChange={form.setRange}
+              lunch
+              conflict={!readOnly && Boolean(conflicts.mine)}
+              fits={readOnly ? [] : conflicts.fits}
+              onPickFit={(start) => {
+                const length = state.range && !state.allDay ? state.range.end - state.range.start : 60;
+                form.setRange({ start, end: start + length });
+              }}
             />
           </div>
         </div>

@@ -47,6 +47,13 @@ interface TimeGridProps {
   allDayLabel?: string;
   onChange: (range: MinuteRange) => void;
   mode: 'desktop' | 'touch';
+  /** 점심 12~13시 빗금 */
+  lunch?: boolean;
+  /** 고른 시간이 내 일정과 겹침 — 고른 칸을 주황으로 */
+  conflict?: boolean;
+  /** 참석자 모두 가능한 시작 시각(분) — 아래 버튼 */
+  fits?: number[];
+  onPickFit?: (start: number) => void;
 }
 
 /** 한 시간 높이(rem). 좌표 계산은 비율만 쓰므로 body zoom 과 무관하다 */
@@ -113,7 +120,7 @@ function dateLabel(date: string): string {
 
 type Drag = { kind: 'new' | 'move' | 'resize'; startMinute: number; base: MinuteRange | null };
 
-export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = false, allDayLabel = '종일', onChange, mode }: TimeGridProps) {
+export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = false, allDayLabel = '종일', onChange, mode, lunch = false, conflict = false, fits = [], onPickFit }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -243,7 +250,11 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
 
       <div ref={scrollRef} className="relative overflow-y-auto"
         style={{
-          height: mode === 'desktop' ? `min(${VISIBLE_HOURS * HOUR_REM}rem, ${DESKTOP_MAX_HEIGHT})` : `${VISIBLE_HOURS * HOUR_REM}rem`,
+          // 아래 '모두 가능한 시간' 줄이 있으면 그만큼 줄여 창 안에 들어가게
+          height:
+            mode === 'desktop'
+              ? `calc(min(${VISIBLE_HOURS * HOUR_REM}rem, ${DESKTOP_MAX_HEIGHT}) - ${fits.length > 0 && onPickFit ? 4.5 : 0}rem)`
+              : `${VISIBLE_HOURS * HOUR_REM}rem`,
           minHeight: '12rem',
         }}>
         <div className="relative flex" style={{ height: `${24 * HOUR_REM}rem` }}>
@@ -276,6 +287,23 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
               />
             )}
 
+            {/* 점심 — 옅은 빗금 */}
+            {lunch && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bg-[repeating-linear-gradient(135deg,transparent_0_5px,rgba(148,163,184,0.18)_5px_7px)]"
+                style={{ top: pct(12 * 60), height: pct(60) }}
+              />
+            )}
+            {/* 지금 — 빨간 선(오늘만) */}
+            {nowBlock && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 z-[5] h-px bg-rose-500"
+                style={{ top: pct(now.getHours() * 60 + now.getMinutes()) }}
+              />
+            )}
+
             {hours.map((h) => (
               <div key={h} className="pointer-events-none absolute inset-x-0">
                 <div className="absolute inset-x-0 border-t border-border" style={{ top: pct(h * 60) }} />
@@ -305,7 +333,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
 
             {value && !allDay && (
               <div
-                className={`absolute inset-x-1 z-10 flex flex-col rounded border border-blue bg-blue px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm ${openEnd ? OPEN_FADE_CLASS : ''}`}
+                className={`absolute inset-x-1 z-10 flex flex-col rounded border px-1.5 py-0.5 text-[11px] font-medium text-white shadow-sm ${conflict ? 'border-amber-500 bg-amber-500' : 'border-blue bg-blue'} ${openEnd ? OPEN_FADE_CLASS : ''}`}
                 style={{
                   top: pct(value.start),
                   height: pct(value.end - value.start),
@@ -336,6 +364,23 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
           </div>
         </div>
       </div>
+      {fits.length > 0 && onPickFit && (
+        <div className="border-t border-border px-2 py-2">
+          <div className="mb-1 text-[11px] text-ink3">참석자 모두 가능한 시간</div>
+          <div className="flex flex-wrap gap-1">
+            {fits.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onPickFit(t)}
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] tabular-nums text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+              >
+                {toHHmm(t)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

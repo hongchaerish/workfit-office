@@ -72,6 +72,7 @@ export function RoomPicker({ mode, onModeChange, text, onTextChange, rooms, room
                 >
                   <DoorOpen size={13} className="shrink-0 text-ink3" />
                   <span className="min-w-0 flex-1 truncate font-semibold">{resource.name}</span>
+                  {blocked && <span className="shrink-0 text-[10.5px] text-ink3">사용 중</span>}
                   {resource.capacity != null && (
                     <span className="shrink-0 text-[10.5px] text-ink3">{resource.capacity}명</span>
                   )}

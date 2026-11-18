@@ -33,6 +33,9 @@ import { openDirectChat } from '@/features/chat/openDirectChat';
 import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import { firstFreeStart } from '@/domain/workPlan/freeSlots';
+import { busyRangeOf, recentItemTitles } from './components/dayDetail';
+import type { EventKind } from './event/useWorkPlanEventForm';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
@@ -359,12 +362,32 @@ export default function WorkPlanScreen() {
     setEventModal((prev) => ({ key: (prev?.key ?? 0) + 1, target }));
   };
 
-  /** 칸 누르기·[+] — 오늘이면 지금 다음 30분, 아니면 09:00~09:30. 주간 시간표는 누른 시각(range) */
-  const handleCreate = (date: string, member: User, range?: MinuteRange) => {
+  /**
+   * 칸 누르기·[+] — 시간을 주지 않으면 그날 첫 빈 1시간(회의면 참석자 모두 비는 때, 오늘이면 지금 이후).
+   * 빈 때가 없으면 예전 기본값(오늘이면 지금 다음 30분, 아니면 09:00~09:30). 주간 시간표는 누른 시각(range).
+   */
+  const handleCreateWith = (date: string, member: User, opts: { range?: MinuteRange; kind?: EventKind; attendeeIds?: string[] } = {}) => {
     if (!actor) return;
-    const target = createTarget(date, member, actor, today, new Date());
-    openEventModal(range ? { ...target, initialRange: range } : target);
+    const base = createTarget(date, member, actor, today, new Date());
+    const people = [member.id, ...(opts.attendeeIds ?? [])];
+    const busy = (id: string) => cellOf(id, date).entries.map(busyRangeOf).filter((r): r is MinuteRange => r !== null);
+    const free = opts.range ? null : firstFreeStart([...new Set(people)].map(busy), 60, date === today ? { notBefore: nowMinute } : {});
+    const range = opts.range ?? (free !== null ? { start: free, end: free + 60 } : undefined);
+    openEventModal({
+      ...base,
+      ...(range ? { initialRange: range } : {}),
+      ...(opts.kind ? { initialKind: opts.kind } : {}),
+      ...(opts.attendeeIds ? { initialAttendeeIds: opts.attendeeIds } : {}),
+    });
   };
+  const handleCreate = (date: string, member: User, range?: MinuteRange) => handleCreateWith(date, member, { range });
+
+  /** 최근 적은 내 업무 제목 — 보고 있는 범위에서 최근 날짜부터 */
+  const recentTitles = useMemo(() => {
+    if (!actor) return [];
+    const entries = [...monthDates].filter((d) => d <= today).reverse().flatMap((d) => [...cellOf(actor.id, d).entries].reverse());
+    return recentItemTitles(entries);
+  }, [actor, monthDates, cellOf, today]);
 
   /** 상세 창에서 내 일반 업무 바로 지우기 — 4초 동안 되돌리기(같은 내용으로 다시 만든다) */
   const handleRemoveItem = (item: WorkPlanItem) => {
@@ -624,7 +647,7 @@ export default function WorkPlanScreen() {
           onDateChange={(date) => setCellPopover((prev) => (prev ? { ...prev, date } : prev))}
           onClose={() => setCellPopover(null)}
           onOpenEntry={handleOpenEntry}
-          onCreate={actorActive ? (date, member, opts) => handleCreate(date, member, opts?.range) : undefined}
+          onCreate={actorActive ? handleCreateWith : undefined}
           onRemoveItem={actorActive ? handleRemoveItem : undefined}
           onSaveMemo={actorActive ? handleSaveMemo : undefined}
           onOpenWeek={(member) => {
@@ -671,6 +694,8 @@ export default function WorkPlanScreen() {
           cellOf={cellOf}
           onClose={() => setEventModal(null)}
           onSaved={notify}
+          recentTitles={recentTitles}
+          onSavedAndNext={(date) => handleCreate(date, actor)}
         />
       )}
 
