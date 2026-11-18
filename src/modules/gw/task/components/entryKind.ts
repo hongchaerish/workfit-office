@@ -26,6 +26,14 @@ export function entryKindOf(entry: DayEntry): EntryKind {
   }
 }
 
+/** 일정 한 줄(C 모양)의 왼쪽 선 색 갈래 — 출장은 외근 색 */
+export type LineTone = 'item' | 'meeting' | 'outside' | 'leave';
+
+export function lineToneOf(entry: DayEntry): LineTone {
+  const kind = entryKindOf(entry);
+  return kind === 'trip' ? 'outside' : kind;
+}
+
 export const ENTRY_KIND_LABEL: Record<EntryKind, string> = {
   meeting: '회의',
   outside: '외근',
