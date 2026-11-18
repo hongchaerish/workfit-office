@@ -10,7 +10,7 @@ import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { EntryLine } from './EntryLine';
 import { lineToneOf, type LineTone } from './entryKind';
-import { groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
+import { chairToCommittee, groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
 
 /* 주간 보기 — 부서별로 접히는 조용한 표. 칸 안은 C 모양 줄 글, 칸을 누르면 칸 옆 상세 창(화면이 띄운다). */
 
@@ -121,7 +121,7 @@ export function WorkPlanTeamWeekTable({
   }, [workPlans]);
 
   const groups = useMemo(
-    () => groupRoster(members, { myDept: actor.dept || null, deptOrder, compare }),
+    () => groupRoster(chairToCommittee(members, isChair), { myDept: actor.dept || null, deptOrder, compare }),
     [members, actor.dept, deptOrder, compare],
   );
 

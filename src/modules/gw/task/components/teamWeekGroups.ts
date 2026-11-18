@@ -12,6 +12,14 @@ export interface RosterGroup {
 
 export const NONE_GROUP_KEY = '__NONE__';
 
+/** 업무계획에서 위원장(대표이사 계정)이 들어갈 부서 */
+export const CHAIR_DEPT = '기술경영전략위원회';
+
+/** 업무계획 한정 — 위원장(대표이사 계정)은 '대표이사' 부서가 아니라 기술경영전략위원회의 위원장으로 보인다 */
+export function chairToCommittee(members: User[], isChair: (u: User) => boolean): User[] {
+  return members.map((m) => (isChair(m) ? { ...m, dept: CHAIR_DEPT } : m));
+}
+
 /**
  * 사람을 부서 묶음으로 나눈다. 겸직 행(같은 id, 다른 dept)은 각 묶음에 하나씩. 묶음 안 순서는 compare(임원·직책 먼저).
  * 부서 관리에 없는 부서 이름은 자기 이름 묶음으로 뒤쪽에, 부서가 빈 사람은 맨 끝 '소속 없음'.

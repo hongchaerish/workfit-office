@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { User } from '@/domain/user/schema';
 import type { DayCell, DayEntry } from '@/domain/workPlan/dayEntries';
-import { groupRoster, summarizeGroup } from './teamWeekGroups';
+import { chairToCommittee, groupRoster, summarizeGroup } from './teamWeekGroups';
 
 const u = (id: string, name: string, dept: string) => ({ id, name, dept }) as User;
 const DEPTS = ['경영지원팀', '개발팀', '기획팀'];
@@ -58,4 +58,13 @@ test('summarizeGroup: 오늘 휴가·외근(출장 포함)·미작성', () => {
 
 test('summarizeGroup: 지난주는 미작성을 세지 않는다', () => {
   assert.equal(summarizeGroup([C], cellOf, '2026-11-30', WEEK).unwritten, 0);
+});
+
+test('chairToCommittee: 위원장(대표이사 계정)은 업무계획에서 기술경영전략위원회 소속으로', () => {
+  const chair = { id: 'C1', name: '대표이사', dept: '대표이사' } as User;
+  const out = chairToCommittee([chair, A], (m) => m.id === 'C1');
+  assert.equal(out[0].dept, '기술경영전략위원회');
+  assert.equal(out[1], A);
+  const g = groupRoster(out, opts(null));
+  assert.ok(!g.some((x) => x.label === '대표이사'));
 });
