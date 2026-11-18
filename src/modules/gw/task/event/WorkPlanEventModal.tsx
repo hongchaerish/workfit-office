@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ChevronDown, Repeat, UserRound } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Repeat, Settings, UserRound } from 'lucide-react';
+import { WorkPlanConfigModal } from '../components/WorkPlanConfigModal';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
@@ -28,6 +29,8 @@ interface WorkPlanEventModalProps {
   onSaved: (message: string) => void;
   /** 최근 적은 업무 제목 — 새 업무 제목 아래 */
   recentTitles?: string[];
+  /** 태그 편집 권한 — 있으면 태그 메뉴 맨 아래에 '태그 편집' */
+  canEditTags?: boolean;
   /** '저장하고 이어서 적기' — 저장 뒤 같은 날 새 일정 창 */
   onSavedAndNext?: (date: string) => void;
 }
@@ -37,7 +40,7 @@ interface WorkPlanEventModalProps {
  * 위 도구 막대에서 종류(회의·외근·출장·일반 태그)를 고르고, 왼쪽에 입력, 오른쪽 세로 시간표로 시간을 고른다.
  * 다른 칸·일정을 열 때는 호출부가 `key`를 바꿔 다시 마운트한다(훅 규칙).
  */
-export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, recentTitles, onSavedAndNext }: WorkPlanEventModalProps) {
+export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClose, onSaved, recentTitles, onSavedAndNext, canEditTags = false }: WorkPlanEventModalProps) {
   const form = useWorkPlanEventForm(target, actor, deptId);
   const { state, readOnly } = form;
   const owner = useMemo(() => ownerOf(target, users), [target, users]);
@@ -142,7 +145,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
           }
         }}
       >
-        <KindToolbar form={form} target={target} />
+        <KindToolbar form={form} target={target} canEditTags={canEditTags} />
 
         {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
         {form.routineRule && (
@@ -237,12 +240,13 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
 }
 
 /** 위 도구 막대 — [회의|외근|출장|일반 ▾] 분할 버튼 + 오른쪽 리마인드·루틴 자리(나중 기능) */
-function KindToolbar({ form, target }: { form: EventForm; target: EventTarget }) {
+function KindToolbar({ form, target, canEditTags }: { form: EventForm; target: EventTarget; canEditTags: boolean }) {
   const { state, readOnly } = form;
   const tagsQuery = useWorkPlanTags();
   const tags = tagsQuery.data ?? [];
   const generalTags = selectableGeneralTags(tags);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tagEditOpen, setTagEditOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -357,9 +361,24 @@ function KindToolbar({ form, target }: { form: EventForm; target: EventTarget })
                 </button>
               );
             })}
+            {canEditTags && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setTagEditOpen(true);
+                }}
+                className="mt-1 flex w-full items-center gap-2 rounded border-t border-border px-2 pb-1.5 pt-2 text-left text-[11.5px] font-semibold text-ink3 hover:bg-panel-alt hover:text-ink"
+              >
+                <Settings size={12} className="shrink-0" />
+                태그 편집
+              </button>
+            )}
           </div>
         )}
       </div>
+      {/* 일정 창 위에 겹쳐 뜬다 — 고친 태그는 바로 이 메뉴에 반영된다 */}
+      <WorkPlanConfigModal isOpen={tagEditOpen} onClose={() => setTagEditOpen(false)} canEdit={canEditTags} />
 
       <span className="flex-1" />
       {/* 반복 — 새 일반 업무만(회의·외근·출장은 아직) */}

@@ -55,6 +55,8 @@ export interface WorkPlanCellPopoverProps {
   onCreate?: (date: string, member: User, opts?: { range?: MinuteRange; kind?: 'MEETING'; attendeeIds?: string[] }) => void;
   /** 내 일반 업무 바로 지우기(되돌리기는 화면이 맡는다) */
   onRemoveItem?: (item: WorkPlanItem) => void;
+  /** 내 일반 업무 복사 — 그 뒤 내 칸을 누르면 붙여넣는다(화면이 맡는다) */
+  onCopyItem?: (item: WorkPlanItem) => void;
   onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
   onOpenWeek: (member: User) => void;
   onMessage: (member: User, text?: string) => void;
@@ -74,7 +76,7 @@ function TimeCell({ entry }: { entry: DayEntry }) {
 }
 
 export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
-  const { actor, member, date, anchor, today, nowMinute, cellOf, weekDates, onDateChange, onClose, onOpenEntry, onCreate, onRemoveItem, onSaveMemo, onOpenWeek, onMessage } = props;
+  const { actor, member, date, anchor, today, nowMinute, cellOf, weekDates, onDateChange, onClose, onOpenEntry, onCreate, onRemoveItem, onCopyItem, onSaveMemo, onOpenWeek, onMessage } = props;
   const isMine = member.id === actor.id;
   const isToday = date === today;
   const cell = cellOf(member.id, date);
@@ -229,6 +231,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
             const memo = entry.item?.memo?.trim();
             const canDelete = isMine && !!onRemoveItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id && !entry.item.routine;
             const askable = !isMine && (kind === 'item' || kind === 'meeting');
+            const canCopy = isMine && !!onCopyItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id;
             return (
               <li key={entry.key} className="group/item flex gap-2 rounded-lg px-1.5 py-1.5 hover:bg-panel-alt/60">
                 <TimeCell entry={entry} />
@@ -242,6 +245,19 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
                   {isMine && !leave && (
                     <button type="button" onClick={() => { onClose(); onOpenEntry(entry); }} className="rounded px-1.5 py-0.5 text-[11px] text-ink2 hover:bg-panel hover:text-ink">
                       수정
+                    </button>
+                  )}
+                  {canCopy && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCopyItem!(entry.item!);
+                        onClose();
+                      }}
+                      title="같은 일을 다른 날에 또 — 복사한 뒤 내 칸을 누르면 붙여넣어요"
+                      className="rounded px-1.5 py-0.5 text-[11px] text-ink2 hover:bg-panel hover:text-ink"
+                    >
+                      복사
                     </button>
                   )}
                   {canDelete && (

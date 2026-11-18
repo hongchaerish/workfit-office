@@ -389,6 +389,36 @@ export default function WorkPlanScreen() {
     return recentItemTitles(entries);
   }, [actor, monthDates, cellOf, today]);
 
+  /** 복사한 내 업무 — 있는 동안 주간 표의 내 칸을 누르면 그날에 같은 일을 만든다(여러 날 연달아 가능, Esc·취소로 끝) */
+  const [clipboard, setClipboard] = useState<WorkPlanItem | null>(null);
+  useEffect(() => {
+    if (!clipboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) setClipboard(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [clipboard]);
+  const handlePaste = (date: string) => {
+    if (!actor || !clipboard) return;
+    const who = { userId: actor.id, active: actorActive };
+    createItem.mutate(
+      { actor: who, ownerUserId: actor.id, draft: movedDraft(clipboard, date) },
+      {
+        onSuccess: (created) =>
+          setNotice({
+            text: `${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일에 "${clipboard.title}"을(를) 붙여넣었어요`,
+            undo: () =>
+              removeItem.mutate(
+                { actor: who, id: created.id },
+                { onSuccess: () => notify('되돌렸어요.'), onError: (e) => notify(e instanceof Error ? e.message : '되돌리지 못했습니다.') },
+              ),
+          }),
+        onError: (e) => notify(e instanceof Error ? e.message : '붙여넣지 못했습니다.'),
+      },
+    );
+  };
+
   /** 상세 창에서 내 일반 업무 바로 지우기 — 4초 동안 되돌리기(같은 내용으로 다시 만든다) */
   const handleRemoveItem = (item: WorkPlanItem) => {
     if (!actor) return;
@@ -551,7 +581,15 @@ export default function WorkPlanScreen() {
       )}
 
       {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4">
+        {clipboard && view === 'teamWeek' && (
+          <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-teal/40 bg-panel px-4 py-2 text-[12px] font-semibold text-ink shadow-lg">
+            <span className="max-w-[22rem] truncate">"{clipboard.title}" 복사함 — 붙여넣을 내 칸을 누르세요</span>
+            <button type="button" onClick={() => setClipboard(null)} className="text-ink3 hover:text-ink">
+              그만 (Esc)
+            </button>
+          </div>
+        )}
         {notice && (
           <div className="pointer-events-auto flex items-center gap-3 rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">
             {notice.text}
@@ -608,6 +646,7 @@ export default function WorkPlanScreen() {
             setCellPopover(null);
             setPanelDate(date);
           }}
+          onPaste={clipboard && actorActive ? handlePaste : undefined}
         />
       )}
       {view === 'team' && (
@@ -653,6 +692,7 @@ export default function WorkPlanScreen() {
           onOpenEntry={handleOpenEntry}
           onCreate={actorActive ? handleCreateWith : undefined}
           onRemoveItem={actorActive ? handleRemoveItem : undefined}
+          onCopyItem={actorActive ? setClipboard : undefined}
           onSaveMemo={actorActive ? handleSaveMemo : undefined}
           onOpenWeek={(member) => {
             setCellPopover(null);
@@ -699,6 +739,7 @@ export default function WorkPlanScreen() {
           onClose={() => setEventModal(null)}
           onSaved={notify}
           recentTitles={recentTitles}
+          canEditTags={canManageWorkPlan}
           onSavedAndNext={(date) => handleCreate(date, actor)}
         />
       )}

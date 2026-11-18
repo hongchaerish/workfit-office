@@ -10,7 +10,7 @@ import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { EntryLine } from './EntryLine';
 import { lineToneOf, type LineTone } from './entryKind';
-import { EXEC_GROUP_KEY, groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
+import { groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
 
 /* 주간 보기 — 부서별로 접히는 조용한 표. 칸 안은 C 모양 줄 글, 칸을 누르면 칸 옆 상세 창(화면이 띄운다). */
 
@@ -67,6 +67,8 @@ export interface WorkPlanTeamWeekTableProps {
   selected: { userId: string; date: string } | null;
   /** 날짜 머리 누르기 — 그날 모두의 일정 */
   onOpenDay?: (date: string) => void;
+  /** 복사한 업무가 있으면 — 내 칸을 누르면 그날에 붙여넣는다 */
+  onPaste?: (date: string) => void;
 }
 
 interface Hover {
@@ -96,8 +98,9 @@ export function WorkPlanTeamWeekTable({
   onMoveItem,
   selected,
   onOpenDay,
+  onPaste,
 }: WorkPlanTeamWeekTableProps) {
-  const { compare, isExecutive, deptOrder } = useRosterOrder();
+  const { compare, deptOrder } = useRosterOrder();
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => plusDays(weekStart, i)), [weekStart]);
   const weekdays = weekDates.slice(0, 5);
   const weekend = weekDates.slice(5);
@@ -118,15 +121,15 @@ export function WorkPlanTeamWeekTable({
   }, [workPlans]);
 
   const groups = useMemo(
-    () => groupRoster(members, { myDept: actor.dept || null, isExecutive, deptOrder, compare }),
-    [members, actor.dept, isExecutive, deptOrder, compare],
+    () => groupRoster(members, { myDept: actor.dept || null, deptOrder, compare }),
+    [members, actor.dept, deptOrder, compare],
   );
 
-  // 펼친 묶음 — 처음엔 내 부서와 임원
-  const [open, setOpen] = useState<Set<string>>(() => new Set([actor.dept, EXEC_GROUP_KEY]));
-  const isOpen = (key: string) => forceOpen || open.has(key);
+  // 접은 부서 — 처음엔 모두 펼친다(모든 사람이 보이게)
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const isOpen = (key: string) => forceOpen || !closed.has(key);
   const toggle = (key: string) =>
-    setOpen((prev) => {
+    setClosed((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -157,6 +160,16 @@ export function WorkPlanTeamWeekTable({
     if (!el) return;
     // offsetHeight — body 글자 배율(zoom) 전 값이라 sticky top 에 그대로 쓴다
     const ro = new ResizeObserver(() => setBarHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const headRef = useRef<HTMLTableSectionElement>(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeadHeight(el.offsetHeight));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -263,7 +276,8 @@ export function WorkPlanTeamWeekTable({
 
   const cols = (
     <colgroup>
-      <col style={{ width: 118 }} />
+      <col style={{ width: 100 }} />
+      <col style={{ width: 92 }} />
       {weekdays.map((d) => (
         <col key={d} />
       ))}
@@ -271,7 +285,7 @@ export function WorkPlanTeamWeekTable({
     </colgroup>
   );
 
-  const tdBase = 'group/cell relative h-px border-b border-l border-[#e4e8ee] px-1.5 py-1 align-top dark:border-border';
+  const tdBase = 'group/cell relative h-px border-b border-l border-[#eef0f3] px-1.5 py-1 align-top dark:border-border';
 
   const renderCell = (member: User, dates: string[], tint: string) => {
     const date = dates[0];
@@ -291,8 +305,9 @@ export function WorkPlanTeamWeekTable({
         }}
         onMouseLeave={() => setHover(null)}
         onClick={(e) => {
-          // 내 빈 칸은 바로 새 일정, 나머지는 칸 옆 상세
-          if (isMe && empty && onCreate && dates.length === 1) onCreate(date, member);
+          // 붙여넣기 중이면 내 칸에 붙여넣기(토·일 칸은 토요일), 내 빈 칸은 바로 새 일정, 나머지는 칸 옆 상세
+          if (isMe && onPaste) onPaste(date);
+          else if (isMe && empty && onCreate && dates.length === 1) onCreate(date, member);
           else onOpenCell(member, date, e.currentTarget);
         }}
         onDragOver={
@@ -314,12 +329,60 @@ export function WorkPlanTeamWeekTable({
               }
             : undefined
         }
-        className={`${tdBase} cursor-pointer ${tint} ${
+        title={isMe && onPaste ? '여기에 붙여넣기' : undefined}
+        className={`${tdBase} ${isMe && onPaste ? 'cursor-copy hover:!bg-teal-soft/40' : 'cursor-pointer'} ${tint} ${
           isSelected ? 'outline outline-2 -outline-offset-2 outline-sky-500' : 'hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300'
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
-        <div className="min-h-[34px]">{renderLines(member, dates, key)}</div>
+        <div className="min-h-[22px]">{renderLines(member, dates, key)}</div>
       </td>
+    );
+  };
+
+  /** 나 — 표에 있을 때만 맨 위에 고정 */
+  const pinned = members.find((m) => m.id === actor.id) ?? null;
+
+  /** 사람 한 줄 — lead 는 맨 앞 칸(부서 합친 칸·'내 일정'), first 는 부서 첫 줄(굵은 위 선), last 는 고정 줄(굵은 아래 선), dim 은 고정 줄과 겹치는 내 줄 */
+  const personRow = (member: User, o: { key: string; zebra: boolean; lead: ReactNode; first?: boolean; last?: boolean; dim?: boolean }) => {
+    const isMe = member.id === actor.id;
+    const unwritten = isUnwrittenWeek(member.id, cellOf, todayStr, weekDates);
+    const todayTint = (d: string) => (d === todayStr ? 'bg-sky-50/60 dark:bg-sky-950/20' : '');
+    const edge = `${o.first ? 'border-t-2 border-t-[#d9dee6]' : ''} ${o.last ? 'border-b-2 border-b-[#d9dee6]' : ''}`;
+    return (
+      <tr
+        key={o.key}
+        className={`group/row ${o.zebra ? 'bg-[#f8f9fb] dark:bg-panel-alt/30' : 'bg-panel'} ${o.dim ? 'text-ink3 [&_*]:!text-ink3' : ''} hover:bg-sky-50/70 dark:hover:bg-sky-950/20`}
+      >
+        {o.lead}
+        <th
+          scope="row"
+          onClick={() => onOpenPerson(member)}
+          className={`cursor-pointer border-b border-[#eef0f3] px-2 py-1 text-left align-top font-normal group-hover/row:shadow-[inset_3px_0_0_0_#0ea5e9] dark:border-border ${edge}`}
+        >
+          <div className="flex items-center gap-1">
+            <span className="truncate text-[11.5px] text-ink group-hover/row:font-semibold group-hover/row:text-sky-700 dark:group-hover/row:text-sky-300">{displayName(member)}</span>
+            <BirthdayMark userId={member.id} />
+            {isMe && <span className="rounded bg-teal-soft/60 px-1 text-[9px] font-bold text-teal">나</span>}
+          </div>
+          <div className="truncate text-[10px] leading-tight text-ink3">{displayRank(member)}</div>
+        </th>
+        {unwritten && !(isMe && onPaste) ? (
+          <td
+            colSpan={5}
+            onClick={(e) => {
+              const date = weekdays.find((d) => d >= todayStr) ?? weekdays[0];
+              if (isMe && onCreate) onCreate(date, member);
+              else onOpenCell(member, date, e.currentTarget);
+            }}
+            className={`${tdBase} ${edge} cursor-pointer text-[11px] text-ink3/80 hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300`}
+          >
+            <div className="flex min-h-[22px] items-center pl-2">이번 주 계획 없음</div>
+          </td>
+        ) : (
+          weekdays.map((d) => renderCell(member, [d], `${todayTint(d)} ${edge}`))
+        )}
+        {renderCell(member, weekend, `${weekend.includes(todayStr) ? 'bg-sky-50/60 dark:bg-sky-950/20' : ''} ${edge}`)}
+      </tr>
     );
   };
 
@@ -379,11 +442,11 @@ export function WorkPlanTeamWeekTable({
           </div>
           {!forceOpen && (
             <div className="flex items-center gap-2 text-[11px] text-ink3">
-              <button type="button" onClick={() => setOpen(new Set(groups.map((g) => g.key)))} className="hover:text-ink">
+              <button type="button" onClick={() => setClosed(new Set())} className="hover:text-ink">
                 모두 펼치기
               </button>
               <span aria-hidden>·</span>
-              <button type="button" onClick={() => setOpen(new Set())} className="hover:text-ink">
+              <button type="button" onClick={() => setClosed(new Set(groups.map((g) => g.key)))} className="hover:text-ink">
                 모두 접기
               </button>
             </div>
@@ -393,9 +456,10 @@ export function WorkPlanTeamWeekTable({
       <div className="rounded-xl border border-[#e4e8ee] bg-panel [overflow-x:clip] dark:border-border">
         <table className="w-full table-fixed border-collapse text-left">
           {cols}
-          <thead className="sticky z-30 bg-panel" style={{ top: `calc(var(--shell-top) + ${barHeight}px)` }}>
+          <thead ref={headRef} className="sticky z-30 bg-panel" style={{ top: `calc(var(--shell-top) + ${barHeight}px)` }}>
             <tr>
-              <th className="border-b border-[#e4e8ee] px-2.5 py-1.5 text-[11px] font-semibold text-ink3">이름</th>
+              <th className="border-b border-[#e4e8ee] px-2 py-1.5 text-[11px] font-semibold text-ink3">부서</th>
+              <th className="border-b border-[#e4e8ee] px-2 py-1.5 text-[11px] font-semibold text-ink3">이름</th>
               {weekdays.map((d, i) => dayHead(d, i))}
               <th
                 onClick={onOpenDay ? () => onOpenDay(weekend[0]) : undefined}
@@ -409,7 +473,7 @@ export function WorkPlanTeamWeekTable({
           <tbody>
             {/* 중요 일정 — 전사 공통 */}
             <tr>
-              <th className="border-b border-[#e4e8ee] px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">중요 일정</th>
+              <th colSpan={2} className="border-b border-[#e4e8ee] px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">중요 일정</th>
               {[...weekdays, weekend[0]].map((date, i) => {
                 const dates = i === 5 ? weekend : [date];
                 const plan = companyPlanOf.get(date);
@@ -432,66 +496,83 @@ export function WorkPlanTeamWeekTable({
 
             {groups.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-[12px] text-ink3">
+                <td colSpan={8} className="py-8 text-center text-[12px] text-ink3">
                   조회된 직원이 없습니다.
                 </td>
               </tr>
             )}
 
+            {/* 내 일정 — 중요 일정 바로 아래 고정 */}
+            {pinned &&
+              personRow(pinned, {
+                key: 'pinned',
+                zebra: false,
+                last: true,
+                lead: (
+                  <th className="border-b-2 border-r border-[#d9dee6] border-r-[#eef0f3] bg-sky-50/50 px-2 py-1 text-left align-top text-[11px] font-bold text-sky-700 dark:border-border dark:bg-sky-950/20 dark:text-sky-300">
+                    내 일정
+                  </th>
+                ),
+              })}
+
             {groups.map((group) => {
               const opened = isOpen(group.key);
               const sum = summarizeGroup(group.members, cellOf, todayStr, weekDates);
-              return (
-                <Fragment key={group.key}>
-                  <tr className="cursor-pointer select-none bg-panel-alt/70 hover:bg-panel-alt" onClick={() => toggle(group.key)}>
-                    <td colSpan={7} className="border-b border-[#e4e8ee] px-2.5 py-1.5 text-[12px] dark:border-border">
-                      <span className="mr-1 inline-block w-3 text-ink3">{opened ? '▾' : '▸'}</span>
-                      <span className="font-bold text-ink">{group.label}</span>
-                      <span className="ml-1.5 text-ink3">{group.members.length}명</span>
-                      {sum.leave > 0 && <span className="ml-3 text-[11px] text-[#6f630f] dark:text-yellow-300">휴가 {sum.leave}</span>}
-                      {sum.outside > 0 && <span className="ml-2.5 text-[11px] text-[#155f8d] dark:text-sky-300">외근·출장 {sum.outside}</span>}
-                      {sum.unwritten > 0 && <span className="ml-2.5 text-[11px] text-amber-600">미작성 {sum.unwritten}</span>}
+              const deptCell = (rowSpan: number) => (
+                <th
+                  rowSpan={rowSpan}
+                  onClick={() => toggle(group.key)}
+                  title={opened ? '부서 접기' : '부서 펼치기'}
+                  className="cursor-pointer select-none border-b border-r border-t-2 border-[#d9dee6] border-r-[#eef0f3] bg-panel px-2 py-1.5 text-left align-top font-normal hover:bg-panel-alt dark:border-border"
+                >
+                  {/* 긴 부서는 내려도 부서명이 날짜 머리 아래에 붙어 따라온다 */}
+                  <div className="sticky" style={{ top: `calc(var(--shell-top) + ${barHeight + headHeight + 4}px)` }}>
+                    <div className="flex items-start gap-0.5 text-[11.5px] font-bold leading-tight text-ink [word-break:keep-all] [overflow-wrap:anywhere]">
+                      <span className="w-2.5 shrink-0 text-[10px] text-ink3">{opened ? '▾' : '▸'}</span>
+                      <span className="min-w-0">{group.label}</span>
+                    </div>
+                    {opened && <div className="mt-0.5 space-y-px pl-3 text-[10px] leading-tight">
+                      <div className="text-ink3">{group.members.length}명</div>
+                      {sum.unwritten > 0 && <div className="text-amber-600">미작성 {sum.unwritten}</div>}
+                      {sum.leave > 0 && <div className="text-[#6f630f] dark:text-yellow-300">휴가 {sum.leave}</div>}
+                      {sum.outside > 0 && <div className="text-[#155f8d] dark:text-sky-300">외근·출장 {sum.outside}</div>}
+                    </div>}
+                  </div>
+                </th>
+              );
+              if (!opened) {
+                const names = group.members.map(displayName);
+                return (
+                  <tr key={group.key} className="bg-panel-alt/40">
+                    {deptCell(1)}
+                    <td
+                      colSpan={7}
+                      onClick={() => toggle(group.key)}
+                      className="cursor-pointer border-b border-t-2 border-[#d9dee6] px-2 py-1.5 align-top text-[11px] text-ink3 hover:bg-panel-alt dark:border-border"
+                    >
+                      <span className="text-ink2">{group.members.length}명</span>
+                      {sum.unwritten > 0 && <span className="ml-2 text-amber-600">미작성 {sum.unwritten}</span>}
+                      {sum.leave > 0 && <span className="ml-2 text-[#6f630f] dark:text-yellow-300">휴가 {sum.leave}</span>}
+                      {sum.outside > 0 && <span className="ml-2 text-[#155f8d] dark:text-sky-300">외근·출장 {sum.outside}</span>}
+                      <span className="ml-3">
+                        {names.slice(0, 6).join(', ')}
+                        {names.length > 6 ? ` 외 ${names.length - 6}명` : ''}
+                      </span>
                     </td>
                   </tr>
-                  {opened &&
-                    group.members.map((member, idx) => {
-                      const isMe = member.id === actor.id;
-                      const zebra = idx % 2 === 1 ? 'bg-[#f8f9fb] dark:bg-panel-alt/30' : 'bg-panel';
-                      const unwritten = isUnwrittenWeek(member.id, cellOf, todayStr, weekDates);
-                      const todayTint = (d: string) => (d === todayStr ? 'bg-sky-50/60 dark:bg-sky-950/20' : '');
-                      return (
-                        <tr key={`${group.key}-${member.id}`} className={`group/row ${zebra} hover:bg-sky-50/70 dark:hover:bg-sky-950/20`}>
-                          <th
-                            scope="row"
-                            onClick={() => onOpenPerson(member)}
-                            className="cursor-pointer border-b border-[#e4e8ee] px-2.5 py-1.5 text-left align-top font-normal group-hover/row:shadow-[inset_3px_0_0_0_#0ea5e9] dark:border-border"
-                          >
-                            <div className="flex items-center gap-1">
-                              <span className="truncate text-[12px] text-ink group-hover/row:font-semibold group-hover/row:text-sky-700 dark:group-hover/row:text-sky-300">{displayName(member)}</span>
-                              <BirthdayMark userId={member.id} />
-                              {isMe && <span className="rounded bg-teal-soft/60 px-1 text-[9px] font-bold text-teal">나</span>}
-                            </div>
-                            <div className="truncate text-[10.5px] text-ink3">{displayRank(member)}</div>
-                          </th>
-                          {unwritten ? (
-                            <td
-                              colSpan={5}
-                              onClick={(e) => {
-                                const date = weekdays.find((d) => d >= todayStr) ?? weekdays[0];
-                                if (isMe && onCreate) onCreate(date, member);
-                                else onOpenCell(member, date, e.currentTarget);
-                              }}
-                              className={`${tdBase} cursor-pointer text-[11px] text-ink3/80 hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300`}
-                            >
-                              <div className="flex min-h-[34px] items-center pl-2">이번 주 계획 없음</div>
-                            </td>
-                          ) : (
-                            weekdays.map((d) => renderCell(member, [d], todayTint(d)))
-                          )}
-                          {renderCell(member, weekend, weekend.includes(todayStr) ? 'bg-sky-50/60 dark:bg-sky-950/20' : '')}
-                        </tr>
-                      );
-                    })}
+                );
+              }
+              return (
+                <Fragment key={group.key}>
+                  {group.members.map((member, idx) =>
+                    personRow(member, {
+                      key: `${group.key}-${member.id}`,
+                      zebra: idx % 2 === 1,
+                      lead: idx === 0 ? deptCell(group.members.length) : null,
+                      first: idx === 0,
+                      dim: !!pinned && member.id === actor.id,
+                    }),
+                  )}
                 </Fragment>
               );
             })}

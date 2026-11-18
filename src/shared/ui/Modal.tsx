@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { modalStack } from './modalStack';
 
 interface ModalProps {
   open: boolean;
@@ -44,14 +45,22 @@ const ModalLayerContext = createContext('z-50');
 export const ModalLayerProvider = ModalLayerContext.Provider;
 
 export function Modal({ open, onClose, title, footer, width = 480, flush = false, zClass, children }: ModalProps) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
+    // 겹쳐 열린 창(일정 창 위 태그 편집 등)은 맨 위 것만 Esc 로 닫는다.
+    // 쌓인 순서는 열릴 때 한 번만 정한다 — onClose 가 바뀔 때마다 다시 넣으면 아래 창이 맨 위로 올라간다
+    const id = modalStack.push();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && modalStack.isTop(id)) onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      modalStack.remove(id);
+    };
+  }, [open]);
 
   // 열려 있는 동안 뒤 화면 스크롤 막기 (모달이 겹쳐 열려도 마지막 것이 닫힐 때 풀림)
   useEffect(() => {

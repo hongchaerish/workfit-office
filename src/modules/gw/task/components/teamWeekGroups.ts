@@ -2,7 +2,7 @@ import type { User } from '@/domain/user/schema';
 import { hasPlannedDay, type DayCell } from '@/domain/workPlan/dayEntries';
 import { dayStatusOf } from './dayDetail';
 
-/* 주간 표의 부서 묶음 — 내 부서 → 임원 → 나머지 부서(부서 관리 순서) → 소속 없음. 화면 의존 없음. */
+/* 주간 표의 부서 묶음 — 내 부서 → 나머지 부서(부서 관리 순서) → 소속 없음. 임원도 자기 부서에. 화면 의존 없음. */
 
 export interface RosterGroup {
   key: string;
@@ -10,29 +10,19 @@ export interface RosterGroup {
   members: User[];
 }
 
-export const EXEC_GROUP_KEY = '__EXEC__';
 export const NONE_GROUP_KEY = '__NONE__';
 
 /**
- * 사람을 부서 묶음으로 나눈다. 겸직 행(같은 id, 다른 dept)은 각 묶음에 하나씩, 임원은 임원 묶음에만.
+ * 사람을 부서 묶음으로 나눈다. 겸직 행(같은 id, 다른 dept)은 각 묶음에 하나씩. 묶음 안 순서는 compare(임원·직책 먼저).
  * 부서 관리에 없는 부서 이름은 자기 이름 묶음으로 뒤쪽에, 부서가 빈 사람은 맨 끝 '소속 없음'.
  */
 export function groupRoster(
   members: User[],
-  opts: { myDept: string | null; isExecutive: (u: User) => boolean; deptOrder: (dept: string) => number; compare: (a: User, b: User) => number },
+  opts: { myDept: string | null; deptOrder: (dept: string) => number; compare: (a: User, b: User) => number },
 ): RosterGroup[] {
-  const exec: User[] = [];
   const byDept = new Map<string, User[]>();
   const none: User[] = [];
-  const seenExec = new Set<string>();
   for (const m of members) {
-    if (opts.isExecutive(m)) {
-      if (!seenExec.has(m.id)) {
-        seenExec.add(m.id);
-        exec.push(m);
-      }
-      continue;
-    }
     const dept = (m.dept ?? '').trim();
     if (!dept) {
       if (!none.some((x) => x.id === m.id)) none.push(m);
@@ -47,7 +37,6 @@ export function groupRoster(
   const mine = opts.myDept && byDept.has(opts.myDept) ? opts.myDept : null;
   const out: RosterGroup[] = [];
   if (mine) out.push({ key: mine, label: mine, members: sortMembers(byDept.get(mine)!) });
-  if (exec.length) out.push({ key: EXEC_GROUP_KEY, label: '임원', members: sortMembers(exec) });
   for (const d of depts) if (d !== mine) out.push({ key: d, label: d, members: sortMembers(byDept.get(d)!) });
   if (none.length) out.push({ key: NONE_GROUP_KEY, label: '소속 없음', members: sortMembers(none) });
   return out;
