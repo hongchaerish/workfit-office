@@ -48,7 +48,8 @@ interface TimeGridProps {
   onChange: (range: MinuteRange) => void;
   mode: 'desktop' | 'touch';
   /** 점심 12~13시 빗금 */
-  lunch?: boolean;
+  /** 점심시간 빗금 — 시스템 점심시간(근태 정책). 없으면 안 그린다 */
+  lunch?: MinuteRange | null;
   /** 고른 시간이 내 일정과 겹침 — 고른 칸을 주황으로 */
   conflict?: boolean;
   /** 참석자 모두 가능한 시작 시각(분) — 아래 버튼 */
@@ -120,7 +121,7 @@ function dateLabel(date: string): string {
 
 type Drag = { kind: 'new' | 'move' | 'resize'; startMinute: number; base: MinuteRange | null };
 
-export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = false, allDayLabel = '종일', onChange, mode, lunch = false, conflict = false, fits = [], onPickFit }: TimeGridProps) {
+export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = false, allDayLabel = '종일', onChange, mode, lunch = null, conflict = false, fits = [], onPickFit }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -292,7 +293,7 @@ export function TimeGrid({ date, onDateChange, blocks, value, allDay, openEnd = 
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 bg-[repeating-linear-gradient(135deg,transparent_0_5px,rgba(148,163,184,0.18)_5px_7px)]"
-                style={{ top: pct(12 * 60), height: pct(60) }}
+                style={{ top: pct(lunch.start), height: pct(lunch.end - lunch.start) }}
               />
             )}
             {/* 지금 — 빨간 선(오늘만) */}

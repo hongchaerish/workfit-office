@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { firstFreeStart, freeSlots } from './freeSlots';
+import { firstFreeStart, freeSlots, LUNCH, lunchRangeOf } from './freeSlots';
 
 test('freeSlots: 점심과 바쁜 시간을 빼고 30분 이상만', () => {
   assert.deepEqual(freeSlots([{ start: 540, end: 600 }, { start: 840, end: 870 }]), [
@@ -40,4 +40,14 @@ test('firstFreeStart: 없으면 null', () => {
 
 test('firstFreeStart: notBefore 이후 30분 단위', () => {
   assert.equal(firstFreeStart([[]], 60, { notBefore: 635 }), 660);
+});
+
+test('lunchRangeOf: 근태 정책의 휴게(점심) 시각을 따른다', () => {
+  assert.deepEqual(lunchRangeOf({ breakStartTime: '11:30', breakEndTime: '12:30' }), { start: 690, end: 750 });
+});
+
+test('lunchRangeOf: 정책이 없거나 시각이 이상하면 기본 12:00~13:00', () => {
+  assert.deepEqual(lunchRangeOf(undefined), LUNCH);
+  assert.deepEqual(lunchRangeOf({ breakStartTime: '13:00', breakEndTime: '12:00' }), LUNCH);
+  assert.deepEqual(lunchRangeOf({ breakStartTime: '', breakEndTime: '12:00' }), LUNCH);
 });

@@ -90,10 +90,10 @@ export function nowLineOf(entries: DayEntry[], nowMinute: number): { tone: 'free
 }
 
 /** 그날 빈 시간 — 종일 휴가·종일 외근/출장이면 없음, 오늘이면 지금 이후 */
-export function freeSlotsOfDay(entries: DayEntry[], opts: { isToday: boolean; nowMinute: number }): MinuteRange[] {
+export function freeSlotsOfDay(entries: DayEntry[], opts: { isToday: boolean; nowMinute: number; lunch?: MinuteRange }): MinuteRange[] {
   if (entries.some(isFullDayAway)) return [];
   const busy = entries.map(busyRangeOf).filter((r): r is MinuteRange => r !== null);
-  return freeSlots(busy, opts.isToday ? { notBefore: opts.nowMinute } : {});
+  return freeSlots(busy, { lunch: opts.lunch, ...(opts.isToday ? { notBefore: opts.nowMinute } : {}) });
 }
 
 /** 최근 적은 업무 제목 — 일반 업무만, 같은 제목은 하나로. 입력은 최근 것부터 */

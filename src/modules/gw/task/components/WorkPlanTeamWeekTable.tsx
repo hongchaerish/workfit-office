@@ -3,13 +3,12 @@ import { ChevronLeft, ChevronRight, Settings, StickyNote, Plus } from 'lucide-re
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
-import { canMoveEntry, type DayCell, type DayEntry } from '@/domain/workPlan/dayEntries';
+import { canMoveEntry, type DayCell } from '@/domain/workPlan/dayEntries';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { EntryLine } from './EntryLine';
-import { lineToneOf, type LineTone } from './entryKind';
 import { chairToCommittee, groupRoster, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
 
 /* 주간 보기 — 부서별로 접히는 조용한 표. 칸 안은 C 모양 줄 글, 칸을 누르면 칸 옆 상세 창(화면이 띄운다). */
@@ -24,14 +23,6 @@ const plusDays = (date: string, days: number) => {
 };
 const mondayOfDate = (date: string) => plusDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7));
 const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
-
-/** 종류 거르기 — 외근·출장은 하나로 */
-const KIND_FILTERS: Array<{ tone: LineTone; label: string; bar: string }> = [
-  { tone: 'item', label: '업무', bar: 'bg-[#d6dbe3]' },
-  { tone: 'meeting', label: '회의', bar: 'bg-[#b6a2f2]' },
-  { tone: 'outside', label: '외근·출장', bar: 'bg-[#8cc8ee]' },
-  { tone: 'leave', label: '휴가', bar: 'bg-[#e3d36a]' },
-];
 
 /** 업무계획 한정 — 대표이사 계정은 '위원장 / 위원회'로 */
 const isChair = (m: User) => m.name === '대표이사' || m.position === '대표이사' || m.jobTitle === '대표이사';
@@ -121,8 +112,8 @@ export function WorkPlanTeamWeekTable({
   }, [workPlans]);
 
   const groups = useMemo(
-    () => groupRoster(chairToCommittee(members, isChair), { myDept: actor.dept || null, deptOrder, compare }),
-    [members, actor.dept, deptOrder, compare],
+    () => groupRoster(chairToCommittee(members, isChair), { deptOrder, compare }),
+    [members, deptOrder, compare],
   );
 
   // 접은 부서 — 처음엔 모두 펼친다(모든 사람이 보이게)
@@ -136,19 +127,12 @@ export function WorkPlanTeamWeekTable({
       return next;
     });
 
-  const [hiddenTones, setHiddenTones] = useState<Set<LineTone>>(() => new Set());
-  const toggleTone = (tone: LineTone) =>
-    setHiddenTones((prev) => {
-      const next = new Set(prev);
-      if (next.has(tone)) next.delete(tone);
-      else next.add(tone);
-      return next;
-    });
-  const visible = (entries: DayEntry[]) => (hiddenTones.size ? entries.filter((e) => !hiddenTones.has(lineToneOf(e))) : entries);
 
   /** '+N건 더'를 누른 칸 */
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [hover, setHover] = useState<Hover | null>(null);
+  /** 상세 창을 연 줄 — 같은 사람이 두 줄(내 일정·부서 안)에 있어도 누른 줄만 테두리 */
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [dragged, setDragged] = useState<WorkPlanItem | null>(null);
   const [dropDate, setDropDate] = useState<string | null>(null);
 
@@ -185,7 +169,7 @@ export function WorkPlanTeamWeekTable({
   /** 한 칸의 줄 글 — 3줄까지, 넘치면 '+N건 더'/'접기' */
   const renderLines = (member: User, dates: string[], key: string) => {
     const isMe = member.id === actor.id;
-    const rows = dates.flatMap((date) => visible(cellOf(member.id, date).entries).map((entry) => ({ date, entry })));
+    const rows = dates.flatMap((date) => cellOf(member.id, date).entries.map((entry) => ({ date, entry })));
     const memo = dates.length === 1 ? cellOf(member.id, dates[0]).memo : null;
     const showAll = expanded.has(key);
     const shown = showAll ? rows : rows.slice(0, LINES_PER_CELL);
@@ -248,11 +232,6 @@ export function WorkPlanTeamWeekTable({
             <span className="truncate">{memoFirstLine(memo)}</span>
           </div>
         )}
-        {rows.length === 0 && !memo && isMe && onCreate && (
-          <span className="pointer-events-none flex items-center gap-0.5 pl-1 text-[10.5px] text-ink3 opacity-0 transition-opacity group-hover/cell:opacity-80">
-            <Plus size={10} /> 일정 적기
-          </span>
-        )}
       </>
     );
   };
@@ -287,13 +266,14 @@ export function WorkPlanTeamWeekTable({
 
   const tdBase = 'group/cell relative h-px border-b border-l border-[#eef0f3] px-1.5 py-1 align-top dark:border-border';
 
-  const renderCell = (member: User, dates: string[], tint: string) => {
+  const renderCell = (member: User, dates: string[], tint: string, rowKey: string) => {
     const date = dates[0];
     const key = `${cellKey(member.id, date)}${dates.length > 1 ? '+' : ''}`;
     const isMe = member.id === actor.id;
-    const count = dates.reduce((n, d) => n + visible(cellOf(member.id, d).entries).length, 0);
+    const count = dates.reduce((n, d) => n + cellOf(member.id, d).entries.length, 0);
     const empty = count === 0 && !(dates.length === 1 && cellOf(member.id, date).memo);
-    const isSelected = selected?.userId === member.id && dates.includes(selected.date);
+    const isSelected = selected?.userId === member.id && dates.includes(selected.date) && selectedRow === rowKey;
+    const canAdd = isMe && !!onCreate && !onPaste;
     const droppable = isMe && dragged !== null && dates.length === 1;
     return (
       <td
@@ -308,7 +288,10 @@ export function WorkPlanTeamWeekTable({
           // 붙여넣기 중이면 내 칸에 붙여넣기(토·일 칸은 토요일), 내 빈 칸은 바로 새 일정, 나머지는 칸 옆 상세
           if (isMe && onPaste) onPaste(date);
           else if (isMe && empty && onCreate && dates.length === 1) onCreate(date, member);
-          else onOpenCell(member, date, e.currentTarget);
+          else {
+            setSelectedRow(rowKey);
+            onOpenCell(member, date, e.currentTarget);
+          }
         }}
         onDragOver={
           droppable
@@ -334,7 +317,21 @@ export function WorkPlanTeamWeekTable({
           isSelected ? 'outline outline-2 -outline-offset-2 outline-sky-500' : 'hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300'
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
-        <div className="min-h-[22px]">{renderLines(member, dates, key)}</div>
+        <div className={`min-h-[22px] ${canAdd ? 'pr-5' : ''}`}>{renderLines(member, dates, key)}</div>
+        {canAdd && (
+          <button
+            type="button"
+            aria-label={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일 일정 추가`}
+            title="일정 추가"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreate!(date, member);
+            }}
+            className="absolute right-1 top-1 grid h-[18px] w-[18px] place-items-center rounded text-sky-600 opacity-40 transition-opacity hover:bg-sky-100 hover:opacity-100 group-hover/cell:opacity-100 dark:text-sky-300 dark:hover:bg-sky-950/40"
+          >
+            <Plus size={13} strokeWidth={2.5} />
+          </button>
+        )}
       </td>
     );
   };
@@ -372,16 +369,19 @@ export function WorkPlanTeamWeekTable({
             onClick={(e) => {
               const date = weekdays.find((d) => d >= todayStr) ?? weekdays[0];
               if (isMe && onCreate) onCreate(date, member);
-              else onOpenCell(member, date, e.currentTarget);
+              else {
+                setSelectedRow(o.key);
+                onOpenCell(member, date, e.currentTarget);
+              }
             }}
             className={`${tdBase} ${edge} cursor-pointer text-[11px] text-ink3/80 hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-sky-300`}
           >
             <div className="flex min-h-[22px] items-center pl-2">이번 주 계획 없음</div>
           </td>
         ) : (
-          weekdays.map((d) => renderCell(member, [d], `${todayTint(d)} ${edge}`))
+          weekdays.map((d) => renderCell(member, [d], `${todayTint(d)} ${edge}`, o.key))
         )}
-        {renderCell(member, weekend, `${weekend.includes(todayStr) ? 'bg-sky-50/60 dark:bg-sky-950/20' : ''} ${edge}`)}
+        {renderCell(member, weekend, `${weekend.includes(todayStr) ? 'bg-sky-50/60 dark:bg-sky-950/20' : ''} ${edge}`, o.key)}
       </tr>
     );
   };
@@ -422,24 +422,7 @@ export function WorkPlanTeamWeekTable({
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="종류 거르기">
-            {KIND_FILTERS.map((k) => {
-              const off = hiddenTones.has(k.tone);
-              return (
-                <button
-                  key={k.tone}
-                  type="button"
-                  aria-pressed={!off}
-                  onClick={() => toggleTone(k.tone)}
-                  className={`flex items-center gap-1.5 rounded-md border border-border bg-panel px-2 py-1 text-[11px] text-ink2 hover:bg-panel-alt ${off ? 'line-through opacity-45' : ''}`}
-                >
-                  <span className={`h-3 w-[3px] rounded-sm ${k.bar}`} aria-hidden />
-                  {k.label}
-                </button>
-              );
-            })}
-          </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 px-1">
           {!forceOpen && (
             <div className="flex items-center gap-2 text-[11px] text-ink3">
               <button type="button" onClick={() => setClosed(new Set())} className="hover:text-ink">

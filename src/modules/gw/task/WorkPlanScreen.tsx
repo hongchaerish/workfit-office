@@ -2,6 +2,7 @@ import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
 import { useCreateWorkPlanItem, useRemoveWorkPlanItem, useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
 import { movedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
+import { useLunchRange } from '@/features/workPlan/useLunchRange';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -366,12 +367,13 @@ export default function WorkPlanScreen() {
    * 칸 누르기·[+] — 시간을 주지 않으면 그날 첫 빈 1시간(회의면 참석자 모두 비는 때, 오늘이면 지금 이후).
    * 빈 때가 없으면 예전 기본값(오늘이면 지금 다음 30분, 아니면 09:00~09:30). 주간 시간표는 누른 시각(range).
    */
+  const lunch = useLunchRange();
   const handleCreateWith = (date: string, member: User, opts: { range?: MinuteRange; kind?: EventKind; attendeeIds?: string[] } = {}) => {
     if (!actor) return;
     const base = createTarget(date, member, actor, today, new Date());
     const people = [member.id, ...(opts.attendeeIds ?? [])];
     const busy = (id: string) => cellOf(id, date).entries.map(busyRangeOf).filter((r): r is MinuteRange => r !== null);
-    const free = opts.range ? null : firstFreeStart([...new Set(people)].map(busy), 60, date === today ? { notBefore: nowMinute } : {});
+    const free = opts.range ? null : firstFreeStart([...new Set(people)].map(busy), 60, date === today ? { notBefore: nowMinute, lunch } : { lunch });
     const range = opts.range ?? (free !== null ? { start: free, end: free + 60 } : undefined);
     openEventModal({
       ...base,

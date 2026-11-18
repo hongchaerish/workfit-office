@@ -15,6 +15,7 @@ import { kindEnabled } from './entryRouting';
 import { RoutineFields, RoutineScopeFields } from './RoutineFields';
 import { defaultRoutineRule, type RoutineFreq } from '@/domain/workPlan/routine';
 import { TimeGrid } from './TimeGrid';
+import { useLunchRange } from '@/features/workPlan/useLunchRange';
 import { EventAssist, useEventConflicts } from './EventAssist';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
 
@@ -47,7 +48,9 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
   const entry = target.mode === 'create' ? null : target.entry;
   const blocks = useEventBlocks(form, target, actor, users, cellOf, owner);
   const { save, join, leave, remove, confirmingDelete, setConfirmingDelete } = useEventActions(form, onSaved, onClose);
-  const conflicts = useEventConflicts(form, target, owner.id, actor.id, users, cellOf);
+  // 시스템 점심시간(근태 정책) — 시간표 빗금과 '모두 가능한 시간'에서 뺀다
+  const lunch = useLunchRange();
+  const conflicts = useEventConflicts(form, target, owner.id, actor.id, users, cellOf, lunch);
   /** 저장하고 이어서 적기 — 새 일정만 */
   const [continueNext, setContinueNext] = useState(false);
   const canContinue = target.mode === 'create' && Boolean(onSavedAndNext);
@@ -217,7 +220,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
               openEnd={state.kind === 'ITEM' && state.openEnd}
               allDayLabel={state.kind === 'ITEM' ? '미정' : '종일'}
               onChange={form.setRange}
-              lunch
+              lunch={lunch}
               conflict={!readOnly && Boolean(conflicts.mine)}
               fits={readOnly ? [] : conflicts.fits}
               onPickFit={(start) => {

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLunchRange } from '@/features/workPlan/useLunchRange';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
@@ -79,6 +80,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
   const { actor, member, date, anchor, today, nowMinute, cellOf, weekDates, onDateChange, onClose, onOpenEntry, onCreate, onRemoveItem, onCopyItem, onSaveMemo, onOpenWeek, onMessage } = props;
   const isMine = member.id === actor.id;
   const isToday = date === today;
+  const lunch = useLunchRange();
   const cell = cellOf(member.id, date);
   const entries = cell.entries;
   const status = dayStatusOf(entries);
@@ -142,7 +144,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
   const prev = idx > 0 ? weekDates[idx - 1] : null;
   const next = idx >= 0 && idx < weekDates.length - 1 ? weekDates[idx + 1] : null;
 
-  const free = isMine ? [] : freeSlotsOfDay(entries, { isToday, nowMinute });
+  const free = isMine ? [] : freeSlotsOfDay(entries, { isToday, nowMinute, lunch });
   const now = !isMine && isToday ? nowLineOf(entries, nowMinute) : null;
   const meetingAt = (slot?: MinuteRange) => {
     if (!onCreate) return;

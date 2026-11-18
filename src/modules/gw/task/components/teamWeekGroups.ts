@@ -2,7 +2,7 @@ import type { User } from '@/domain/user/schema';
 import { hasPlannedDay, type DayCell } from '@/domain/workPlan/dayEntries';
 import { dayStatusOf } from './dayDetail';
 
-/* 주간 표의 부서 묶음 — 내 부서 → 나머지 부서(부서 관리 순서) → 소속 없음. 임원도 자기 부서에. 화면 의존 없음. */
+/* 주간 표의 부서 묶음 — 부서 관리 순서 그대로(내 부서도 올리지 않는다) → 소속 없음. 임원도 자기 부서에. 화면 의존 없음. */
 
 export interface RosterGroup {
   key: string;
@@ -26,7 +26,7 @@ export function chairToCommittee(members: User[], isChair: (u: User) => boolean)
  */
 export function groupRoster(
   members: User[],
-  opts: { myDept: string | null; deptOrder: (dept: string) => number; compare: (a: User, b: User) => number },
+  opts: { deptOrder: (dept: string) => number; compare: (a: User, b: User) => number },
 ): RosterGroup[] {
   const byDept = new Map<string, User[]>();
   const none: User[] = [];
@@ -42,10 +42,8 @@ export function groupRoster(
   }
   const sortMembers = (list: User[]) => [...list].sort(opts.compare);
   const depts = [...byDept.keys()].sort((a, b) => opts.deptOrder(a) - opts.deptOrder(b) || a.localeCompare(b, 'ko'));
-  const mine = opts.myDept && byDept.has(opts.myDept) ? opts.myDept : null;
   const out: RosterGroup[] = [];
-  if (mine) out.push({ key: mine, label: mine, members: sortMembers(byDept.get(mine)!) });
-  for (const d of depts) if (d !== mine) out.push({ key: d, label: d, members: sortMembers(byDept.get(d)!) });
+  for (const d of depts) out.push({ key: d, label: d, members: sortMembers(byDept.get(d)!) });
   if (none.length) out.push({ key: NONE_GROUP_KEY, label: '소속 없음', members: sortMembers(none) });
   return out;
 }

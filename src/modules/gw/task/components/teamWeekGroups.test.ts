@@ -6,8 +6,7 @@ import { chairToCommittee, groupRoster, summarizeGroup } from './teamWeekGroups'
 
 const u = (id: string, name: string, dept: string) => ({ id, name, dept }) as User;
 const DEPTS = ['경영지원팀', '개발팀', '기획팀'];
-const opts = (myDept: string | null) => ({
-  myDept,
+const opts = (_myDept?: string | null) => ({
   deptOrder: (d: string) => (DEPTS.includes(d) ? DEPTS.indexOf(d) : Number.MAX_SAFE_INTEGER),
   compare: (a: User, b: User) => a.name.localeCompare(b.name, 'ko'),
 });
@@ -17,10 +16,10 @@ const B = u('U2', '다라', '개발팀');
 const C = u('U3', '마바', '기획팀');
 const E = u('U9', '임원', '경영지원팀');
 
-test('groupRoster: 내 부서 → 부서 순서, 임원 묶음 없이 임원은 자기 부서에', () => {
+test('groupRoster: 내 부서도 올리지 않고 부서 관리 순서 그대로, 임원은 자기 부서에', () => {
   const g = groupRoster([A, B, C, E], opts('개발팀'));
-  assert.deepEqual(g.map((x) => x.label), ['개발팀', '경영지원팀', '기획팀']);
-  assert.deepEqual(g[1].members.map((m) => m.id), ['U1', 'U9']);
+  assert.deepEqual(g.map((x) => x.label), ['경영지원팀', '개발팀', '기획팀']);
+  assert.deepEqual(g[0].members.map((m) => m.id), ['U1', 'U9']);
 });
 
 test('groupRoster: 겸직 행은 두 묶음에 모두', () => {

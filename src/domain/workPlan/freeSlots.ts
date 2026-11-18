@@ -4,8 +4,20 @@ import type { MinuteRange } from './timeGrid';
 
 /** 근무 시간 9~18시 */
 export const WORK_DAY: MinuteRange = { start: 540, end: 1080 };
-/** 점심 12~13시 — 빈 시간에서 뺀다 */
+/** 점심 기본값 12~13시 — 근태 정책이 없을 때. 빈 시간에서 뺀다 */
 export const LUNCH: MinuteRange = { start: 720, end: 780 };
+
+const toMinute = (hhmm: string | undefined) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? '');
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+
+/** 시스템 점심시간 — 근태 정책의 휴게(점심) 시작·종료 시각. 없거나 이상하면 기본 12~13시 */
+export function lunchRangeOf(policy: { breakStartTime?: string; breakEndTime?: string } | undefined | null): MinuteRange {
+  const start = toMinute(policy?.breakStartTime);
+  const end = toMinute(policy?.breakEndTime);
+  return start !== null && end !== null && start < end ? { start, end } : LUNCH;
+}
 
 const STEP = 30;
 const ceilTo = (minute: number, step: number) => Math.ceil(minute / step) * step;

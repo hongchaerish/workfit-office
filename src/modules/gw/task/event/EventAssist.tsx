@@ -3,14 +3,12 @@ import { calendarToday } from '@/domain/calendarEvent/calendarDate';
 import type { User } from '@/domain/user/schema';
 import { sourceIdOf, type DayCell, type DayEntry } from '@/domain/workPlan/dayEntries';
 import { firstFreeStart } from '@/domain/workPlan/freeSlots';
-import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import type { MinuteRange } from '@/domain/workPlan/timeGrid';
 import { busyRangeOf } from '../components/dayDetail';
-import { LINE_TONE_CLASS } from '../components/EntryLine';
-import type { LineTone } from '../components/entryKind';
 import type { EventForm } from './EventFields';
 import type { EventTarget } from './useWorkPlanEventForm';
 
-/* 일정 창 도움 — 내 일정 겹침, 참석자 바쁨, 참석자 모두 가능한 시간, 팀원 화면 미리보기 */
+/* 일정 창 도움 — 내 일정 겹침, 참석자 바쁨, 참석자 모두 가능한 시간 */
 
 /** 모두 가능한 시간 버튼 수 */
 const MAX_FITS = 4;
@@ -31,7 +29,7 @@ export interface EventConflicts {
 }
 
 /** 겹침 계산 — 고치는 일정 자신은 뺀다 */
-export function useEventConflicts(form: EventForm, target: EventTarget, ownerId: string, actorId: string, users: User[], cellOf: (userId: string, date: string) => DayCell): EventConflicts {
+export function useEventConflicts(form: EventForm, target: EventTarget, ownerId: string, actorId: string, users: User[], cellOf: (userId: string, date: string) => DayCell, lunch: MinuteRange): EventConflicts {
   const { state } = form;
   const editingId = target.mode === 'create' ? null : sourceIdOf(target.entry);
   return useMemo(() => {
@@ -58,27 +56,19 @@ export function useEventConflicts(form: EventForm, target: EventTarget, ownerId:
       const now = new Date();
       let notBefore = state.date === today ? now.getHours() * 60 + now.getMinutes() : undefined;
       while (fits.length < MAX_FITS) {
-        const t = firstFreeStart(lists, length, notBefore === undefined ? {} : { notBefore });
+        const t = firstFreeStart(lists, length, notBefore === undefined ? { lunch } : { notBefore, lunch });
         if (t === null) break;
         fits.push(t);
         notBefore = t + length;
       }
     }
     return { mine, busyNames, allFree, fits, busyAt };
-  }, [cellOf, state.date, state.allDay, state.range, state.kind, state.attendeeIds, editingId, ownerId, actorId, users]);
+  }, [cellOf, state.date, state.allDay, state.range, state.kind, state.attendeeIds, editingId, ownerId, actorId, users, lunch]);
 }
 
-const KIND_TONE: Record<string, LineTone> = { ITEM: 'item', MEETING: 'meeting', OUTSIDE: 'outside', TRIP: 'outside' };
-
-/** 왼쪽 맨 아래 — 안내 상자 + 팀원 화면 미리보기 */
-export function EventAssist({ form, conflicts }: { form: EventForm; conflicts: EventConflicts }) {
-  const { state } = form;
-  const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
-  const time = state.allDay || !state.range ? (isOutside ? '종일' : '미정') : toHHmm(state.range.start);
-  const title = isOutside
-    ? `${state.kind === 'TRIP' ? '출장' : '외근'} · ${state.destination.trim() || '행선지'}`
-    : state.title.trim() || (state.kind === 'MEETING' ? '회의 제목' : '제목');
-
+/** 왼쪽 맨 아래 — 겹침·참석자 안내. 알릴 것이 없으면 아무것도 그리지 않는다 */
+export function EventAssist({ conflicts }: { form?: EventForm; conflicts: EventConflicts }) {
+  if (!conflicts.mine && conflicts.busyNames.length === 0 && !conflicts.allFree) return null;
   return (
     <div className="mt-4 space-y-2.5">
       {conflicts.mine && (
@@ -94,13 +84,6 @@ export function EventAssist({ form, conflicts }: { form: EventForm; conflicts: E
       {conflicts.allFree && (
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">참석자 모두 이 시간에 비어 있어요.</p>
       )}
-      <div className="border-t border-dashed border-border pt-2.5">
-        <div className="mb-1 text-[11px] text-ink3">팀원 화면에는 이렇게 보여요</div>
-        <div className={`flex items-center gap-1 border-l-2 pl-1.5 text-[11.5px] ${LINE_TONE_CLASS[KIND_TONE[state.kind] ?? 'item']}`}>
-          <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{time}</span>
-          <span className="truncate">{title}</span>
-        </div>
-      </div>
     </div>
   );
 }
