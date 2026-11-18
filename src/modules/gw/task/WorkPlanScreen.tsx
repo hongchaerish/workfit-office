@@ -29,7 +29,6 @@ import { WorkPlanDayPanel } from './components/WorkPlanDayPanel';
 import { WorkPlanMyWeek, mondayOf } from './components/WorkPlanMyWeek';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { WorkPlanConfigModal } from './components/WorkPlanConfigModal';
-import { RosterOrderModal } from './components/RosterOrderModal';
 import { WorkPlanCompanyScheduleModal } from './components/WorkPlanCompanyScheduleModal';
 import { GwHead } from '@/modules/gw/_gw';
 import { OutsideWorkDetailModal } from '@/modules/gw/outsideWork/OutsideWorkDetailModal';
@@ -83,10 +82,9 @@ const NOTICE_MS = 3000;
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
   const { userRoles } = usePermission();
-  // 전 직원 정렬 순서 편집 — 최고관리자·'팀·전사 업무 종합 현황' 수정 권한자 전용(전사 공통 설정)
+  // 태그 관리 수정 — 최고관리자·'팀·전사 업무 종합 현황' 수정 권한자 전용
   const { can: canAuthz } = useAuthz();
-  const canEditRosterOrder = canAuthz('workplan.manage');
-  const [isOrderOpen, setIsOrderOpen] = useState(false);
+  const canManageWorkPlan = canAuthz('workplan.manage');
   const org = useOrgTree();
   const usersQuery = useUsers();
   // 실제 회사 운영 원칙: 퇴사자(status === '미사용' 또는 resignedAt)는 업무계획 로스터/부서원/일정에서 100% 원천 배제
@@ -396,16 +394,6 @@ export default function WorkPlanScreen() {
           </button>
         )}
       </div>
-      {canEditRosterOrder && (
-        <button
-          type="button"
-          onClick={() => setIsOrderOpen(true)}
-          title="인원 정렬 순서 편집 (관리자 전용, 전사 적용)"
-          className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink hover:border-teal/50"
-        >
-          ↕ 정렬 순서
-        </button>
-      )}
     </>
   );
 
@@ -565,14 +553,11 @@ export default function WorkPlanScreen() {
         />
       )}
 
-      {/* 전 직원 정렬 순서 편집(관리자 전용) */}
-      <RosterOrderModal open={isOrderOpen} onClose={() => setIsOrderOpen(false)} />
-
       {/* 업무계획 태그 관리 모달 */}
       <WorkPlanConfigModal
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}
-        canEdit={canEditRosterOrder}
+        canEdit={canManageWorkPlan}
       />
 
       {/* 전사 공통 중요 일정 등록/수정 모달 */}
