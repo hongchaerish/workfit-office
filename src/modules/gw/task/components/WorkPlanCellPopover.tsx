@@ -239,8 +239,22 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
             const canDelete = isMine && !!onRemoveItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id && !entry.item.routine;
             const askable = !isMine && (kind === 'item' || kind === 'meeting');
             const canCopy = isMine && !!onCopyItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id;
+            // 남의 일정은 줄을 누르면 바로 상세 — 외근·출장은 외근 상세, 그 외는 그날 일정 보기([[entryRouting]])
+            const openable = !isMine && !leave;
+            const open = () => {
+              onClose();
+              onOpenEntry(entry);
+            };
             return (
-              <li key={entry.key} className="group/item flex gap-2 rounded-lg px-1.5 py-1.5 hover:bg-panel-alt/60">
+              <li
+                key={entry.key}
+                onClick={openable ? open : undefined}
+                onKeyDown={openable ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } } : undefined}
+                role={openable ? 'button' : undefined}
+                tabIndex={openable ? 0 : undefined}
+                title={openable ? '눌러서 상세 보기' : undefined}
+                className={`group/item flex gap-2 rounded-lg px-1.5 py-1.5 hover:bg-panel-alt/60 ${openable ? 'cursor-pointer' : ''}`}
+              >
                 <TimeCell entry={entry} />
                 <div className={`min-w-0 flex-1 border-l-2 pl-2 ${LINE_TONE_CLASS[lineToneOf(entry)]}`}>
                   <div className="truncate text-[12.5px] text-ink">{lineTitleOf(entry)}</div>
@@ -272,15 +286,13 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
                       삭제
                     </button>
                   )}
-                  {!isMine && !leave && (
-                    <button type="button" onClick={() => { onClose(); onOpenEntry(entry); }} className="rounded px-1.5 py-0.5 text-[11px] text-ink2 hover:bg-panel hover:text-ink">
-                      보기
-                    </button>
-                  )}
                   {askable && (
                     <button
                       type="button"
-                      onClick={() => onMessage(member, `${Number(date.slice(5, 7))}/${Number(date.slice(8))} ${entry.title} 일정 관련해서 여쭤볼게요.`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMessage(member, `${Number(date.slice(5, 7))}/${Number(date.slice(8))} ${entry.title} 일정 관련해서 여쭤볼게요.`);
+                      }}
                       className="rounded px-1.5 py-0.5 text-[11px] text-sky-700 hover:bg-panel dark:text-sky-300"
                     >
                       이 일정 묻기
