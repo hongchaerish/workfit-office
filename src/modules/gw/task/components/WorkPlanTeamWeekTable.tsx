@@ -1,11 +1,12 @@
 import type { MinuteRange } from '@/domain/workPlan/timeGrid';
 import { isCopyGesture, COPY_BADGE_CLASS } from './dragCopy';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, StickyNote, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
-import { canMoveEntry, type DayCell } from '@/domain/workPlan/dayEntries';
+import { canMoveEntry, type DayCell, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
+import { CellMemo } from './CellMemo';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
@@ -42,10 +43,6 @@ const isChair = isChairAccount;
 const displayName = (m: User) => (isChair(m) ? '위원장' : m.name);
 const displayRank = (m: User) => (isChair(m) ? '위원회' : m.position || m.jobTitle || '');
 
-/** 메모 첫 줄 — 체크 상자·목록 표시는 뗀다 */
-const memoFirstLine = (memo: string) =>
-  (memo.split('\n').map((l) => l.replace(/^\s*(?:[-*]\s*)?(?:\[[ xX]\]\s*)?/, '').trim()).find(Boolean) ?? '');
-
 export interface WorkPlanTeamWeekTableProps {
   actor: User;
   todayStr: string;
@@ -73,6 +70,8 @@ export interface WorkPlanTeamWeekTableProps {
   onOpenDay?: (date: string) => void;
   /** 복사한 업무가 있으면 — 내 칸을 누르면 그날에 붙여넣는다 */
   onPaste?: (date: string) => void;
+  /** 그날 메모 저장 — 없으면(사용 중이 아닌 계정) 내 칸도 보기만 */
+  onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
 }
 
 export function WorkPlanTeamWeekTable({
@@ -94,6 +93,7 @@ export function WorkPlanTeamWeekTable({
   selected,
   onOpenDay,
   onPaste,
+  onSaveMemo,
 }: WorkPlanTeamWeekTableProps) {
   const { compare, deptOrder } = useRosterOrder();
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => plusDays(weekStart, i)), [weekStart]);
@@ -189,7 +189,6 @@ export function WorkPlanTeamWeekTable({
     const isMe = member.id === actor.id;
     // skip — 여러 칸에 걸쳐 한 줄로 따로 그리는 일정(출장 등)은 칸 안에서 빼고
     const rows = dates.flatMap((date) => cellOf(member.id, date).entries.filter((entry) => !skip?.has(entry.key)).map((entry) => ({ date, entry })));
-    const memo = dates.length === 1 ? cellOf(member.id, dates[0]).memo : null;
     const showAll = expanded.has(key);
     const shown = showAll ? rows : rows.slice(0, LINES_PER_CELL);
     const more = rows.length - shown.length;
@@ -246,13 +245,22 @@ export function WorkPlanTeamWeekTable({
             {showAll ? '접기' : `+${more}건 더`}
           </button>
         )}
-        {memo && (
-          <div className="mt-0.5 flex items-center gap-1 pl-2 text-[10.5px] text-ink3" title={memo}>
-            <StickyNote size={10} className="shrink-0" />
-            <span className="truncate">{memoFirstLine(memo)}</span>
-          </div>
-        )}
       </>
+    );
+  };
+
+  /** 그날 메모 — 운영과 같은 서식 메모 칸(굵게·체크 상자 등), 칸 맨 아래에 붙는다. 모든 사람 칸에 보이고, 내 칸만 눌러서 쓴다 */
+  const renderMemo = (member: User, date: string) => {
+    const cell = cellOf(member.id, date);
+    const isMe = member.id === actor.id;
+    return (
+      <CellMemo
+        key={`${cell.memoPlan?.id ?? 'new'}|${cell.memo ?? ''}`}
+        text={cell.memo}
+        label={`${displayName(member)} ${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일 메모`}
+        onSave={isMe && onSaveMemo ? (text) => onSaveMemo(date, cell.memoPlan, text) : undefined}
+        look={{ memo: 'text-[11px]', mark: 10 }}
+      />
     );
   };
 
@@ -347,6 +355,8 @@ export function WorkPlanTeamWeekTable({
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
         {droppable && dropDate === date && dropCopy && <span className={COPY_BADGE_CLASS}>+ 복사</span>}
+        {/* 칸 높이를 다 채우는 세로 줄 — 위는 일정, 맨 아래는 메모 */}
+        <div className="flex h-full flex-col">
         {lanes > 0 && <div style={{ height: lanes * SPAN_LANE }} />}
         {starting.map((sp) => {
           const days = Math.min(sp.end, 4) - sp.start + 1;
@@ -366,6 +376,8 @@ export function WorkPlanTeamWeekTable({
           );
         })}
         <div className={`min-h-[22px] ${canAdd ? 'pr-5' : ''}`}>{renderLines(member, dates, key, new Set(spans.map((sp) => sp.key)))}</div>
+        {dates.length === 1 && <div className="mt-auto">{renderMemo(member, date)}</div>}
+        </div>
         {canAdd && (
           <button
             type="button"

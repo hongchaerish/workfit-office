@@ -637,6 +637,7 @@ export default function WorkPlanScreen() {
             setPanelDate(date);
           }}
           onPaste={clipboard && actorActive ? handlePaste : undefined}
+          onSaveMemo={actorActive ? handleSaveMemo : undefined}
         />
       )}
       {view === 'team' && (
