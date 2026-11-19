@@ -405,12 +405,32 @@ export default function WorkPlanScreen() {
   };
 
   /** 내 일반 업무를 옮긴다 — 날짜와, 시간표에서 옮겼다면 시각만 바뀐다 */
-  const handleMoveItem = (item: WorkPlanItem, date: string, range?: MinuteRange) => {
+  /** 끌어 놓기 — 그냥 놓으면 이동, Ctrl 을 누른 채 놓으면 복사(날짜·시각만 놓은 자리로). 둘 다 되돌리기 */
+  const handleMoveItem = (item: WorkPlanItem, date: string, range?: MinuteRange, copy = false) => {
     if (!actor) return;
+    const who = { userId: actor.id, active: actorActive };
+    const when = `${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${range ? ` ${toHHmm(range.start)}` : ''}`;
+    const undoDone = { onSuccess: () => notify('되돌렸어요.'), onError: (e: unknown) => notify(e instanceof Error ? e.message : '되돌리지 못했습니다.') };
+    if (copy) {
+      createItem.mutate(
+        { actor: who, ownerUserId: actor.id, draft: movedDraft(item, date, range) },
+        {
+          onSuccess: (created) =>
+            setNotice({ text: `${when}에 "${item.title}"을(를) 복사했어요`, undo: () => removeItem.mutate({ actor: who, id: created.id }, undoDone) }),
+          onError: (e) => notify(e instanceof Error ? e.message : '복사하지 못했습니다.'),
+        },
+      );
+      return;
+    }
     updateItem.mutate(
-      { actor: { userId: actor.id, active: actorActive }, id: item.id, draft: movedDraft(item, date, range) },
+      { actor: who, id: item.id, draft: movedDraft(item, date, range) },
       {
-        onSuccess: () => notify(`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${range ? ` ${toHHmm(range.start)}` : ''}(으)로 옮겼습니다.`),
+        onSuccess: () =>
+          setNotice({
+            text: `${when}(으)로 옮겼어요`,
+            // 원래 날짜·시각 그대로 되돌린다
+            undo: () => updateItem.mutate({ actor: who, id: item.id, draft: movedDraft(item, item.date) }, undoDone),
+          }),
         onError: (e) => notify(e instanceof Error ? e.message : '옮기지 못했습니다.'),
       },
     );

@@ -1,3 +1,5 @@
+import type { MinuteRange } from '@/domain/workPlan/timeGrid';
+import { isCopyGesture, COPY_BADGE_CLASS } from './dragCopy';
 import { useState, useMemo, useRef, useEffect, Fragment, type ReactNode } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
@@ -75,7 +77,8 @@ interface WorkPlanTeamMonthlyMatrixProps {
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
   /** 내 일반 업무를 끌어서 다른 날로 옮긴다. 없으면(사용 중이 아닌 계정) 끌 수 없다 */
-  onMoveItem?: (item: WorkPlanItem, date: string) => void;
+  /** 끌어 놓기 — copy 면 같은 내용으로 새로 만들고(Ctrl), 아니면 옮긴다 */
+  onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange, copy?: boolean) => void;
   /** 내 칸 메모 저장. 없으면(사용 중이 아닌 계정) 메모는 보기만. 실패하면 이유를 담아 throw */
   onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
   /** 보고 있는 달(YYYY-MM) — 화면이 들고 칸 조립 범위로도 쓴다 */
@@ -137,6 +140,7 @@ export function WorkPlanTeamMonthlyMatrix({
   /** 끌고 있는 내 업무와, 놓으려는 내 칸의 날짜 */
   const [draggedItem, setDraggedItem] = useState<WorkPlanItem | null>(null);
   const [dropDate, setDropDate] = useState<string | null>(null);
+  const [dropCopy, setDropCopy] = useState(false);
   const endDrag = () => {
     setDraggedItem(null);
     setDropDate(null);
@@ -651,12 +655,15 @@ export function WorkPlanTeamMonthlyMatrix({
                                 key={dayStr}
                                 onDragOver={droppable ? (e) => {
                                   e.preventDefault();
-                                  e.dataTransfer.dropEffect = 'move';
+                                  const copy = isCopyGesture(e);
+                                  e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
                                   if (dropDate !== dayStr) setDropDate(dayStr);
+                                  if (dropCopy !== copy) setDropCopy(copy);
                                 } : undefined}
                                 onDrop={droppable ? (e) => {
                                   e.preventDefault();
-                                  if (draggedItem.date !== dayStr) onMoveItem?.(draggedItem, dayStr);
+                                  const copy = isCopyGesture(e);
+                                  if (copy || draggedItem.date !== dayStr) onMoveItem?.(draggedItem, dayStr, undefined, copy);
                                   endDrag();
                                 } : undefined}
                                 // 위(일정) 칸 누르기 — 내 칸은 일정 창, 남의 칸은 하루 상세. 아래 메모 칸은 CellMemo 가 받는다
@@ -666,6 +673,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                   onCellClick ? 'cursor-pointer' : ''
                                 } ${!d.inCurrentMonth ? 'opacity-50' : ''} ${droppable && dropDate === dayStr ? 'ring-2 ring-inset ring-teal' : ''}`}
                               >
+                                {droppable && dropDate === dayStr && dropCopy && <span className={COPY_BADGE_CLASS}>+ 복사</span>}
                                 {onCreate && (
                                   <button
                                     type="button"
@@ -703,7 +711,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                           key={entry.key}
                                           draggable
                                           onDragStart={(e) => {
-                                            e.dataTransfer.effectAllowed = 'move';
+                                            e.dataTransfer.effectAllowed = 'copyMove';
                                             e.dataTransfer.setData('text/plain', item.title);
                                             setDraggedItem(item);
                                           }}

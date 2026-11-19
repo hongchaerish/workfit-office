@@ -1,3 +1,5 @@
+import type { MinuteRange } from '@/domain/workPlan/timeGrid';
+import { isCopyGesture, COPY_BADGE_CLASS } from './dragCopy';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, StickyNote, Plus } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
@@ -63,7 +65,8 @@ export interface WorkPlanTeamWeekTableProps {
   onOpenPerson: (member: User) => void;
   /** 내 빈 칸 누르기 — 바로 새 일정. 없으면(사용 중이 아닌 계정) 상세 창 */
   onCreate?: (date: string, member: User) => void;
-  onMoveItem?: (item: WorkPlanItem, date: string) => void;
+  /** 끌어 놓기 — copy 면 같은 내용으로 새로 만들고(Ctrl), 아니면 옮긴다 */
+  onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange, copy?: boolean) => void;
   /** 상세 창이 열린 칸 */
   selected: { userId: string; date: string } | null;
   /** 날짜 머리 누르기 — 그날 모두의 일정 */
@@ -148,6 +151,8 @@ export function WorkPlanTeamWeekTable({
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [dragged, setDragged] = useState<WorkPlanItem | null>(null);
   const [dropDate, setDropDate] = useState<string | null>(null);
+  /** 놓으려는 칸에 Ctrl 을 누르고 있나(복사) */
+  const [dropCopy, setDropCopy] = useState(false);
 
   // 날짜 머리를 상단 바 바로 아래에 붙인다 — 상단 바 높이를 재서 쓴다
   const barRef = useRef<HTMLDivElement>(null);
@@ -210,7 +215,7 @@ export function WorkPlanTeamWeekTable({
                 onDragStart={
                   draggable
                     ? (e) => {
-                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.effectAllowed = 'copyMove';
                         e.dataTransfer.setData('text/plain', item!.title);
                         setDragged(item!);
                       }
@@ -318,8 +323,10 @@ export function WorkPlanTeamWeekTable({
           droppable
             ? (e) => {
                 e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
+                const copy = isCopyGesture(e);
+                e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
                 if (dropDate !== date) setDropDate(date);
+                if (dropCopy !== copy) setDropCopy(copy);
               }
             : undefined
         }
@@ -327,7 +334,8 @@ export function WorkPlanTeamWeekTable({
           droppable
             ? (e) => {
                 e.preventDefault();
-                if (dragged && dragged.date !== date) onMoveItem?.(dragged, date);
+                const copy = isCopyGesture(e);
+                if (dragged && (copy || dragged.date !== date)) onMoveItem?.(dragged, date, undefined, copy);
                 setDragged(null);
                 setDropDate(null);
               }
@@ -338,6 +346,7 @@ export function WorkPlanTeamWeekTable({
           isSelected ? 'outline outline-1 -outline-offset-1 outline-sky-400/70' : ''
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
+        {droppable && dropDate === date && dropCopy && <span className={COPY_BADGE_CLASS}>+ 복사</span>}
         {lanes > 0 && <div style={{ height: lanes * SPAN_LANE }} />}
         {starting.map((sp) => {
           const days = Math.min(sp.end, 4) - sp.start + 1;

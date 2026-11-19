@@ -1,3 +1,4 @@
+import { isCopyGesture, COPY_BADGE_CLASS } from './dragCopy';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { calendarToday } from '@/domain/calendarEvent/calendarDate';
@@ -56,7 +57,8 @@ interface WorkPlanMyWeekProps {
   /** 빈 시간 누르기 → 그 시각으로 새 일정. 없으면(사용 중이 아닌 계정) 누를 수 없다 */
   onCreate?: (date: string, member: User, range?: MinuteRange) => void;
   /** 내 일반 업무를 끌어서 옮긴다(range 는 시간표에서 옮겼을 때). 없으면(사용 중이 아닌 계정) 끌 수 없다 */
-  onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange) => void;
+  /** 끌어 놓기 — copy 면 같은 내용으로 새로 만들고(Ctrl), 아니면 옮긴다 */
+  onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange, copy?: boolean) => void;
   /** 복사한 업무가 있으면 — 시간표를 누르면 그 시각에, 종일 줄을 누르면 원래 시각으로 붙여넣는다 */
   onPaste?: (date: string, startMinute?: number) => void;
 }
@@ -79,6 +81,8 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
   /** 종일 줄에서 끌고 있는 내 업무와 놓으려는 날짜 */
   const [untimedItem, setUntimedItem] = useState<WorkPlanItem | null>(null);
   const [untimedDrop, setUntimedDrop] = useState<string | null>(null);
+  /** 끌면서 Ctrl 을 누르고 있나(복사) — 시간표 끌기·종일 줄 끌기 같이 쓴다 */
+  const [dragCopy, setDragCopy] = useState(false);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 60_000);
@@ -169,14 +173,17 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
     if (e.clientY < top + AUTO_SCROLL_EDGE) window.scrollBy(0, -AUTO_SCROLL_STEP);
     else if (e.clientY > window.innerHeight - AUTO_SCROLL_EDGE) window.scrollBy(0, AUTO_SCROLL_STEP);
     setDrag({ ...drag, moved, date: dateAt(e.clientX), range: moveRange(drag.base, minuteAt(e.clientY) - drag.startMinute) });
+    if (dragCopy !== isCopyGesture(e)) setDragCopy(isCopyGesture(e));
   };
 
-  const finishDrag = () => {
+  const finishDrag = (e: ReactPointerEvent) => {
     if (!drag) return;
     setDrag(null);
+    setDragCopy(false);
     suppressClick.current = drag.moved;
+    const copy = drag.moved && isCopyGesture(e);
     const changed = drag.date !== drag.baseDate || drag.range.start !== drag.base.start;
-    if (changed) onMoveItem?.(drag.item, drag.date, drag.range);
+    if (changed || copy) onMoveItem?.(drag.item, drag.date, drag.range, copy);
   };
 
   const gridCols = 'grid grid-cols-[3.25rem_repeat(7,minmax(0,1fr))]';
@@ -233,12 +240,16 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
             onClick={onPaste ? () => onPaste(d.date) : onCreate ? () => onCreate(d.date, actor) : undefined}
             onDragOver={untimedItem ? (e) => {
               e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
+              const copy = isCopyGesture(e);
+              e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
               if (untimedDrop !== d.date) setUntimedDrop(d.date);
+              if (dragCopy !== copy) setDragCopy(copy);
             } : undefined}
             onDrop={untimedItem ? (e) => {
               e.preventDefault();
-              if (untimedItem.date !== d.date) onMoveItem?.(untimedItem, d.date);
+              const copy = isCopyGesture(e);
+              if (copy || untimedItem.date !== d.date) onMoveItem?.(untimedItem, d.date, undefined, copy);
+              setDragCopy(false);
               setUntimedItem(null);
               setUntimedDrop(null);
             } : undefined}
@@ -254,7 +265,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
                   title={label}
                   draggable={Boolean(item)}
                   onDragStart={item ? (e) => {
-                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.effectAllowed = 'copyMove';
                     e.dataTransfer.setData('text/plain', item.title);
                     setUntimedItem(item);
                   } : undefined}
@@ -351,6 +362,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
                     style={{ top: pct(drag.range.start), height: pct(drag.range.end - drag.range.start) }}
                   >
                     <span className="block truncate font-semibold">{drag.block.label}</span>
+                    {dragCopy && <span className={COPY_BADGE_CLASS}>+ 복사</span>}
                     <span className="block truncate text-[10px] opacity-75">
                       {toHHmm(drag.range.start)}~{drag.block.open ? '' : drag.range.end >= DAY_END ? '24:00' : toHHmm(drag.range.end)}
                     </span>
