@@ -1,6 +1,7 @@
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { toHHmm } from '@/domain/workPlan/timeGrid';
-import type { EventFormState } from './eventFormMapping';
+import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { initialStateFromEntry, type EventFormState } from './eventFormMapping';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -51,11 +52,35 @@ export function eventViewOf(
 
   const facts: ViewFact[] = [
     { id: 'when', text: time ? `${range} · ${time}` : range },
-    { id: 'place', text: place.trim() },
+    { id: 'place', text: place.trim() === title ? '' : place.trim() },
     { id: 'transport', text: outside ? state.transportation.trim() : '' },
     { id: 'people', text: people },
     { id: 'contact', text: outside ? state.contact.trim() : '' },
     { id: 'memo', text: state.memo.trim() },
   ];
   return { kindLabel, title, facts: facts.filter((f) => f.text) };
+}
+
+/** 그날 일정 줄 앞 시각 — 종일, '09:00~10:30', 시작만이면 '12:30~'. 시간 없는 업무는 빈 글 */
+export function entryTimeLabel(entry: DayEntry): string {
+  if (entry.allDay) return entry.source === 'ITEM' ? '' : '종일';
+  if (!entry.startTime) return '';
+  return `${entry.startTime}~${entry.endTime ?? ''}`;
+}
+
+/** 그날 일정 한 건의 보기 내용 — 업무·회의·외근은 입력값에서, 결재·달력 일정은 제목과 날짜만 */
+export function entryViewOf(entry: DayEntry, date: string, opts: { ownerId: string; nameOf: (id: string) => string }): EventView {
+  if (entry.item || entry.event || entry.outside) {
+    return eventViewOf(initialStateFromEntry(entry, null), {
+      ...opts,
+      tagName: entry.tag?.name,
+      place: entry.event?.location ?? undefined,
+    });
+  }
+  const time = entryTimeLabel(entry);
+  return {
+    kindLabel: entry.source === 'APPROVAL' ? '결재' : '일정',
+    title: entry.title,
+    facts: [{ id: 'when', text: time ? `${dateLabel(date)} · ${time}` : dateLabel(date) }],
+  };
 }

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { initialCreateState, type EventFormState } from './eventFormMapping';
-import { eventViewOf } from './eventView';
+import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { entryTimeLabel, entryViewOf, eventViewOf } from './eventView';
 
 const names: Record<string, string> = { u1: '홍채원', u2: '신지웅', u3: '모란' };
 const nameOf = (id: string) => names[id] ?? '';
@@ -30,7 +31,7 @@ test('일정 보기 — 목적이 없는 외근은 장소가 제목', () => {
   const view = eventViewOf(base({ kind: 'OUTSIDE', subType: '시간 외근', allDay: false, range: { start: 840, end: 960 }, destination: '판교 고객사' }), { ownerId: 'u1', nameOf });
   assert.equal(view.kindLabel, '외근');
   assert.equal(view.title, '판교 고객사');
-  assert.deepEqual(view.facts[0], { id: 'when', text: '11월 17일 (화) · 14:00~16:00' });
+  assert.deepEqual(view.facts, [{ id: 'when', text: '11월 17일 (화) · 14:00~16:00' }]);
 });
 
 test('일정 보기 — 회의: 장소·참석자·메모, 빈 칸은 뺀다', () => {
@@ -54,4 +55,21 @@ test('일정 보기 — 업무: 태그 이름, 시간 미정·끝 미정', () =>
   const open = eventViewOf(base({ kind: 'ITEM', title: '보고서', range: { start: 750, end: 780 }, openEnd: true }), { ownerId: 'u1', nameOf });
   assert.equal(open.kindLabel, '업무');
   assert.deepEqual(open.facts, [{ id: 'when', text: '11월 17일 (화) · 12:30~' }]);
+});
+
+const entry = (patch: Partial<DayEntry>): DayEntry =>
+  ({ key: 'k', source: 'APPROVAL', allDay: false, startTime: null, endTime: null, title: '연차', tag: null, roomStatus: null, ...patch }) as DayEntry;
+
+test('그날 일정 줄 시각 — 종일, 시작~끝, 시작만, 시간 없는 업무는 빈 글', () => {
+  assert.equal(entryTimeLabel(entry({ allDay: true })), '종일');
+  assert.equal(entryTimeLabel(entry({ startTime: '09:00', endTime: '10:30' })), '09:00~10:30');
+  assert.equal(entryTimeLabel(entry({ startTime: '12:30' })), '12:30~');
+  assert.equal(entryTimeLabel(entry({ source: 'ITEM', allDay: true })), '');
+});
+
+test('그날 일정 보기 — 결재·달력 일정은 제목과 날짜만', () => {
+  const view = entryViewOf(entry({ allDay: true }), '2026-11-20', { ownerId: 'u1', nameOf });
+  assert.equal(view.kindLabel, '결재');
+  assert.equal(view.title, '연차');
+  assert.deepEqual(view.facts, [{ id: 'when', text: '11월 20일 (금) · 종일' }]);
 });

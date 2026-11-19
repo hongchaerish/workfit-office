@@ -121,10 +121,23 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
     </>
   );
 
-  // 고칠 수 없는 일정 — 잠긴 입력 칸 대신 보기 전용 창
-  if (readOnly) {
+  // 고칠 수 없는 일정 — 잠긴 입력 칸 대신 그날 일정 보기(누른 일정 강조)
+  if (readOnly && entry) {
     const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
-    return <WorkPlanEventView form={form} entry={entry} owner={owner} nameOf={nameOf} footer={footer} onClose={onClose} />;
+    const day = cellOf(owner.id, state.date);
+    return (
+      <WorkPlanEventView
+        entry={entry}
+        date={state.date}
+        entries={day.entries}
+        dayMemo={day.memo}
+        owner={owner}
+        nameOf={nameOf}
+        footer={footer}
+        busy={form.saving}
+        onClose={onClose}
+      />
+    );
   }
 
   return (
