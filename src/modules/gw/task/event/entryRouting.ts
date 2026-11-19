@@ -38,13 +38,14 @@ export function createTarget(
 
 /**
  * 칩·항목 누르기 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
- * 보기: 일반 업무·회의는 그날 일정 보기, 외근·출장(남의 것·결재 건·동행)은 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창. 결재 휴가는 상세가 없다(null).
+ * 보기: 일반 업무는 열지 않고, 회의는 그날 일정 보기, 외근·출장(남의 것·결재 건·동행)은 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창. 결재 휴가는 상세가 없다(null).
  */
 export function routeEntry(entry: DayEntry, actor: User, actorActive: boolean): EntryRoute {
   const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
   switch (entry.source) {
     case 'ITEM':
-      return { sheet: { mode: mode(entry.item?.ownerUserId === actor.id), entry } };
+      // 고칠 수 없는 일반 업무는 열지 않는다 — 상세는 특수한 일정(회의·외근·출장·결재·캘린더)만
+      return mode(entry.item?.ownerUserId === actor.id) === 'edit' ? { sheet: { mode: 'edit', entry } } : null;
     case 'MEETING':
       return { sheet: { mode: mode(entry.event?.ownerUserId === actor.id), entry } };
     case 'CALENDAR':

@@ -239,8 +239,8 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
             const canDelete = isMine && !!onRemoveItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id && !entry.item.routine;
             const askable = !isMine && (kind === 'item' || kind === 'meeting');
             const canCopy = isMine && !!onCopyItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id;
-            // 남의 일정은 줄을 누르면 바로 상세 — 외근·출장은 외근 상세, 그 외는 그날 일정 보기([[entryRouting]])
-            const openable = !isMine && !leave;
+            // 남의 특수한 일정(회의·외근·출장·결재·캘린더)은 줄을 누르면 바로 상세, 일반 업무는 열지 않는다([[entryRouting]])
+            const openable = !isMine && !leave && entry.source !== 'ITEM';
             const open = () => {
               onClose();
               onOpenEntry(entry);
