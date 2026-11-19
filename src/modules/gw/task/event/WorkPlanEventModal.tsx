@@ -15,6 +15,7 @@ import { kindEnabled } from './entryRouting';
 import { RoutineFields, RoutineScopeFields } from './RoutineFields';
 import { defaultRoutineRule, type RoutineFreq } from '@/domain/workPlan/routine';
 import { TimeGrid } from './TimeGrid';
+import { WorkPlanEventView } from './WorkPlanEventView';
 import { useLunchRange } from '@/features/workPlan/useLunchRange';
 import { EventAssist, useEventConflicts } from './EventAssist';
 import { useWorkPlanEventForm, type EventKind, type EventTarget } from './useWorkPlanEventForm';
@@ -119,6 +120,12 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
       </Button>
     </>
   );
+
+  // 고칠 수 없는 일정 — 잠긴 입력 칸 대신 보기 전용 창
+  if (readOnly) {
+    const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+    return <WorkPlanEventView form={form} entry={entry} owner={owner} nameOf={nameOf} footer={footer} onClose={onClose} />;
+  }
 
   return (
     <Modal

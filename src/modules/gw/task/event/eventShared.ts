@@ -9,6 +9,7 @@ import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import type { EventForm } from './EventFields';
 import { savedNotice } from './eventFormMapping';
+import { dateLabel } from './eventView';
 import { entriesToBlocks, type TimeGridBlock } from './TimeGrid';
 import type { EventKind, EventTarget } from './useWorkPlanEventForm';
 
@@ -16,14 +17,7 @@ import type { EventKind, EventTarget } from './useWorkPlanEventForm';
 
 export const isOutsideKind = (kind: EventKind) => kind === 'OUTSIDE' || kind === 'TRIP';
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-/** 'YYYY-MM-DD' → 'M월 D일 (요일)' */
-export function dateLabel(date: string): string {
-  if (!isValidCalendarDate(date)) return '';
-  const [y, m, d] = date.split('-').map(Number);
-  return `${m}월 ${d}일 (${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
-}
+export { dateLabel } from './eventView';
 
 /** 도구 막대의 고정 종류 버튼(일반 ▾ 앞) */
 export const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
