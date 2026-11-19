@@ -424,23 +424,24 @@ export function WorkPlanTeamWeekTable({
     <div className="space-y-2">
       {/* 상단 바 — 스크롤해도 위에 붙는다 */}
       <div ref={barRef} className="sticky top-[var(--shell-top)] z-40">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel px-2.5 py-1.5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-panel px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-2">
             {viewSwitch}
+            <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
                 <ChevronLeft size={16} />
               </button>
-              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt">
+              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink">
                 이번 주
               </button>
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
                 <ChevronRight size={16} />
               </button>
             </div>
-            <h2 className="ml-1 text-[14px] font-extrabold text-ink">
+            <h2 className="ml-1 text-[14px] font-bold text-ink">
               {Number(first.slice(5, 7))}월 {weekNo}주차
-              <span className="ml-1.5 text-[12px] font-semibold text-ink3">
+              <span className="ml-1.5 text-[12px] font-medium text-ink3">
                 {md(first)} ~ {md(last)}
               </span>
             </h2>

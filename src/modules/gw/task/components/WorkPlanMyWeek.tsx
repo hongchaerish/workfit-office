@@ -196,18 +196,19 @@ export function WorkPlanMyWeek({ viewSwitch, helpButton, actor, weekStart, onWee
       <div ref={stickyRef} className="sticky top-[var(--shell-top)] z-40 rounded-t-xl bg-panel">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5">
         {viewSwitch}
-        <button type="button" aria-label="지난주" onClick={() => onWeekChange(shiftDate(weekStart, -7))} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
+        <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
+        <button type="button" aria-label="지난주" onClick={() => onWeekChange(shiftDate(weekStart, -7))} className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
           <ChevronLeft size={16} />
         </button>
-        <button type="button" onClick={() => onWeekChange(mondayOf(calendarToday()))} className="rounded-lg border border-border px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt">
+        <button type="button" onClick={() => onWeekChange(mondayOf(calendarToday()))} className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink">
           이번 주
         </button>
-        <button type="button" aria-label="다음 주" onClick={() => onWeekChange(shiftDate(weekStart, 7))} className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt">
+        <button type="button" aria-label="다음 주" onClick={() => onWeekChange(shiftDate(weekStart, 7))} className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
           <ChevronRight size={16} />
         </button>
-        <h2 className="ml-1 text-[14px] font-extrabold text-ink">
+        <h2 className="ml-1 text-[14px] font-bold text-ink">
           {w ? `${w.month}월 ${w.week}주차` : ''}
-          <span className="ml-2 text-[12px] font-semibold text-ink3">{sm}/{sd} ~ {em}/{ed}</span>
+          <span className="ml-2 text-[12px] font-medium text-ink3">{sm}/{sd} ~ {em}/{ed}</span>
         </h2>
         {helpButton && <div className="ml-auto">{helpButton}</div>}
       </div>

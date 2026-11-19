@@ -20,7 +20,6 @@ import {
   ChevronRight,
   Plus,
   Check,
-  Calendar as CalendarIcon,
   LocateFixed,
   PanelRightOpen,
 } from 'lucide-react';
@@ -397,18 +396,19 @@ export function WorkPlanTeamMonthlyMatrix({
       {/* ── 월간 상단 툴바 (스크롤해도 상단 고정) ── */}
       <div ref={stickyBarRef} className="sticky top-[var(--shell-top)] z-40">
       <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel px-2.5 py-1.5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-panel px-2 py-1.5">
         <div className="flex flex-wrap items-center gap-2">
           {viewSwitch}
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
           {weekStart && onWeekChange ? (
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
                 <ChevronLeft size={16} />
               </button>
-              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer">
+              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink">
                 이번 주
               </button>
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
                 <ChevronRight size={16} />
               </button>
             </div>
@@ -418,14 +418,14 @@ export function WorkPlanTeamMonthlyMatrix({
               type="button"
               onClick={handlePrevMonth}
               aria-label="이전 달"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
+              className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
             >
               <ChevronLeft size={16} />
             </button>
             <button
               type="button"
               onClick={handleThisMonth}
-              className="rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
+              className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink"
             >
               이번 달
             </button>
@@ -433,19 +433,18 @@ export function WorkPlanTeamMonthlyMatrix({
               type="button"
               onClick={handleNextMonth}
               aria-label="다음 달"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
+              className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
             >
               <ChevronRight size={16} />
             </button>
           </div>
           )}
 
-          <h2 className="ml-1 text-[14px] font-extrabold text-ink flex items-center gap-1.5">
-            <CalendarIcon size={16} className="text-teal" />
+          <h2 className="ml-1 text-[14px] font-bold text-ink flex items-center gap-1.5">
             {weekStart && weeks[0] ? (
               <span>
                 {weeks[0].days[0].monthNum}월 {weeks[0].weekNum}주차
-                <span className="ml-1.5 text-[12px] font-semibold text-ink3">
+                <span className="ml-1.5 text-[12px] font-medium text-ink3">
                   {weeks[0].days[0].monthNum}/{weeks[0].days[0].dayNum} ~ {weeks[0].days[6].monthNum}/{weeks[0].days[6].dayNum}
                 </span>
               </span>
@@ -458,10 +457,10 @@ export function WorkPlanTeamMonthlyMatrix({
             <button
               type="button"
               onClick={scrollToCurrentWeek}
-              className="ml-2 flex items-center gap-1 rounded-lg border border-teal/40 bg-teal-soft/20 px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors shadow-2xs cursor-pointer"
+              title="이번 주로" className="flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
             >
               <LocateFixed size={12} />
-              <span>이번 주차로 이동</span>
+              <span>이번 주</span>
             </button>
           )}
         </div>

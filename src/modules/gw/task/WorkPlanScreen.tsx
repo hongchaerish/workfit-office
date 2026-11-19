@@ -1,4 +1,4 @@
-import { CircleHelp, X } from 'lucide-react';
+import { CircleHelp, Search, X } from 'lucide-react';
 import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
 import { useCreateWorkPlanItem, useRemoveWorkPlanItem, useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
@@ -453,7 +453,7 @@ export default function WorkPlanScreen() {
 
   // 보기 전환 — 각 보기의 상단 바 맨 앞에 놓인다
   const viewSwitch = (
-    <div className="inline-flex overflow-hidden rounded-lg border border-border bg-panel" role="radiogroup" aria-label="보기">
+    <div className="inline-flex rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="보기">
       {VIEW_OPTIONS.map((option) => (
         <button
           key={option.id}
@@ -461,8 +461,8 @@ export default function WorkPlanScreen() {
           role="radio"
           aria-checked={view === option.id}
           onClick={() => setView(option.id)}
-          className={`border-r border-border px-2.5 py-1.5 text-[11.5px] font-bold transition-colors last:border-r-0 ${
-            view === option.id ? 'bg-teal text-white' : 'text-ink2 hover:bg-panel-alt'
+          className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
+            view === option.id ? 'bg-panel text-ink shadow-sm' : 'text-ink3 hover:text-ink'
           }`}
         >
           {option.label}
@@ -478,7 +478,7 @@ export default function WorkPlanScreen() {
       aria-label={guideOpen ? '도움말 닫기' : '도움말'}
       aria-pressed={guideOpen}
       title={guideOpen ? '도움말 닫기' : '도움말'}
-      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border text-ink3 transition-colors hover:text-ink ${guideOpen ? 'border-teal/50 bg-teal-soft/40 text-teal' : 'border-border bg-panel'}`}
+      className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition-colors hover:bg-panel-alt ${guideOpen ? 'bg-panel-alt text-teal' : 'text-ink3 hover:text-ink'}`}
     >
       <CircleHelp size={16} />
     </button>
@@ -491,7 +491,7 @@ export default function WorkPlanScreen() {
         value={deptFilter}
         onChange={(e) => setDeptFilter(e.target.value)}
         title="부서 필터"
-        className="h-8 rounded-lg border border-border bg-panel-alt/50 px-2.5 text-[11px] font-bold text-ink outline-none focus:border-teal/50"
+        className="h-7 rounded-md border border-transparent bg-panel-alt px-2 text-[11.5px] font-medium text-ink2 outline-none hover:text-ink focus:border-border focus:bg-panel"
       >
         <option value="all">전체 부서 ({roster.length}명)</option>
         {departments.map((d) => (
@@ -506,9 +506,9 @@ export default function WorkPlanScreen() {
           value={searchKeyword}
           onChange={(e) => setSearchKeyword(e.target.value)}
           placeholder="이름 또는 부서 검색..."
-          className="h-8 w-full rounded-lg border border-border bg-panel-alt/40 pl-7 pr-7 text-[11px] text-ink placeholder:text-ink3 outline-none focus:border-teal/50 focus:bg-panel"
+          className="h-7 w-full rounded-md border border-transparent bg-panel-alt pl-7 pr-7 text-[11.5px] text-ink placeholder:text-ink3 outline-none focus:border-border focus:bg-panel"
         />
-        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-ink3">🔍</span>
+        <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink3" />
         {searchKeyword && (
           <button
             type="button"
