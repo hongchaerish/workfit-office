@@ -206,7 +206,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * 외근·출장 입력 — 장소 → 목적(비워도 됨, 표에 보이는 글) → 기간 → 세부 정보(교통수단, 더보기: 동행자·연락처·메모, 출장 구분).
+ * 외근·출장 입력 — 장소 → 목적(비워도 됨, 표에 보이는 글) → 기간 → 세부 정보(교통수단, 출장 구분, 더보기: 동행자·연락처, 메모).
  * 나눠 그릴 때(모바일) 'main' = 장소·목적·기간, 'more' = 종료일과 세부 정보.
  */
 function OutsideFields({
@@ -228,8 +228,8 @@ function OutsideFields({
   const endDate = state.endDate < state.date ? state.date : state.endDate;
   const length = outsideLengthLabel(kind, state.date, endDate);
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
-  // 동행자·연락처·메모 — 비어 있으면 접어 둔다(적힌 게 있거나 읽기 전용·모바일이면 펼침)
-  const hasExtra = state.companionIds.some((id) => id !== outsideSelfId && id !== actor.id) || !!state.contact.trim() || !!state.memo.trim();
+  // 동행자·연락처 — 비어 있으면 접어 둔다(적힌 게 있거나 읽기 전용·모바일이면 펼침). 메모는 늘 보인다
+  const hasExtra = state.companionIds.some((id) => id !== outsideSelfId && id !== actor.id) || !!state.contact.trim();
   const [extraOpen, setExtraOpen] = useState(false);
   const showExtra = extraOpen || hasExtra || readOnly || split;
 
@@ -285,7 +285,7 @@ function OutsideFields({
               onClick={() => setExtraOpen(true)}
               className="inline-flex w-fit items-center gap-1 pl-7 text-[11.5px] font-semibold text-ink3 hover:text-ink"
             >
-              동행자·연락처·메모
+              동행자·연락처
               <ChevronDown size={13} />
             </button>
           )}
@@ -315,7 +315,6 @@ function OutsideFields({
             />
           </Row>
           )}
-          {showExtra && (
           <Row icon={<AlignLeft size={15} />} label="메모">
             <textarea
               aria-label="메모"
@@ -328,7 +327,6 @@ function OutsideFields({
               onChange={(e) => set('memo', e.target.value)}
             />
           </Row>
-          )}
         </Section>
       )}
     </div>

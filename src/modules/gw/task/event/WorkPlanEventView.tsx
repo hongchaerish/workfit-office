@@ -15,7 +15,7 @@ const ICONS: Record<ViewFactId, ReactNode> = {
 };
 
 /**
- * 일정 보기 — 그 사람의 그날 일정을 시간순으로 모두 보여 주고, 누른 일정을 강조해 펼친다.
+ * 일정 보기 — 그 사람의 그날 특수한 일정을 시간순으로 보여 주고, 누른 일정을 강조해 펼친다.
  * 다른 줄을 누르면 그 일정이 펼쳐진다. 고치는 칸은 없다(다른 사람 일정·결재로 들어온 일정 등).
  * 참석 취소·합류 같은 동작(footer)은 처음 누른 일정에만 붙는다.
  */
@@ -40,7 +40,9 @@ export function WorkPlanEventView({
   busy: boolean;
   onClose: () => void;
 }) {
-  const list = entries.some((e) => e.key === entry.key) ? entries : [entry, ...entries];
+  // 특수한 일정(회의·외근·출장·결재·캘린더)만 — 일반 업무는 상세가 필요 없다
+  const special = entries.filter((e) => e.source !== 'ITEM');
+  const list = special.some((e) => e.key === entry.key) ? special : [entry, ...special];
   const [selected, setSelected] = useState(entry.key);
   const selectedRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
