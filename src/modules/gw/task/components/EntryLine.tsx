@@ -30,7 +30,7 @@ export function lineTitleOf(entry: DayEntry): string {
  * wrap — 제목이 길면 두 줄까지 접어 보인다(주간 표). 없으면 한 줄 말줄임.
  * 반복 업무는 제목을 옅게 — 매일 같은 일이 외근·휴가 같은 일정과 같은 무게로 보이지 않게.
  */
-export function EntryLine({ entry, onOpen, className = '', wrap = false }: { entry: DayEntry; onOpen?: (entry: DayEntry) => void; className?: string; wrap?: boolean }) {
+export function EntryLine({ entry, onOpen, className = '', wrap = false, hideTime = false }: { entry: DayEntry; onOpen?: (entry: DayEntry) => void; className?: string; wrap?: boolean; hideTime?: boolean }) {
   const { hint } = chipLook(entry);
   const range = timeRangeOf(entry);
   const title = range ? `${hint} (${range})` : hint;
@@ -39,7 +39,7 @@ export function EntryLine({ entry, onOpen, className = '', wrap = false }: { ent
   const body = (
     <>
       {/* 시각이 없는 줄(연차 등)은 빈 시각 칸 없이 붙인다 */}
-      {timeOf(entry) && <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{timeOf(entry)}</span>}
+      {!hideTime && timeOf(entry) && <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{timeOf(entry)}</span>}
       <span className={`min-w-0 flex-1 ${wrap ? 'line-clamp-2 [overflow-wrap:anywhere]' : 'truncate'} ${entry.item?.routine ? 'font-normal text-ink3' : ''}`}>{lineTitleOf(entry)}</span>
       {entry.roomStatus === 'PENDING' && <span className="shrink-0 text-[9px] text-amber">대기</span>}
       {entry.roomStatus === 'REJECTED' && <span className="shrink-0 text-[9px] text-danger">회의실 반려</span>}

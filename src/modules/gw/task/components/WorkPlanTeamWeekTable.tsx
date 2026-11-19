@@ -9,11 +9,22 @@ import { KOREA_STANDARD_HOLIDAYS } from '@/domain/holiday/koreaHolidays';
 import { BirthdayMark } from '@/features/birthday/BirthdayProvider';
 import { useRosterOrder } from '@/features/user/useRosterOrder';
 import { EntryLine } from './EntryLine';
+import { lineToneOf, type LineTone } from './entryKind';
+import { weekSpans } from './weekSpans';
 import { chairToCommittee, groupRoster, isChairAccount, isUnwrittenWeek, summarizeGroup } from './teamWeekGroups';
 
 /* 주간 보기 — 부서별로 접히는 조용한 표. 칸 안은 C 모양 줄 글, 칸을 누르면 칸 옆 상세 창(화면이 띄운다). */
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+/** 여러 칸에 걸친 줄 하나의 높이(px) */
+const SPAN_LANE = 20;
+/** 걸친 줄 바탕 — 칸 경계를 덮어 한 줄로 이어 보이게, 아주 옅게 */
+const SPAN_FILL: Record<LineTone, string> = {
+  item: 'bg-panel',
+  meeting: 'bg-panel',
+  outside: 'bg-[#eef6fc] dark:bg-sky-950/40',
+  leave: 'bg-[#fbf6dc] dark:bg-yellow-950/30',
+};
 /** 칸당 보이는 줄 수 — 넘치면 '+N건 더' */
 const LINES_PER_CELL = 3;
 
@@ -85,6 +96,8 @@ export function WorkPlanTeamWeekTable({
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => plusDays(weekStart, i)), [weekStart]);
   const weekdays = weekDates.slice(0, 5);
   const weekend = weekDates.slice(5);
+  /** 칸마다 날짜 — 월~금 한 날씩, 토·일은 한 칸 */
+  const spanCols = [...weekdays.map((d) => [d]), weekend];
 
   const holidaysQuery = useHolidays();
   const holidayOf = useMemo(() => {
@@ -167,9 +180,10 @@ export function WorkPlanTeamWeekTable({
   const cellKey = (userId: string, date: string) => `${userId}|${date}`;
 
   /** 한 칸의 줄 글 — 3줄까지, 넘치면 '+N건 더'/'접기' */
-  const renderLines = (member: User, dates: string[], key: string) => {
+  const renderLines = (member: User, dates: string[], key: string, skip?: Set<string>) => {
     const isMe = member.id === actor.id;
-    const rows = dates.flatMap((date) => cellOf(member.id, date).entries.map((entry) => ({ date, entry })));
+    // skip — 여러 칸에 걸쳐 한 줄로 따로 그리는 일정(출장 등)은 칸 안에서 빼고
+    const rows = dates.flatMap((date) => cellOf(member.id, date).entries.filter((entry) => !skip?.has(entry.key)).map((entry) => ({ date, entry })));
     const memo = dates.length === 1 ? cellOf(member.id, dates[0]).memo : null;
     const showAll = expanded.has(key);
     const shown = showAll ? rows : rows.slice(0, LINES_PER_CELL);
@@ -276,6 +290,12 @@ export function WorkPlanTeamWeekTable({
     const isSelected = selected?.userId === member.id && dates.includes(selected.date) && selectedRow === rowKey;
     const canAdd = isMe && !!onCreate && !onPaste;
     const droppable = isMe && dragged !== null && dates.length === 1;
+    // 여러 날 출장·휴가 — 시작 칸에서 한 줄로 길게 그리고, 걸친 칸은 그만큼 위를 비운다
+    const col = dates.length > 1 ? 5 : weekDates.indexOf(date);
+    const spans = weekSpans(spanCols, (d) => cellOf(member.id, d).entries);
+    const covering = spans.filter((sp) => sp.start <= col && col <= sp.end);
+    const lanes = covering.length ? Math.max(...covering.map((sp) => sp.lane)) + 1 : 0;
+    const starting = spans.filter((sp) => sp.start === col);
     return (
       <td
         key={key}
@@ -318,7 +338,25 @@ export function WorkPlanTeamWeekTable({
           isSelected ? 'outline outline-1 -outline-offset-1 outline-sky-400/70' : ''
         } ${droppable && dropDate === date ? 'outline outline-2 -outline-offset-2 outline-teal' : ''}`}
       >
-        <div className={`min-h-[22px] ${canAdd ? 'pr-5' : ''}`}>{renderLines(member, dates, key)}</div>
+        {lanes > 0 && <div style={{ height: lanes * SPAN_LANE }} />}
+        {starting.map((sp) => {
+          const days = Math.min(sp.end, 4) - sp.start + 1;
+          return (
+            <div
+              key={sp.key}
+              className={`absolute z-[1] rounded-r ${SPAN_FILL[lineToneOf(sp.entry)]}`}
+              style={{
+                top: 4 + sp.lane * SPAN_LANE,
+                left: 6,
+                width: `calc(${days} * 100% + ${days - 1}px ${sp.end === 5 ? '+ 54px' : ''} - 12px)`,
+              }}
+            >
+              {/* 여러 날이라 종일 표시는 빼고 제목만. 걸친 칸의 + 는 마우스를 올릴 때만 */}
+              <EntryLine entry={sp.entry} hideTime />
+            </div>
+          );
+        })}
+        <div className={`min-h-[22px] ${canAdd ? 'pr-5' : ''}`}>{renderLines(member, dates, key, new Set(spans.map((sp) => sp.key)))}</div>
         {canAdd && (
           <button
             type="button"
@@ -328,7 +366,7 @@ export function WorkPlanTeamWeekTable({
               e.stopPropagation();
               onCreate!(date, member);
             }}
-            className="absolute right-1 top-1 grid h-[18px] w-[18px] place-items-center rounded text-ink3 opacity-50 transition-opacity hover:text-ink2 hover:opacity-100 group-hover/cell:opacity-80"
+            className={`absolute right-1 top-1 z-[2] grid h-[18px] w-[18px] place-items-center rounded text-ink3 transition-opacity hover:text-ink2 hover:opacity-100 group-hover/cell:opacity-80 ${lanes > 0 ? 'opacity-0' : 'opacity-50'}`}
           >
             <Plus size={13} strokeWidth={2.5} />
           </button>
