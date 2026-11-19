@@ -5,7 +5,7 @@ import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility
 import type { User } from '@/domain/user/schema';
 import { outsideKindLabel } from '@/domain/outsideWork/schema';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
-import { DAY_END, durationLabel, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
+import { DAY_END, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { useOutsideSchedulesOf } from '@/features/outsideWork/useOutsideWorks';
@@ -425,6 +425,9 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   const showTimes = isMeeting || !state.allDay;
   // 업무만 — 종료 미정(시작만)
   const openEnd = isItem && state.openEnd;
+  // 시간 정하기 상태 — 업무 종일은 근무시간 전체를 차지하는 일(시각이 출근~퇴근과 같으면)
+  const workDay = isItem && !state.allDay && !openEnd && range?.start === work.start && range?.end === work.end;
+  const timeMode: 'time' | 'work' | 'none' = state.allDay ? (isItem ? 'none' : 'work') : workDay ? 'work' : 'time';
 
   // 시각 = 입력 + 10분 간격 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
   const onStart = (start: number) => {
@@ -444,7 +447,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   };
   const startOptions = startTimeOptions(range?.start ?? null).map((minute) => ({ minute, label: toHHmm(minute) }));
   const endOptions = range
-    ? [...(isItem ? [{ minute: OPEN_END, label: '미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
+    ? [...(isItem ? [{ minute: OPEN_END, label: '끝 미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
     : [];
   const dates = (
     <>
@@ -472,7 +475,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       )}
     </>
   );
-  const times = showTimes && (
+  const times = showTimes && timeMode === 'time' && (
     <>
       <TimeCombo
         aria-label="시작 시각"
@@ -499,37 +502,55 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         touch={stacked}
         onChange={onEnd}
       />
-      {range && range.end > range.start && !openEnd && (
-        <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
-      )}
     </>
   );
-  const allDayToggle = !isMeeting && (
-    <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
-      <input
-        type="checkbox"
-        className="accent-teal"
-        checked={state.allDay}
-        disabled={readOnly}
-        onChange={(e) => form.setAllDay(e.target.checked)}
-      />
-      {/* 업무는 시각 없음 = 시간을 모르는 일(날짜만) — 외근·출장의 종일은 근태와 이어져 그대로 */}
-      {isItem ? '시간 미정' : '종일'}
-    </label>
+  // 시간 정하기 — 한 줄 선택(상단 보기 전환과 같은 모양). 셋은 동시에 고를 수 없다
+  //  업무: 시간 지정 / 종일(근무시간 전체, 근태 정책 출근~퇴근) / 미정(날짜만)
+  //  외근·출장: 시간 지정 / 종일(근태와 이어지는 종일). 회의는 시간이 꼭 있어 없음
+  const chooseMode = (mode: 'time' | 'work' | 'none') => {
+    if (readOnly || mode === timeMode) return;
+    if (mode === 'none' || (!isItem && mode === 'work')) {
+      form.setAllDay(true);
+      return;
+    }
+    if (state.allDay) form.setAllDay(false);
+    if (mode === 'work') {
+      form.setRange({ start: work.start, end: work.end });
+      return;
+    }
+    // 시간 지정으로 — 남아 있던 시각이 쓸 만하면 그대로, 아니면(없거나 근무시간 전체) 09:00부터 기본 길이
+    const keep = range && !(range.start === work.start && range.end === work.end) && range.end > range.start;
+    form.setRange(keep ? range : { start: 9 * 60, end: Math.min(9 * 60 + DEFAULT_LENGTH, DAY_END) });
+  };
+  const modeOptions: { id: 'time' | 'work' | 'none'; label: string }[] = isMeeting
+    ? []
+    : isItem
+      ? [{ id: 'time', label: '시간 지정' }, ...(work.end > work.start ? [{ id: 'work' as const, label: '종일' }] : []), { id: 'none', label: '미정' }]
+      : [{ id: 'time', label: '시간 지정' }, { id: 'work', label: '종일' }];
+  const modeSwitch = modeOptions.length > 0 && (
+    <div className="inline-flex rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="시간">
+      {modeOptions.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={timeMode === o.id}
+          disabled={readOnly}
+          onClick={() => chooseMode(o.id)}
+          className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors disabled:cursor-default ${
+            timeMode === o.id ? 'bg-panel text-ink shadow-sm' : 'text-ink3 hover:text-ink'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
-  // 업무만 — 종일 = 회사 업무시간(근태 정책 출근~퇴근) 전체를 차지하는 일
-  const workDay = !state.allDay && !openEnd && range?.start === work.start && range?.end === work.end;
-  const workDayChip = isItem && !readOnly && work.end > work.start && (
-    <button
-      type="button"
-      aria-pressed={workDay}
-      onClick={() => form.setRange({ start: work.start, end: work.end })}
-      className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
-        workDay ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-      }`}
-    >
-      근무시간 전체 {policy.workStartTime}~{policy.workEndTime}
-    </button>
+  // 업무 종일 — 시각 칸 대신 근무시간만 옅게
+  const workLabel = isItem && timeMode === 'work' && (
+    <span className="text-[12px] font-medium tabular-nums text-ink3">
+      {policy.workStartTime}~{policy.workEndTime}
+    </span>
   );
 
   if (stacked) {
@@ -537,10 +558,9 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           {dates}
-          {workDayChip}
-          {allDayToggle}
+          {modeSwitch}
         </div>
-        {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
+        {(times || workLabel) && <div className="flex flex-wrap items-center gap-1.5">{times}{workLabel}</div>}
       </div>
     );
   }
@@ -548,9 +568,9 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         {dates}
+        {modeSwitch}
         {times}
-        {workDayChip}
-        {allDayToggle}
+        {workLabel}
       </div>
     </div>
   );
