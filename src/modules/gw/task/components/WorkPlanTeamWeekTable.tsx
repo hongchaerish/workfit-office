@@ -109,6 +109,17 @@ export function WorkPlanTeamWeekTable({
   // 접은 부서 — 처음엔 모두 펼친다(모든 사람이 보이게)
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
   const isOpen = (key: string) => forceOpen || !closed.has(key);
+  // 줄무늬는 부서마다 새로 세지 않고 표 전체 줄 순서로 — 부서를 넘어가도 번갈아 이어진다
+  const rowStart = new Map<string, number>();
+  {
+    let n = 0;
+    for (const g of groups) {
+      rowStart.set(g.key, n);
+      n += !isOpen(g.key) ? 1 : g.members.length;
+    }
+  }
+  /** 마우스 옆 안내 — 누구의 며칠인지만(글자 최소) */
+  const [hover, setHover] = useState<{ name: string; date: string; x: number; y: number } | null>(null);
   const toggle = (key: string) =>
     setClosed((prev) => {
       const next = new Set(prev);
@@ -268,6 +279,12 @@ export function WorkPlanTeamWeekTable({
     return (
       <td
         key={key}
+        onMouseMove={(e) => {
+          // body 글자 배율(zoom) — fixed 좌표도 배율로 나눈다
+          const z = parseFloat(getComputedStyle(document.body).zoom) || 1;
+          setHover({ name: displayName(member), date, x: e.clientX / z, y: e.clientY / z });
+        }}
+        onMouseLeave={() => setHover(null)}
         onClick={(e) => {
           // 붙여넣기 중이면 내 칸에 붙여넣기(토·일 칸은 토요일), 내 빈 칸은 바로 새 일정, 나머지는 칸 옆 상세
           if (isMe && onPaste) onPaste(date);
@@ -516,7 +533,7 @@ export function WorkPlanTeamWeekTable({
                   {group.members.map((member, idx) =>
                     personRow(member, {
                       key: `${group.key}-${member.id}`,
-                      zebra: idx % 2 === 1,
+                      zebra: ((rowStart.get(group.key) ?? 0) + idx) % 2 === 1,
                       lead: idx === 0 ? deptCell(group.members.length) : null,
                       first: idx === 0,
                       dim: !!pinned && member.id === actor.id,
@@ -529,6 +546,16 @@ export function WorkPlanTeamWeekTable({
         </table>
       </div>
 
+      {/* 마우스 옆 안내 — 누구·며칠. 상세 창이 열려 있으면 숨긴다 */}
+      {hover && !selected && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 rounded bg-ink/85 px-1.5 py-0.5 text-[11px] text-panel"
+          style={{ left: hover.x + 12, top: hover.y + 14 }}
+        >
+          {hover.name} · {Number(hover.date.slice(8))}일 {WEEKDAYS[weekDates.indexOf(hover.date)] ?? ''}
+        </div>
+      )}
     </div>
   );
 }

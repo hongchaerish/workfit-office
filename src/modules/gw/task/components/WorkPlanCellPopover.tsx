@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLunchRange } from '@/features/workPlan/useLunchRange';
+import { useUserPresence } from '@/features/userPresence/useUserPresence';
+import { PresenceDot } from '@/features/userPresence/PresenceIndicator';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
@@ -81,6 +83,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
   const isMine = member.id === actor.id;
   const isToday = date === today;
   const lunch = useLunchRange();
+  const presence = useUserPresence(member.id);
   const cell = cellOf(member.id, date);
   const entries = cell.entries;
   const status = dayStatusOf(entries);
@@ -179,8 +182,10 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
     >
       {/* 머리 */}
       <div className="flex items-start gap-2.5 border-b border-border px-3.5 py-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-100 text-[11.5px] font-bold text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+        <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sky-100 text-[11.5px] font-bold text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
           {initialsOf(member.name)}
+          {/* 현재 상태(접속·자리 비움 등) — 얼굴 오른쪽 아래 점 */}
+          <PresenceDot presence={presence?.presence} size="md" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -191,7 +196,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
           <div className="mt-0.5 text-[11.5px] text-ink3">
             {!isMine && member.dept ? `${member.dept} · ` : ''}
             {dayLabel(date)}
-            {isToday ? ' 오늘' : ''} · {entries.length}건
+            {isToday ? ' 오늘' : ''}
           </div>
         </div>
         <button type="button" onClick={onClose} aria-label="닫기" className="rounded p-1 text-ink3 hover:bg-panel-alt hover:text-ink">

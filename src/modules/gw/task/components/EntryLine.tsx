@@ -38,7 +38,8 @@ export function EntryLine({ entry, onOpen, className = '', wrap = false }: { ent
   const cls = `flex w-full min-w-0 ${wrap ? 'items-start' : 'items-center'} gap-1 border-l-2 pl-1.5 text-left text-[11.5px] leading-[1.45] ${LINE_TONE_CLASS[lineToneOf(entry)]} ${className}`;
   const body = (
     <>
-      <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{timeOf(entry)}</span>
+      {/* 시각이 없는 줄(연차 등)은 빈 시각 칸 없이 붙인다 */}
+      {timeOf(entry) && <span className="w-[2.8em] shrink-0 text-[10.5px] tabular-nums text-ink3">{timeOf(entry)}</span>}
       <span className={`min-w-0 flex-1 ${wrap ? 'line-clamp-2 [overflow-wrap:anywhere]' : 'truncate'} ${entry.item?.routine ? 'font-normal text-ink3' : ''}`}>{lineTitleOf(entry)}</span>
       {entry.roomStatus === 'PENDING' && <span className="shrink-0 text-[9px] text-amber">대기</span>}
       {entry.roomStatus === 'REJECTED' && <span className="shrink-0 text-[9px] text-danger">회의실 반려</span>}
