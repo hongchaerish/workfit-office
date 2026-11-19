@@ -8,17 +8,11 @@ import { resolveTag, selectableGeneralTags, type WorkPlanTag, ETC_TAG_ID } from 
 import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import type { EventForm } from './EventFields';
+import { savedNotice } from './eventFormMapping';
 import { entriesToBlocks, type TimeGridBlock } from './TimeGrid';
 import type { EventKind, EventTarget } from './useWorkPlanEventForm';
 
 /* 일정 창(PC 창·모바일 시트) 공용 — 주인 찾기, 시간표 블록, 저장·삭제·합류 버튼 동작. */
-
-export const SAVED_MESSAGE: Record<EventKind, string> = {
-  ITEM: '업무를 저장했습니다.',
-  MEETING: '회의를 저장했습니다.',
-  OUTSIDE: '외근·출장을 저장했습니다.',
-  TRIP: '외근·출장을 저장했습니다.',
-};
 
 export const isOutsideKind = (kind: EventKind) => kind === 'OUTSIDE' || kind === 'TRIP';
 
@@ -115,9 +109,9 @@ export function useEventActions(form: EventForm, onSaved: (message: string) => v
 
   /** after 를 주면(저장하고 이어서 적기) 닫는 대신 그것을 부른다 */
   const save = async (after?: () => void) => {
-    const kind = form.state.kind;
+    const { kind, date, endDate } = form.state;
     if (await form.save()) {
-      onSaved(SAVED_MESSAGE[kind]);
+      onSaved(savedNotice(kind, date, isOutsideKind(kind) ? endDate : ''));
       (after ?? onClose)();
     }
   };

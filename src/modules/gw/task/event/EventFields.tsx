@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, Phone, UserPlus, Users, X } from 'lucide-react';
+import { AlignLeft, ArrowRight, Car, ChevronDown, Clock, Eye, Flag, MapPin, Phone, Plane, UserPlus, Users, X } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
-import { outsideKindLabel } from '@/domain/outsideWork/schema';
+import { OUTSIDE_WORK_SUBTYPES, outsideKindLabel } from '@/domain/outsideWork/schema';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { DAY_END, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
@@ -13,7 +13,7 @@ import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Button } from '@/shared/ui/Button';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { TextField } from '@/shared/ui/form/TextField';
-import { outsideLengthLabel, recentDestinations } from './eventFormMapping';
+import { outsideLengthLabel, recentDestinations, tripEndDate, tripNightsOf } from './eventFormMapping';
 import { RoomPicker } from './RoomPicker';
 import { TimeCombo } from './TimeCombo';
 import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
@@ -206,8 +206,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * 외근·출장 입력 — 제목(저장은 목적 칸) → 출장지·외근지(행선지·기간) → 세부 정보(동행자·교통·연락처·메모).
- * 나눠 그릴 때(모바일) 'main' = 제목·장소·기간, 'more' = 종료일과 세부 정보.
+ * 외근·출장 입력 — 장소 → 목적(비워도 됨, 표에 보이는 글) → 기간 → 세부 정보(교통수단, 더보기: 동행자·연락처·메모, 출장 구분).
+ * 나눠 그릴 때(모바일) 'main' = 장소·목적·기간, 'more' = 종료일과 세부 정보.
  */
 function OutsideFields({
   form,
@@ -228,37 +228,37 @@ function OutsideFields({
   const endDate = state.endDate < state.date ? state.date : state.endDate;
   const length = outsideLengthLabel(kind, state.date, endDate);
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
+  // 동행자·연락처·메모 — 비어 있으면 접어 둔다(적힌 게 있거나 읽기 전용·모바일이면 펼침)
+  const hasExtra = state.companionIds.some((id) => id !== outsideSelfId && id !== actor.id) || !!state.contact.trim() || !!state.memo.trim();
+  const [extraOpen, setExtraOpen] = useState(false);
+  const showExtra = extraOpen || hasExtra || readOnly || split;
 
   return (
     <div className="flex flex-col gap-4">
       {main && (
-        <Row label="제목">
-          <input
-            aria-label="제목"
-            className={titleClass}
-            value={state.purpose}
-            maxLength={500}
-            placeholder="제목"
-            disabled={readOnly}
-            autoFocus={autoFocusTitle && !readOnly}
-            onChange={(e) => set('purpose', e.target.value)}
-          />
-        </Row>
-      )}
-
-      {main && (
-        <Section title={placeLabel}>
+        <div className="flex flex-col gap-3">
           <Row icon={<MapPin size={15} />} label={placeLabel}>
-            <DestinationField form={form} ownerId={ownerId} ownerName={ownerName} placeholder={placeLabel} />
+            <DestinationField form={form} ownerId={ownerId} ownerName={ownerName} placeholder={placeLabel} autoFocus={autoFocusTitle && !readOnly} />
+          </Row>
+          <Row icon={<Flag size={15} />} label="목적">
+            <TextField
+              aria-label="목적"
+              value={state.purpose}
+              maxLength={500}
+              placeholder="목적 (예: 고객사 미팅)"
+              disabled={readOnly}
+              className="w-full"
+              onChange={(e) => set('purpose', e.target.value)}
+            />
           </Row>
           <Row icon={<Clock size={15} />} label="날짜·시간">
             <TimeFields form={form} stacked={split} showEndDate={!split} />
-            {length && !split && <LengthBadge length={length} />}
+            {length && !split && kind === 'OUTSIDE' && <LengthBadge length={length} />}
           </Row>
           {!readOnly && (
             <OutsideOverlapWarning ownerId={ownerId} ownerName={ownerName} selfId={outsideSelfId} startDate={state.date} endDate={endDate} />
           )}
-        </Section>
+        </div>
       )}
 
       {more && (
@@ -271,6 +271,25 @@ function OutsideFields({
               </div>
             </Row>
           )}
+          <Row icon={<Car size={15} />} label="교통수단">
+            <TransportField form={form} />
+          </Row>
+          {kind === 'TRIP' && (
+            <Row icon={<Plane size={15} />} label="구분">
+              <SubTypeField form={form} />
+            </Row>
+          )}
+          {!showExtra && (
+            <button
+              type="button"
+              onClick={() => setExtraOpen(true)}
+              className="inline-flex w-fit items-center gap-1 pl-7 text-[11.5px] font-semibold text-ink3 hover:text-ink"
+            >
+              동행자·연락처·메모
+              <ChevronDown size={13} />
+            </button>
+          )}
+          {showExtra && (
           <Row icon={<Users size={15} />} label="동행자">
             <CompanionField
               form={form}
@@ -282,9 +301,8 @@ function OutsideFields({
               endDate={endDate}
             />
           </Row>
-          <Row icon={<Car size={15} />} label="교통수단">
-            <TransportField form={form} />
-          </Row>
+          )}
+          {showExtra && (
           <Row icon={<Phone size={15} />} label="연락처">
             <TextField
               aria-label="연락처"
@@ -296,6 +314,8 @@ function OutsideFields({
               onChange={(e) => set('contact', e.target.value)}
             />
           </Row>
+          )}
+          {showExtra && (
           <Row icon={<AlignLeft size={15} />} label="메모">
             <textarea
               aria-label="메모"
@@ -308,6 +328,7 @@ function OutsideFields({
               onChange={(e) => set('memo', e.target.value)}
             />
           </Row>
+          )}
         </Section>
       )}
     </div>
@@ -319,7 +340,19 @@ function LengthBadge({ length }: { length: string }) {
 }
 
 /** 행선지 — 비어 있으면 일정 주인의 지난 행선지를 눌러 채운다 */
-function DestinationField({ form, ownerId, ownerName, placeholder }: { form: EventForm; ownerId: string; ownerName: string; placeholder: string }) {
+function DestinationField({
+  form,
+  ownerId,
+  ownerName,
+  placeholder,
+  autoFocus = false,
+}: {
+  form: EventForm;
+  ownerId: string;
+  ownerName: string;
+  placeholder: string;
+  autoFocus?: boolean;
+}) {
   const { state, set, readOnly } = form;
   const schedules = useOutsideSchedulesOf(ownerId, ownerName);
   const recent = useMemo(() => recentDestinations(schedules, RECENT_DESTINATION_LIMIT), [schedules]);
@@ -333,6 +366,7 @@ function DestinationField({ form, ownerId, ownerName, placeholder }: { form: Eve
         maxLength={200}
         placeholder={placeholder}
         disabled={readOnly}
+        autoFocus={autoFocus}
         className="w-full"
         onChange={(e) => set('destination', e.target.value)}
       />
@@ -355,42 +389,146 @@ function DestinationField({ form, ownerId, ownerName, placeholder }: { form: Eve
   );
 }
 
-/** 교통수단 — 자주 쓰는 것은 눌러 고르고(다시 누르면 해제), 그 밖은 직접 입력 */
+/** 교통수단 — 자주 쓰는 것은 눌러 고르고(다시 누르면 해제), 그 밖은 '직접'을 눌러 적는다 */
 function TransportField({ form }: { form: EventForm }) {
   const { state, set, readOnly } = form;
+  const value = state.transportation;
+  const isPreset = (TRANSPORT_PRESETS as readonly string[]).includes(value);
+  const [typing, setTyping] = useState(false);
+  const custom = typing || (!!value.trim() && !isPreset);
+  if (readOnly) return <span className="pt-1 text-[13px] text-ink">{value || '—'}</span>;
+  const chip = (active: boolean) =>
+    `rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+      active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+    }`;
   return (
     <div className="flex flex-col gap-1.5">
-      {!readOnly && (
-        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="교통수단 고르기">
-          {TRANSPORT_PRESETS.map((preset) => {
-            const active = state.transportation === preset;
-            return (
-              <button
-                key={preset}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => set('transportation', active ? '' : preset)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-                }`}
-              >
-                {preset}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="교통수단 고르기">
+        {TRANSPORT_PRESETS.map((preset) => {
+          const active = !custom && value === preset;
+          return (
+            <button
+              key={preset}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => {
+                setTyping(false);
+                set('transportation', active ? '' : preset);
+              }}
+              className={chip(active)}
+            >
+              {preset}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={custom}
+          onClick={() => {
+            if (custom) {
+              setTyping(false);
+              set('transportation', '');
+            } else {
+              setTyping(true);
+              if (isPreset) set('transportation', '');
+            }
+          }}
+          className={chip(custom)}
+        >
+          직접
+        </button>
+      </div>
+      {custom && (
+        <TextField
+          aria-label="교통수단"
+          value={value}
+          maxLength={50}
+          placeholder="교통수단"
+          autoFocus={typing}
+          className="w-full max-w-[240px]"
+          onChange={(e) => set('transportation', e.target.value)}
+        />
       )}
-      <TextField
-        aria-label="교통수단"
-        value={state.transportation}
-        maxLength={50}
-        placeholder={readOnly ? '' : '직접 입력'}
-        disabled={readOnly}
-        className="w-full max-w-[240px]"
-        onChange={(e) => set('transportation', e.target.value)}
-      />
     </div>
+  );
+}
+
+/** 출장 세부 구분(국내·해외) — 대부분 국내라 세부 정보 쪽에 둔다 */
+function SubTypeField({ form }: { form: EventForm }) {
+  const { state, readOnly } = form;
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-0.5" role="radiogroup" aria-label="세부 구분">
+      {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
+        const active = state.subType === subType;
+        return (
+          <button
+            key={subType}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={readOnly}
+            onClick={() => form.setSubType(subType)}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:cursor-default ${
+              active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+            }`}
+          >
+            {subType}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 출장 기간 — [당일 | 1박 2일 | 2박 3일 | 직접]. 직접일 때만 끝날짜 칸 */
+const TRIP_NIGHTS = [0, 1, 2] as const;
+function TripLength({ form }: { form: EventForm }) {
+  const { state, set, readOnly } = form;
+  const nights = tripNightsOf(state.date, state.endDate);
+  const [typing, setTyping] = useState(false);
+  const custom = typing || nights > 2;
+  const length = outsideLengthLabel('TRIP', state.date, state.endDate < state.date ? state.date : state.endDate);
+  const options: { id: string; label: string; active: boolean; pick: () => void }[] = [
+    ...TRIP_NIGHTS.map((n) => ({
+      id: String(n),
+      label: n === 0 ? '당일' : `${n}박 ${n + 1}일`,
+      active: !custom && nights === n,
+      pick: () => {
+        setTyping(false);
+        set('endDate', tripEndDate(state.date, n));
+      },
+    })),
+    { id: 'custom', label: '직접', active: custom, pick: () => setTyping(true) },
+  ];
+  return (
+    <>
+      <div className="inline-flex rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="기간">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={o.active}
+            disabled={readOnly}
+            onClick={o.pick}
+            className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors disabled:cursor-default ${
+              o.active ? 'bg-panel text-ink shadow-sm' : 'text-ink3 hover:text-ink'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {custom && (
+        <>
+          <span className="text-ink3">~</span>
+          <EndDateField form={form} />
+          {length && <span className="text-[11.5px] font-semibold text-teal">{length}</span>}
+        </>
+      )}
+    </>
   );
 }
 
@@ -459,7 +597,8 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         className="w-[140px]"
         onChange={(e) => form.setDate(e.target.value)}
       />
-      {isOutside && showEndDate && (
+      {state.kind === 'TRIP' && showEndDate && <TripLength form={form} />}
+      {state.kind === 'OUTSIDE' && showEndDate && (
         <>
           <span className="text-ink3">~</span>
           <TextField

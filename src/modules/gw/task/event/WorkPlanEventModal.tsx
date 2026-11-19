@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, ChevronDown, Repeat, Settings, UserRound } from 'lucide-react';
 import { WorkPlanConfigModal } from '../components/WorkPlanConfigModal';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
-import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
@@ -182,29 +181,6 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
           />
         )}
 
-        {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
-        {state.kind === 'TRIP' && (
-          <div className="flex flex-wrap items-center gap-1 border-b border-border px-5 py-2" role="radiogroup" aria-label="세부 구분">
-            {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
-              const active = state.subType === subType;
-              return (
-                <button
-                  key={subType}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  disabled={readOnly}
-                  onClick={() => form.setSubType(subType)}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed ${
-                    active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-                  }`}
-                >
-                  {subType}
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         <div className="grid grid-cols-[minmax(0,1fr)_240px]">
           {/* 시간표 높이에 맞추고 넘치는 입력은 왼쪽 안에서 스크롤 */}

@@ -13,6 +13,9 @@ import {
   applyRangeChange,
   applySubType,
   outsideLengthLabel,
+  savedNotice,
+  tripEndDate,
+  tripNightsOf,
   recentDestinations,
   roomDayBlocks,
   initialCreateState,
@@ -354,12 +357,12 @@ test('시간 바꾸기 — 외근은 세부 구분을 시간 외근으로 맞춘
   }
 });
 
-test('날짜 바꾸기 — 종료일이 앞서면 같이 옮기고, 뒤면 그대로', () => {
+test('날짜 바꾸기 — 종료일이 앞서면 같이 옮기고, 여러 날이면 기간을 지킨다', () => {
   const later = applyDateChange(createState({ date: D, endDate: D }), '2026-10-23');
   assert.equal(later.date, '2026-10-23');
   assert.equal(later.endDate, '2026-10-23');
   const kept = applyDateChange(createState({ date: D, endDate: '2026-10-25' }), '2026-10-22');
-  assert.equal(kept.endDate, '2026-10-25');
+  assert.equal(kept.endDate, '2026-10-26');
 });
 
 test('날짜 바꾸기 — 빈 값이면 그대로', () => {
@@ -487,4 +490,28 @@ test('새 일정 — 처음 종류·참석자를 주면(상세 창의 회의 잡
   assert.equal(s.kind, 'MEETING');
   assert.deepEqual(s.attendeeIds, ['U2']);
   assert.equal(s.allDay, false);
+});
+
+test('날짜 바꾸기 — 여러 날 일정은 시작일을 옮겨도 기간을 지킨다', () => {
+  const moved = applyDateChange(createState({ kind: 'TRIP', date: '2026-11-17', endDate: '2026-11-18' }), '2026-11-20');
+  assert.equal(moved.date, '2026-11-20');
+  assert.equal(moved.endDate, '2026-11-21');
+  const monthEnd = applyDateChange(createState({ kind: 'TRIP', date: '2026-11-17', endDate: '2026-11-19' }), '2026-11-30');
+  assert.equal(monthEnd.endDate, '2026-12-02');
+});
+
+test('출장 기간 — 박 수와 끝날짜', () => {
+  assert.equal(tripNightsOf('2026-11-17', '2026-11-17'), 0);
+  assert.equal(tripNightsOf('2026-11-17', '2026-11-19'), 2);
+  assert.equal(tripNightsOf('2026-11-17', '2026-11-16'), 0);
+  assert.equal(tripEndDate('2026-11-17', 1), '2026-11-18');
+  assert.equal(tripEndDate('2026-11-30', 2), '2026-12-02');
+});
+
+test('저장 알림 — 날짜와 종류를 넣는다', () => {
+  assert.equal(savedNotice('OUTSIDE', '2026-11-16', '2026-11-16'), '11월 16일 외근을 저장했어요');
+  assert.equal(savedNotice('TRIP', '2026-11-17', '2026-11-18'), '11월 17~18일 출장을 저장했어요');
+  assert.equal(savedNotice('TRIP', '2026-11-30', '2026-12-01'), '11월 30일~12월 1일 출장을 저장했어요');
+  assert.equal(savedNotice('ITEM', '2026-11-16', '2026-11-16'), '11월 16일 업무를 저장했어요');
+  assert.equal(savedNotice('MEETING', '2026-11-16', ''), '11월 16일 회의를 저장했어요');
 });
