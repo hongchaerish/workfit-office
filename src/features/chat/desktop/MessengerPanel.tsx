@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } fr
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import type { MouseEvent, PointerEvent, ReactNode, WheelEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X, Pencil, Download } from 'lucide-react';
+import { Search, X, Pencil, Download, MoreVertical } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useChatRooms, useUnreadCounts, useCreateRoom, useInviteMembers, useLeaveRoom, useDeleteRoom, useUpdateRoomName, useKickMember, CHAT_ROOMS_KEY, CHAT_UNREAD_KEY } from '@/features/chat/useChatRooms';
@@ -525,14 +525,24 @@ function MessengerThread({
   const filesInRoom = useMemo(() => roomFilesOf(fileMessages ?? messages), [fileMessages, messages]);
 
   const [showMemberList, setShowMemberList] = useState(false);
+  /** 참여자 목록에서 케밥 메뉴가 열린 사람, 내보내기 확인 단계 */
+  const [memberMenu, setMemberMenu] = useState<string | null>(null);
+  const [confirmKick, setConfirmKick] = useState(false);
+  const closeMemberList = () => {
+    setShowMemberList(false);
+    setMemberMenu(null);
+    setConfirmKick(false);
+  };
   const kick = useKickMember();
   /** 단체방·부서방에서 내보내기 — 참여자 누구나. 방 안 시스템 메시지로 기록된다. */
   const canKick = room.type === 'group' || room.type === 'dept';
   const onKick = async (targetId: string, targetName: string) => {
     if (kick.isPending) return;
-    if (!window.confirm(`${targetName}님을 이 대화방에서 내보내시겠어요?\n대화 내용은 보존됩니다.`)) return;
+    // 확인은 케밥 메뉴 안에서 한 번 더 받는다
     try {
       await kick.mutateAsync({ roomId: room.id, targetId, targetName, kickerName: meName });
+      setMemberMenu(null);
+      setConfirmKick(false);
     } catch {
       window.alert('내보내는 중 오류가 발생했습니다.');
     }
@@ -722,7 +732,89 @@ function MessengerThread({
         const otherPresence = otherId ? presenceMap[otherId] : null;
 
         return (
-          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
+          <div className="relative flex shrink-0 items-center gap-2.5 border-b border-border bg-panel px-2.5 py-2.5">
+            {/* 참여자 목록 — 머리 아래에 가볍게 뜨는 창. 바깥을 누르면 닫힌다 */}
+            {showMemberList && !isDirect && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={closeMemberList} />
+                <div className="absolute left-2 right-2 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-panel p-2 shadow-lg">
+                  <div className="px-1.5 pb-1.5 text-[11px] font-bold text-ink2">참여자 {memberDetails.length}</div>
+                  {memberDetails.map((m) => {
+                    const p = presenceMap[m.id];
+                    const menuOpenHere = memberMenu === m.id;
+                    return (
+                      <div key={m.id} className="relative flex items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-[11.5px] hover:bg-panel-alt/60">
+                        <button
+                          type="button"
+                          disabled={!openProfile}
+                          onClick={(e) => openProfile?.(m.id, e.currentTarget, m.name)}
+                          title={`${m.name} 프로필`}
+                          className="flex min-w-0 cursor-pointer items-center gap-2 text-left disabled:cursor-default"
+                        >
+                          <div className="relative shrink-0">
+                            <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="relative overflow-hidden grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
+                              {m.name?.[0] ?? '?'}
+                              <ChatAvatarPhoto userId={m.id} />
+                            </span>
+                            <PresenceDot presence={p} size="sm" />
+                          </div>
+                          <span className="font-semibold text-ink truncate">{m.name}</span>
+                          <BirthdayMark userId={m.id} />
+                          <span className="truncate text-[10px] text-ink3">{m.position ?? ''}{m.dept ? ` · ${m.dept}` : ''}</span>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {p && <PresenceBadge presence={p} showMessage={false} size="xs" />}
+                          {canKick && m.id !== me && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMemberMenu(menuOpenHere ? null : m.id);
+                                setConfirmKick(false);
+                              }}
+                              aria-label={`${m.name} 더보기`}
+                              className="grid h-6 w-6 place-items-center rounded-md text-ink3 hover:bg-panel-alt hover:text-ink"
+                            >
+                              <MoreVertical size={14} />
+                            </button>
+                          )}
+                        </div>
+                        {/* 케밥 메뉴 — 내보내기는 한 번 더 확인 */}
+                        {menuOpenHere && (
+                          <div className="absolute right-1 top-full z-10 mt-0.5 w-44 rounded-lg border border-border bg-panel p-1 shadow-lg">
+                            {!confirmKick ? (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmKick(true)}
+                                className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-danger hover:bg-panel-alt"
+                              >
+                                내보내기
+                              </button>
+                            ) : (
+                              <div className="px-2 py-1.5">
+                                <div className="text-[11.5px] text-ink">{m.name}님을 내보낼까요?</div>
+                                <div className="mt-1.5 flex justify-end gap-1">
+                                  <button type="button" onClick={() => setMemberMenu(null)} className="rounded-md px-2 py-1 text-[11px] text-ink2 hover:bg-panel-alt">
+                                    취소
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={kick.isPending}
+                                    onClick={() => void onKick(m.id, m.name)}
+                                    className="rounded-md bg-danger px-2 py-1 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    내보내기
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <button onClick={onBack} title="목록" className="grid h-7 w-7 place-items-center rounded-lg text-[16px] text-ink2 hover:bg-panel-alt">←</button>
             <div className="relative shrink-0">
               {/* 방 사진 — 단체방은 참여자 목록 열고 닫기, 1:1은 상대 명함 */}
@@ -817,64 +909,6 @@ function MessengerThread({
           </div>
         );
       })()}
-
-      {showMemberList && room.type !== 'direct' && (
-        <div className="shrink-0 border-b border-[#d0e6f7] bg-[#f2f8fc] px-4 py-3 max-h-48 overflow-y-auto">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-ink2">대화방 참여자 ({memberDetails.length})</span>
-            <button
-              onClick={() => setShowMemberList(false)}
-              className="text-[10px] text-ink3 hover:text-ink hover:underline"
-            >
-              닫기
-            </button>
-          </div>
-          <div className="space-y-2">
-            {memberDetails.map((m) => {
-              const p = presenceMap[m.id];
-              return (
-                <div key={m.id} className="flex items-center justify-between gap-2 text-[11.5px]">
-                  <button
-                    type="button"
-                    disabled={!openProfile}
-                    onClick={(e) => openProfile?.(m.id, e.currentTarget, m.name)}
-                    title={`${m.name} 프로필`}
-                    className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md text-left hover:bg-black/5 disabled:cursor-default"
-                  >
-                    <div className="relative shrink-0">
-                      <span style={{ backgroundColor: getAvatarStyle(m.id).bg, color: getAvatarStyle(m.id).text }} className="relative overflow-hidden grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold">
-                        {m.name?.[0] ?? '?'}
-                        <ChatAvatarPhoto userId={m.id} />
-                      </span>
-                      <PresenceDot presence={p} size="sm" />
-                    </div>
-                    <span className="font-semibold text-ink truncate">{m.name}</span>
-                    <BirthdayMark userId={m.id} />
-                    <span className="text-[10px] text-ink3">{m.position ?? ''}</span>
-                    <span className="text-[10px] text-ink3">/ {m.dept ?? ''}</span>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {p && (
-                      <PresenceBadge presence={p} showMessage={true} size="xs" />
-                    )}
-                    {canKick && m.id !== me && (
-                      <button
-                        type="button"
-                        onClick={() => onKick(m.id, m.name)}
-                        disabled={kick.isPending}
-                        title={`${m.name}님 내보내기`}
-                        className="cursor-pointer rounded-md border border-danger/30 px-1.5 py-0.5 text-[10px] font-bold text-danger hover:bg-danger/10 disabled:cursor-default disabled:opacity-50"
-                      >
-                        내보내기
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {showSearch && (
         <div className="shrink-0 border-b border-border bg-panel px-4 py-2 flex items-center gap-2">
