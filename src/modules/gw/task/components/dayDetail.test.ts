@@ -92,3 +92,8 @@ test('escClosesPopover: 그냥 Esc 는 닫고, 이미 처리했거나 글 쓰는
   assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'INPUT' } }), false);
   assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'DIV', isContentEditable: true } }), false);
 });
+
+test('escClosesPopover: 위에 상세 창(모달)이 떠 있으면 그 창만 닫히고 그날 상세는 남는다', () => {
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'DIV' }, modalOpen: true }), false);
+  assert.equal(escClosesPopover({ key: 'Escape', defaultPrevented: false, target: { tagName: 'DIV' }, modalOpen: false }), true);
+});

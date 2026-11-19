@@ -109,8 +109,14 @@ export function recentItemTitles(entriesNewestFirst: DayEntry[], limit = 5): str
 }
 
 /** 상세 창을 Esc 로 닫을까 — 메모·입력칸이 먼저 처리한 Esc(취소)나 글 쓰는 중의 Esc 는 상세 창까지 닫지 않는다 */
-export function escClosesPopover(e: { key: string; defaultPrevented: boolean; target: { tagName?: string; isContentEditable?: boolean } | null }): boolean {
-  if (e.key !== 'Escape' || e.defaultPrevented) return false;
+export function escClosesPopover(e: {
+  key: string;
+  defaultPrevented: boolean;
+  target: { tagName?: string; isContentEditable?: boolean } | null;
+  /** 위에 모달(외근 상세 등)이 떠 있음 — 그 Esc 는 모달 몫 */
+  modalOpen?: boolean;
+}): boolean {
+  if (e.key !== 'Escape' || e.defaultPrevented || e.modalOpen) return false;
   const t = e.target;
   if (!t) return true;
   if (t.isContentEditable) return false;

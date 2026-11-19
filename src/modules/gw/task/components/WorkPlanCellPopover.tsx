@@ -126,19 +126,21 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
   }, [anchor, onClose]);
 
   // 바깥 누르기·Esc 로 닫기 — 스크롤로는 닫지 않는다
+  // 위에 띄운 상세 창(모달)을 누르거나 Esc 로 닫을 때는 그 창만 닫히고, 그날 상세로 돌아온다
   useEffect(() => {
+    const modalOpen = () => !!document.querySelector('[aria-modal="true"]');
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (ref.current?.contains(t) || anchor.contains(t)) return;
+      if (ref.current?.contains(t) || anchor.contains(t) || modalOpen()) return;
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (escClosesPopover({ key: e.key, defaultPrevented: e.defaultPrevented, target: e.target as HTMLElement | null })) onClose();
+      if (escClosesPopover({ key: e.key, defaultPrevented: e.defaultPrevented, target: e.target as HTMLElement | null, modalOpen: modalOpen() })) onClose();
     };
-    document.addEventListener('mousedown', onDown);
+    document.addEventListener('mousedown', onDown, true); // capture — 모달 배경을 누르면 모달이 먼저 사라지므로 그 전에 검사
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('mousedown', onDown, true);
       document.removeEventListener('keydown', onKey);
     };
   }, [anchor, onClose]);
@@ -241,10 +243,8 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
             const canCopy = isMine && !!onCopyItem && entry.source === 'ITEM' && entry.item?.ownerUserId === actor.id;
             // 남의 특수한 일정(회의·외근·출장·결재·캘린더)은 줄을 누르면 바로 상세, 일반 업무는 열지 않는다([[entryRouting]])
             const openable = !isMine && !leave && entry.source !== 'ITEM';
-            const open = () => {
-              onClose();
-              onOpenEntry(entry);
-            };
+            // 그날 상세는 닫지 않는다 — 위에 뜬 상세를 닫으면 그날 상세로 돌아온다
+            const open = () => onOpenEntry(entry);
             return (
               <li
                 key={entry.key}

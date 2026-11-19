@@ -569,8 +569,8 @@ export default function WorkPlanScreen() {
         </div>
       )}
 
-      {/* 저장 알림 — 화면 아래 가운데 토스트(화면을 밀지 않는다) */}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4">
+      {/* 저장 알림 — 왼쪽 아래 토스트(화면을 밀지 않는다). 가운데에 두면 그날 상세 창 아래 버튼을 가린다 — 왼쪽은 부서·이름 칸이라 상세 창이 열리지 않는다 */}
+      <div aria-live="polite" className="pointer-events-none fixed bottom-6 left-6 z-[60] flex max-w-[calc(100vw-3rem)] flex-col items-start gap-2">
         {clipboard && (
           <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-teal/40 bg-panel px-4 py-2 text-[12px] font-semibold text-ink shadow-lg">
             <span className="max-w-[22rem] truncate">"{clipboard.title}" 복사함 — 붙여넣을 {view === 'week' ? '날짜나 시간' : '내 칸'}을 누르세요</span>
@@ -580,8 +580,8 @@ export default function WorkPlanScreen() {
           </div>
         )}
         {notice && (
-          <div className="pointer-events-auto flex items-center gap-3 rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">
-            {notice.text}
+          <div className="pointer-events-auto flex max-w-[26rem] items-center gap-3 rounded-lg bg-ink px-4 py-2 text-[12px] font-semibold text-panel shadow-lg">
+            <span className="min-w-0 truncate">{notice.text}</span>
             {notice.undo && (
               <button
                 type="button"
@@ -590,7 +590,7 @@ export default function WorkPlanScreen() {
                   setNotice(null);
                   undo?.();
                 }}
-                className="text-sky-300 hover:text-sky-200"
+                className="shrink-0 text-sky-300 hover:text-sky-200"
               >
                 되돌리기
               </button>
