@@ -177,7 +177,7 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
       ref={ref}
       role="dialog"
       aria-label={`${member.name} ${dayLabel(date)} 일정`}
-      className="absolute z-[55] flex max-h-[70vh] flex-col rounded-[14px] border border-border bg-panel shadow-xl"
+      className="absolute z-[45] flex max-h-[70vh] flex-col rounded-[14px] border border-border bg-panel shadow-xl"
       style={{ width: WIDTH, left: pos?.left ?? -9999, top: pos?.top ?? 0 }}
     >
       {/* 머리 */}
