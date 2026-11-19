@@ -1,3 +1,4 @@
+import { CircleHelp, X } from 'lucide-react';
 import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
 import { useCreateWorkPlanItem, useRemoveWorkPlanItem, useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
@@ -181,6 +182,8 @@ export default function WorkPlanScreen() {
     setGuideOpen(false);
     writeStored(GUIDE_STORAGE_KEY, '1');
   };
+  /** 상단 바 오른쪽 ? — 언제든 도움말을 켜고 끈다 */
+  const toggleGuide = () => (guideOpen ? closeGuide() : setGuideOpen(true));
   const [searchKeyword, setSearchKeyword] = useState<string>('');
 
   const create = useCreateWorkPlan();
@@ -468,6 +471,19 @@ export default function WorkPlanScreen() {
     </div>
   );
 
+  const helpButton = (
+    <button
+      type="button"
+      onClick={toggleGuide}
+      aria-label={guideOpen ? '도움말 닫기' : '도움말'}
+      aria-pressed={guideOpen}
+      title={guideOpen ? '도움말 닫기' : '도움말'}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border text-ink3 transition-colors hover:text-ink ${guideOpen ? 'border-teal/50 bg-teal-soft/40 text-teal' : 'border-border bg-panel'}`}
+    >
+      <CircleHelp size={16} />
+    </button>
+  );
+
   // 부서 필터·검색 — 주간·월간 표 상단 고정 바에 놓인다
   const filters = (
     <>
@@ -503,6 +519,7 @@ export default function WorkPlanScreen() {
           </button>
         )}
       </div>
+      {helpButton}
     </>
   );
 
@@ -532,21 +549,23 @@ export default function WorkPlanScreen() {
         }
       />
 
-      {/* 첫 사용 안내 — 처음 한 번만, 닫으면 다시 뜨지 않는다 */}
+      {/* 사용 안내 — 처음 한 번 저절로, 그 뒤엔 상단 바 오른쪽 ? 로 켜고 끈다 */}
       {guideOpen && (
         <div role="complementary" aria-label="업무계획 사용법" className="fixed bottom-6 right-6 z-30 w-[300px] rounded-xl border border-border bg-panel p-4 shadow-xl">
-          <h3 className="mb-2 text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
-          <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
-            <li><b className="text-ink">칸</b>을 누르면 옆에 그날 일정 — 내 칸은 고치기·메모, 남의 칸은 빈 시간·회의 잡기·메시지</li>
-            <li><b className="text-ink">내 빈 칸</b>을 누르면 바로 새 일정</li>
-            <li><b className="text-ink">이름</b>을 누르면 그 사람의 한 주</li>
-            <li>새 업무의 <b className="text-ink">반복</b>으로 반복 업무를 한 번에</li>
-          </ul>
-          <div className="mt-3 flex justify-end">
-            <button type="button" onClick={closeGuide} className="rounded-lg bg-teal px-3 py-1.5 text-[12px] font-bold text-white">
-              알겠어요
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[13px] font-extrabold text-ink">업무계획 사용법</h3>
+            <button type="button" onClick={closeGuide} aria-label="도움말 닫기" className="rounded p-0.5 text-ink3 hover:text-ink">
+              <X size={14} />
             </button>
           </div>
+          <ul className="space-y-1.5 text-[12px] leading-relaxed text-ink2">
+            <li><b className="text-ink">칸</b> 누르기 — 그날 일정</li>
+            <li><b className="text-ink">내 칸 +</b> — 새 일정</li>
+            <li><b className="text-ink">이름</b> 누르기 — 그 사람의 한 주</li>
+            <li><b className="text-ink">끌어 놓기</b> — 이동, <b className="text-ink">Ctrl</b>+끌기 — 복사</li>
+            <li><b className="text-ink">복사</b> 후 내 칸 누르기 — 붙여넣기</li>
+            <li><span className="font-semibold text-orange-700 dark:text-orange-300">주황 이름</span> — 이번 주 미작성</li>
+          </ul>
         </div>
       )}
 
@@ -584,6 +603,7 @@ export default function WorkPlanScreen() {
       {view === 'week' && (
         <WorkPlanMyWeek
           viewSwitch={viewSwitch}
+          helpButton={helpButton}
           actor={actor}
           weekStart={weekStart}
           onWeekChange={setWeekStart}

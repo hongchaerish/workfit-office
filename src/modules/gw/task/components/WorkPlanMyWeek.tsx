@@ -48,6 +48,8 @@ export function mondayOf(date: string): string {
 interface WorkPlanMyWeekProps {
   /** 상단 바 맨 앞에 놓일 보기 전환 */
   viewSwitch?: ReactNode;
+  /** 상단 바 오른쪽 끝 — 도움말 ? */
+  helpButton?: ReactNode;
   actor: User;
   /** 보고 있는 주의 월요일 */
   weekStart: string;
@@ -69,7 +71,7 @@ interface WorkPlanMyWeekProps {
  * 빈 시간을 누르면 그 30분 칸으로 새 일정(끌어 옮기면 10분 단위), 블록을 누르면 상세.
  * 내 일반 업무는 끌어서 시간·요일을 옮긴다(길이는 그대로, 놓을 때 저장, 이번 주 안에서만).
  */
-export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem, onPaste }: WorkPlanMyWeekProps) {
+export function WorkPlanMyWeek({ viewSwitch, helpButton, actor, weekStart, onWeekChange, cellOf, onOpenEntry, onCreate, onMoveItem, onPaste }: WorkPlanMyWeekProps) {
   /** 위에 남는 주차·요일·종일 줄 */
   const stickyRef = useRef<HTMLDivElement>(null);
   /** 처음 보일 시각 표시 — 이 자리로 페이지를 스크롤한다 */
@@ -207,6 +209,7 @@ export function WorkPlanMyWeek({ viewSwitch, actor, weekStart, onWeekChange, cel
           {w ? `${w.month}월 ${w.week}주차` : ''}
           <span className="ml-2 text-[12px] font-semibold text-ink3">{sm}/{sd} ~ {em}/{ed}</span>
         </h2>
+        {helpButton && <div className="ml-auto">{helpButton}</div>}
       </div>
 
       {/* 요일 머리 */}
