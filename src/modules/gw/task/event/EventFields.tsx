@@ -21,8 +21,6 @@ import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
 export type EventForm = ReturnType<typeof useWorkPlanEventForm>;
 
 const DEFAULT_LENGTH = 60;
-/** 길이 버튼(분) */
-const LENGTH_PRESETS = [10, 20, 30, 60, 90, 120] as const;
 /** 종료 목록의 '미정' 값 */
 const OPEN_END = -1;
 
@@ -444,10 +442,6 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
     if (!range || end <= range.start) return;
     form.setRange({ start: range.start, end });
   };
-  const onLength = (length: number) => {
-    if (!range) return;
-    form.setRange({ start: range.start, end: Math.min(range.start + length, DAY_END) });
-  };
   const startOptions = startTimeOptions(range?.start ?? null).map((minute) => ({ minute, label: toHHmm(minute) }));
   const endOptions = range
     ? [...(isItem ? [{ minute: OPEN_END, label: '미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
@@ -510,40 +504,6 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       )}
     </>
   );
-  // 자주 쓰는 길이 — 누르면 시작 기준으로 끝을 정한다
-  const lengths = showTimes && range && !readOnly && (
-    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="길이">
-      {LENGTH_PRESETS.map((length) => {
-        const active = !openEnd && range.end - range.start === length;
-        return (
-          <button
-            key={length}
-            type="button"
-            aria-pressed={active}
-            disabled={range.start + length > DAY_END}
-            onClick={() => onLength(length)}
-            className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors disabled:opacity-40 ${
-              active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-            }`}
-          >
-            {durationLabel({ start: 0, end: length })}
-          </button>
-        );
-      })}
-      {isItem && (
-        <button
-          type="button"
-          aria-pressed={openEnd}
-          onClick={() => set('openEnd', true)}
-          className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
-            openEnd ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-          }`}
-        >
-          미정
-        </button>
-      )}
-    </div>
-  );
   const allDayToggle = !isMeeting && (
     <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
       <input
@@ -581,7 +541,6 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
           {allDayToggle}
         </div>
         {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
-        {lengths}
       </div>
     );
   }
@@ -593,7 +552,6 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         {workDayChip}
         {allDayToggle}
       </div>
-      {lengths}
     </div>
   );
 }
