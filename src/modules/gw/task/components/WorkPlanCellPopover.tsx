@@ -7,7 +7,7 @@ import { X } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlanItem } from '@/domain/workPlan/item';
 import type { DayCell, DayEntry, MemoPlanRef } from '@/domain/workPlan/dayEntries';
-import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
+import type { MinuteRange } from '@/domain/workPlan/timeGrid';
 import { WORK_DAY } from '@/domain/workPlan/freeSlots';
 import { CellMemo } from './CellMemo';
 import { LINE_TONE_CLASS, LINE_TONE_FILL, lineTitleOf } from './EntryLine';
@@ -312,24 +312,6 @@ export function WorkPlanCellPopover(props: WorkPlanCellPopoverProps) {
           >
             {entries.length === 0 ? '+ 이날 일정 적기' : '+ 이날 일정 추가'}
           </button>
-        )}
-
-        {free.length > 0 && onCreate && (
-          <div className="mt-3">
-            <div className="mb-1.5 text-[11px] text-ink3">비어 있는 시간 — 누르면 이 시간으로 회의를 잡아요</div>
-            <div className="flex flex-wrap gap-1">
-              {free.map((slot) => (
-                <button
-                  key={slot.start}
-                  type="button"
-                  onClick={() => meetingAt(slot)}
-                  className="rounded-md border border-sky-200 bg-sky-50/60 px-2 py-0.5 text-[11px] tabular-nums text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200"
-                >
-                  {toHHmm(slot.start)}–{toHHmm(slot.end)}
-                </button>
-              ))}
-            </div>
-          </div>
         )}
       </div>
 
