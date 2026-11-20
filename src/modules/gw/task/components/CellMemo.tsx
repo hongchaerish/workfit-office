@@ -87,8 +87,8 @@ export function CellMemo({
           : undefined
       }
       // 기본 높이(두 줄)는 늘 같고 글이 길면 늘어난다 — 옆 칸 때문에 행이 늘 때는 위 일정 칸이 늘어난다(shrink-0)
-      // 옅은 바탕으로 위 일정 칸과 구분한다
-      className={`-mx-1 mt-1.5 min-h-[2.5rem] shrink-0 rounded border-t border-dashed border-border bg-panel-alt/50 px-1 pt-1 ${
+      // 바탕 없이 위쪽 점선으로만 일정과 구분한다 — 바탕을 깔면 줄마다 같은 색이 되어 표의 얼룩무늬(줄 구분)가 흐려진다
+      className={`-mx-1 mt-1.5 min-h-[2.5rem] shrink-0 rounded-b border-t border-dashed border-border px-1 pt-1 ${
         onSave && draft === null ? 'cursor-text hover:bg-panel-alt' : ''
       }`}
     >
