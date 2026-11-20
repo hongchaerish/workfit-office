@@ -6,6 +6,7 @@ import { useChatRooms, useUnreadCounts, useLeaveRoom } from '@/features/chat/use
 import { useHiddenRooms, hideRoom as hideRoomFor, unhideRooms } from '@/features/chat/hiddenRooms';
 import { usePinnedRooms, togglePinnedRoom, sortPinnedFirst } from '@/features/chat/pinnedRooms';
 import { useChatDrafts, draftPreview } from '@/features/chat/chatDrafts';
+import { useFailedOutboxRooms } from '@/features/chat/chatOutbox';
 import { usePrefetchChatThread } from '@/features/chat/useChatThread';
 import { useUsers } from '@/features/user/useUsers';
 import { getRoomDisplayName, fmtTime } from './chatUtils';
@@ -23,6 +24,7 @@ export default function MobileChatList() {
   const me = user!.id;
   const textSize = useChatTextSize(me);
   const { data: rooms = [] } = useChatRooms(me);
+  const failedRooms = useFailedOutboxRooms(me);
   const { data: unread = {} } = useUnreadCounts(me);
   const drafts = useChatDrafts(me);
   const prefetchThread = usePrefetchChatThread();
@@ -149,6 +151,7 @@ export default function MobileChatList() {
                       {isDirect && otherPresence?.message ? (
                         <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
                       ) : null}
+                      {failedRooms.has(r.id) && <span className="mr-1 font-semibold" style={{ color: '#e0483b' }}>[전송 실패]</span>}
                       {drafts[r.id] ? (
                         <>
                           <span className="mr-1 font-semibold" style={{ color: '#e0483b' }}>[작성 중]</span>

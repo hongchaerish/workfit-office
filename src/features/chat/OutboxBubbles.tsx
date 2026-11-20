@@ -6,21 +6,25 @@ import { useOutboxSender } from '@/features/chat/useOutboxSender';
 /** 눌러도 입력창의 커서를 뺏지 않는다 — 휴대폰 키보드가 내려가지 않게 */
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
+/** [보내기]를 누른 지 이만큼 안 된 말풍선은 '방금 보낸 것'으로 본다 */
+const JUST_SENT_MS = 15_000;
+
 /**
  * 보내는 중·전송 실패 말풍선 — 대화 목록 맨 아래에 둔다(PC·모바일 공용).
  * 실패한 것은 [재전송]·[삭제]를 고른다.
  */
 export function OutboxBubbles({ roomId, me }: { roomId: string; me: string }) {
-  // 내가 보낸 것만 — 같은 브라우저에서 다른 계정으로 바꿔 들어와도 남의 것이 보이지 않게
-  const items = useChatOutbox(roomId).filter((x) => x.senderId === me);
+  // 보내는 중인 글 메시지는 뺀다 — 대화창에 진짜 말풍선 모양으로 이미 붙어 있다(outboxRunner)
+  const items = useChatOutbox(roomId, me).filter((x) => !(x.payload.kind === 'text' && x.status === 'sending'));
   const sender = useOutboxSender(roomId);
   const endRef = useRef<HTMLDivElement>(null);
 
   const count = items.length;
   const prevCount = useRef(0);
   useEffect(() => {
-    // 방금 보낸 것만 따라 내린다 — 뒤늦게 뜬 실패 말풍선 때문에 읽던 자리를 잃지 않게
-    if (count > prevCount.current && items[count - 1].status === 'sending') endRef.current?.scrollIntoView({ block: 'end' });
+    // 방금 보낸 것만 따라 내린다(바로 실패한 것 포함) — 한참 뒤에 뜬 실패 말풍선 때문에 읽던 자리를 잃지 않게
+    const last = items[count - 1];
+    if (count > prevCount.current && Date.now() - last.createdAt < JUST_SENT_MS) endRef.current?.scrollIntoView({ block: 'end' });
     prevCount.current = count;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [count]);

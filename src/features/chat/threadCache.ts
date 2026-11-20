@@ -7,7 +7,7 @@ import { compareChatMessages } from '@/domain/chatMessage/order';
  */
 export type LiveChange = { roomId: string; message: ChatMessage } | { roomId: string; removedId: string };
 
-/** 보내는 중에 화면에 먼저 붙여 둔 내 메시지(useSendMessage) — 저장된 진짜 메시지가 오면 빠진다. */
+/** 보내는 중에 화면에 먼저 붙여 둔 내 메시지(outboxRunner) — 저장된 진짜 메시지가 오면 빠진다. */
 const isOptimistic = (m: ChatMessage) => m.id.includes('-optimistic-');
 
 /**
