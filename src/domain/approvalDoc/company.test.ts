@@ -17,7 +17,7 @@ test('주소의 company 값 — 아는 값만', () => {
 test('루미팹 서식 — 코드나 이름으로', () => {
   assert.ok(isLumefabForm({ code: '지출결의', name: '아무개' }));
   assert.ok(isLumefabForm({ code: 'X1', name: '품의서' }));
-  assert.ok(!isLumefabForm({ code: '휴가', name: '휴가신청서' }));
+  assert.ok(!isLumefabForm({ code: '휴일근무', name: '휴일근무 신청서' }));
   // 법인카드 사용 내역서 — 코드가 달라도 이름으로
   assert.ok(isLumefabForm({ code: '품의_사본', name: '법인카드 사용 내역서' }));
   assert.ok(isLumefabForm({ code: '법인카드', name: '아무 이름' }));
@@ -29,6 +29,12 @@ test('루미팹 서식 — 코드나 이름으로', () => {
   assert.ok(isLumefabForm({ code: '외근', name: '아무 이름' }));
   assert.ok(isLumefabForm({ code: 'X4', name: '외근신청서' }));
   assert.ok(!isLumefabForm({ code: '국내출장', name: '국내출장 신청서' }));
+  // 휴가원·개인 경비 사용 신청서 — 코드로, 이름(띄어쓰기 달라도)으로. 시험용 사본 서식은 아님
+  assert.ok(isLumefabForm({ code: '휴가', name: '아무 이름' }));
+  assert.ok(isLumefabForm({ code: 'X5', name: '휴가원' }));
+  assert.ok(isLumefabForm({ code: '개인경비', name: '아무 이름' }));
+  assert.ok(isLumefabForm({ code: 'X6', name: '개인경비 사용 신청서' }));
+  assert.ok(!isLumefabForm({ code: '개인경비_운영시험', name: '(운영본) 개인 경비 사용 신청서' }));
 });
 
 test('루미팹 문서 판별 — 기존 문서(company 없음)는 워크핏', () => {
