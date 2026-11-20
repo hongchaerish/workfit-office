@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Paperclip, Type, X } from 'lucide-react';
-import { useSendMessage, useSendRich } from '@/features/chat/useChatThread';
+import { useOutboxSender } from '@/features/chat/useOutboxSender';
 import { ChatRichEditor, type ChatRichEditorHandle, type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
-import { isEmptyRich, isPlainOnlyRich, plainTextOfRich, type RichNode } from '@/domain/chatMessage/richBody';
+import { isEmptyRich, isPlainOnlyRich, isRichBodyTooLong, plainTextOfRich, type RichNode } from '@/domain/chatMessage/richBody';
 import { clearChatDraft, readChatDraft, saveChatDraft } from '@/features/chat/chatDrafts';
 import { MAX_ATTACHMENT_BYTES, type ReplyPreview } from '@/domain/chatMessage/schema';
 
@@ -41,8 +41,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   ref,
 ) {
   const mobile = variant === 'mobile';
-  const send = useSendMessage(roomId);
-  const sendRich = useSendRich(roomId);
+  const outbox = useOutboxSender(roomId);
   const composerRef = useRef<ChatRichEditorHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   /** 확장 편집기 모드 — 서식 도구 막대 */
@@ -122,40 +121,31 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     e.target.value = '';
   };
 
-  /** 전송 — 메시지 1건. */
-  const submit = async () => {
+  /**
+   * 전송 — 메시지 1건. 누르자마자 입력창을 비우고, 올리는 일은 뒤에서 한다(useOutboxSender).
+   * 입력창을 잠그지 않으므로 휴대폰 키보드가 내려가지 않고, 실패하면 대화창에 '전송 실패' 말풍선이 남는다.
+   */
+  const submit = () => {
     const draft = composerRef.current?.getDraft();
     if (!draft) return;
-    const hasFiles = attachedFiles.length > 0;
-    if (isEmptyRich(draft.doc) && !hasFiles) return;
-    if (sendRich.isPending) return;
-
-    const reset = () => {
-      composerRef.current?.clear();
-      latestDocRef.current = null;
-      window.clearTimeout(saveTimerRef.current);
-      clearChatDraft(senderId, roomId);
-      onCancelReply();
-    };
-
-    if (!hasFiles && isPlainOnlyRich(draft.doc)) {
-      send.mutate({ text: plainTextOfRich(draft.doc), senderId, senderName, replyTo });
-      reset();
+    const files = attachedFiles.map((f) => f.file);
+    if (isEmptyRich(draft.doc) && files.length === 0) return;
+    if (isRichBodyTooLong(draft.doc)) {
+      window.alert('메시지가 너무 깁니다. 나누어 보내 주세요.');
       return;
     }
-    try {
-      await sendRich.mutateAsync({
-        draft: { doc: draft.doc, pendingImages: draft.pendingImages, files: attachedFiles.map((f) => f.file) },
-        senderId,
-        senderName,
-        replyTo,
-      });
-      attachedFiles.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
-      setAttachedFiles([]);
-      reset();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : '전송에 실패했습니다.');
-    }
+
+    const who = { senderId, senderName, replyTo };
+    if (files.length === 0 && isPlainOnlyRich(draft.doc)) outbox.sendText(plainTextOfRich(draft.doc), who);
+    else outbox.sendRich({ doc: draft.doc, pendingImages: draft.pendingImages, files }, who);
+
+    attachedFiles.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    setAttachedFiles([]);
+    composerRef.current?.clear();
+    latestDocRef.current = null;
+    window.clearTimeout(saveTimerRef.current);
+    clearChatDraft(senderId, roomId);
+    onCancelReply();
   };
 
   const btnSize = mobile ? 'h-9 w-9' : 'h-[30px] w-[30px]';
@@ -221,8 +211,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             ref={composerRef}
             expanded={formatMode}
             members={members}
-            disabled={sendRich.isPending}
-            onSubmit={() => void submit()}
+            onSubmit={submit}
             onFiles={attachFiles}
             initialDoc={initialDraft}
             onChange={onDocChange}
@@ -236,7 +225,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={sendRich.isPending}
               title={`파일·사진 첨부 (최대 ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB)`}
               aria-label="파일·사진 첨부"
               className={`grid ${btnSize} shrink-0 place-items-center rounded-full text-ink3 hover:bg-panel-alt disabled:opacity-40 select-none`}
@@ -260,8 +248,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               type="button"
               // 누를 때 입력창의 커서를 뺏지 않는다 — 휴대폰에서 보낸 뒤에도 키보드가 내려가지 않고 이어서 쓸 수 있다
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => void submit()}
-              disabled={sendRich.isPending}
+              onClick={submit}
               title={sendLabel}
               aria-label="보내기"
               className={`grid ${btnSize} shrink-0 place-items-center rounded-full bg-amber disabled:opacity-50 ${mobile ? 'text-[15px]' : 'text-[14px]'} text-white select-none hover:bg-amber-dark transition-colors`}

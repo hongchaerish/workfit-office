@@ -66,6 +66,18 @@ interface SendVars {
   replyTo?: ReplyPreview | null;
 }
 
+/**
+ * 방 목록 미리보기 갱신 — 메시지는 이미 저장된 뒤라, 이게 실패해도 전송 실패로 치지 않는다.
+ * (실패로 치면 '전송 실패' 말풍선이 떠서, 재전송하면 같은 메시지가 두 번 간다)
+ */
+async function touchRoom(roomId: string, last: { text: string; at: string; senderId: string }) {
+  try {
+    await chatRoomRepo.updateLastMessage(roomId, last);
+  } catch (e) {
+    console.warn('[chat] 방 미리보기 갱신 실패', e);
+  }
+}
+
 /** 메시지 전송(낙관적) — 캐시에 즉시 추가 → 실패 시 롤백. 성공 시 방 목록 lastMessage 갱신. */
 export function useSendMessage(roomId: string) {
   const qc = useQueryClient();
@@ -90,7 +102,7 @@ export function useSendMessage(roomId: string) {
         reactions: {},
       };
       await chatMessageRepo.append(message);
-      await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
+      await touchRoom(roomId, { text, at, senderId });
       return message;
     },
     onMutate: async ({ text, senderId, senderName, replyTo }) => {
@@ -331,8 +343,8 @@ export function useSendRich(roomId: string) {
         mentions: prepared.mentions,
       };
       await chatMessageRepo.append(message);
-      await chatRoomRepo.updateLastMessage(roomId, { text: richPreview(prepared.text, prepared.attachments), at, senderId });
-      await notifyMentions(roomId, prepared.mentions, senderId, senderName, prepared.text);
+      await touchRoom(roomId, { text: richPreview(prepared.text, prepared.attachments), at, senderId });
+      void notifyMentions(roomId, prepared.mentions, senderId, senderName, prepared.text); // 알림을 기다리지 않는다 — 메시지는 이미 저장됐다
       return message;
     },
     onSettled: () => {

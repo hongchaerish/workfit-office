@@ -17,6 +17,7 @@ import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import { ChatComposer, type ChatComposerHandle } from '@/features/chat/ChatComposer';
+import { OutboxBubbles } from '@/features/chat/OutboxBubbles';
 import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
@@ -1041,6 +1042,7 @@ function MessengerThread({
             </div>
           );
         })}
+        {!searchQuery && <OutboxBubbles roomId={room.id} me={me} />}
         {filteredMessages.length === 0 && searchQuery && (
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
         )}
