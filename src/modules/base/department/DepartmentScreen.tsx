@@ -6,7 +6,8 @@ import { DEPARTMENT_MEMBERS_KEY } from '@/features/departmentMember/useDepartmen
 import { assignDeptHead, departmentDeleteBlocker } from '@/data/orgSync/orgSync';
 import { usePermission } from '@/features/auth/usePermission';
 import { DEPT_TYPES, type Department } from '@/domain/department/schema';
-import { moveSibling, saveOrdersAllOrNothing } from '@/domain/department/reorder';
+import { moveSibling, orderOnSave, renumberSiblings, sameNameDept, saveOrdersAllOrNothing } from '@/domain/department/reorder';
+import { departmentRepo } from '@/data/department/department.repo';
 import { chatRoomRepo } from '@/data/chatRoom/chatRoom.repo';
 import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 
@@ -36,16 +37,23 @@ export default function DepartmentScreen() {
   const [msg, setMsg] = useState('');
   const [moving, setMoving] = useState(false);
 
-  /** 같은 상위 부서 안에서 한 칸 위/아래로 — 번호가 바뀐 부서만 저장한다. 조직도·업무계획·근태 줄 순서가 이 값을 따른다 */
+  /** 순서 번호만 저장(다른 칸은 그대로) — 하나라도 실패하면 이미 바꾼 번호를 되돌린다 */
+  const saveOrders = async (changes: Array<{ id: string; order: number }>, before: Map<string, number>) => {
+    if (changes.length === 0) return;
+    try {
+      await saveOrdersAllOrNothing(changes, before, (rid, order) => departmentRepo.saveOrder(rid, order));
+    } finally {
+      qc.invalidateQueries({ queryKey: ['departments'] });
+    }
+  };
+
+  /** 같은 상위 부서 안에서 한 칸 위/아래로 — 형제를 1부터 다시 매겨 바뀐 번호만 저장한다. 조직도·업무계획·근태 줄 순서가 이 값을 따른다 */
   const move = async (id: string, dir: -1 | 1) => {
     const changes = moveSibling(rows.map((d) => ({ ...d, parentId: d.parentId || null })), id, dir);
     if (changes.length === 0) return;
     setMoving(true);
     try {
-      await saveOrdersAllOrNothing(changes, new Map(rows.map((d) => [d.id, d.order])), async (rid, order) => {
-        const row = rows.find((d) => d.id === rid);
-        if (row) await upsert.mutateAsync({ ...row, order });
-      });
+      await saveOrders(changes, new Map(rows.map((d) => [d.id, d.order])));
     } catch (err) {
       window.alert(`순서를 바꾸지 못했습니다. 원래 순서로 되돌렸습니다.
 ${err instanceof Error ? err.message : ''}`);
@@ -97,6 +105,9 @@ ${err instanceof Error ? err.message : ''}`);
     if (!sel) return;
     if (!sel.name.trim()) return setMsg('부서명을 입력하세요.');
     if (sel.parentId === sel.id && sel.id) return setMsg('자기 자신을 상위로 지정할 수 없습니다.');
+    // 같은 이름 금지 — 조직도·업무계획은 부서를 이름으로 묶어 같은 이름이면 두 부서가 섞인다
+    const twin = sameNameDept(rows, sel.name, sel.id);
+    if (twin) return setMsg(`같은 이름의 부서가 이미 있습니다: ${twin.name}`);
 
     // 본부 중복 지정 검증
     if (sel.deptType === '본부') {
@@ -110,9 +121,10 @@ ${err instanceof Error ? err.message : ''}`);
     const oldHeadUserId = oldDept?.headUserId;
 
     const targetId = sel.id || nextId();
-    const targetOrder = sel.id
-      ? (oldDept?.order ?? sel.order ?? rows.length + 1)
-      : (rows.reduce((max, d) => Math.max(max, d.order || 0), 0) + 1);
+    const parentId = sel.parentId || null;
+    // 새 부서·상위를 바꾼 부서는 새 상위 부서 안 맨 끝, 상위 그대로면 지금 자리
+    const flat = rows.map((d) => ({ ...d, parentId: d.parentId || null }));
+    const targetOrder = orderOnSave(flat, { id: sel.id, parentId });
 
     // 부서장은 assignDeptHead 가 직책과 함께 바꾼다 — 여기서는 기존 값 그대로 두고 나머지 칸만 저장
     await upsert.mutateAsync({
@@ -130,6 +142,15 @@ ${err instanceof Error ? err.message : ''}`);
     } finally {
       qc.invalidateQueries({ queryKey: ['departments'] });
       refreshPeople();
+    }
+    // 같은 상위 부서 안 번호를 1부터 다시(겹친 번호 정리) — 상위를 바꿨으면 예전 상위 쪽도
+    const after = [...flat.filter((d) => d.id !== targetId), { ...sel, id: targetId, parentId, order: targetOrder }];
+    const parents = new Set<string | null>([parentId, ...(oldDept ? [oldDept.parentId || null] : [])]);
+    const renumber = [...parents].flatMap((p) => renumberSiblings(after, p));
+    try {
+      await saveOrders(renumber, new Map(after.map((d) => [d.id, d.order])));
+    } catch {
+      // 부서 자체는 저장됐다 — 번호 정리는 다음 ▲▼·저장 때 다시 된다
     }
     setMsg('저장되었습니다.');
     setSel(null);

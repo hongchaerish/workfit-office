@@ -36,6 +36,11 @@ export const departmentRepo = {
     await backend.save(departmentSchema.parse(item));
   },
 
+  /** 순서 번호만 저장 — 다른 칸(이름·부서장 등)은 건드리지 않아 동시에 고친 내용을 덮어쓰지 않는다 */
+  async saveOrder(id: string, order: number): Promise<void> {
+    await backend.patch(id, { order } as Partial<Department>);
+  },
+
   /** 삭제. 문서 ID = department.id. */
   async remove(id: string): Promise<void> {
     await backend.remove(id);
