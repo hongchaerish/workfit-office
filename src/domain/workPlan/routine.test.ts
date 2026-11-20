@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { defaultRoutineRule, newRoutineId, routineDates, routineLabel, routineSchema, validateRoutineRule } from './routine';
+import { defaultRoutineRule, newRoutineId, routineDates, routineLabel, routinePlan, routineSchema, validateRoutineRule } from './routine';
 
 // 2026-11-02 = 월요일
 test('루틴 날짜 — 매주 월·수, 시작부터 끝 날짜까지', () => {
@@ -37,4 +37,18 @@ test('루틴 규칙 확인·이름', () => {
 test('루틴 id 형식', () => {
   const id = newRoutineId(1_700_000_000_000, () => 0.5);
   assert.ok(routineSchema.shape.id.safeParse(id).success, id);
+});
+
+test('루틴 날짜 — 공휴일은 빼고, 뺀 날짜를 따로 알려 준다(누른 날은 공휴일이어도 넣는다)', () => {
+  const holidays = new Set(['2026-12-25', '2027-01-01']);
+  const plan = routinePlan('2026-12-24', { freq: 'WEEKDAYS', days: [], until: '2027-01-04' }, holidays);
+  assert.deepEqual(plan.dates, ['2026-12-24', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-04']);
+  assert.deepEqual(plan.skipped, ['2026-12-25', '2027-01-01']);
+  assert.deepEqual(routineDates('2026-12-25', { freq: 'WEEKDAYS', days: [], until: '2026-12-28' }, holidays), ['2026-12-25', '2026-12-28']);
+});
+
+test('루틴 날짜 — 공휴일로 뺀 날은 최대 횟수에 세지 않는다', () => {
+  const holidays = new Set(['2026-11-03']);
+  assert.equal(routineDates('2026-11-02', { freq: 'DAILY', days: [], until: '2027-11-02' }, holidays).length, 120);
+  assert.equal(routineDates('2026-11-02', { freq: 'DAILY', days: [], until: '2027-11-02' }, holidays).includes('2026-11-03'), false);
 });

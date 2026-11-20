@@ -1,4 +1,5 @@
 import { createCrudBackend, DocumentExistsError } from '@/data/_backend/crudBackend';
+import { runEachWithRetry, withRateLimitRetry } from '@/data/_backend/rateLimit';
 import { isValidCalendarDate } from '@/domain/calendarEvent/calendarDate';
 import { workPlanItemSchema, type WorkPlanItem, type WorkPlanItemDraft } from '@/domain/workPlan/item';
 import type { Routine } from '@/domain/workPlan/routine';
@@ -136,7 +137,7 @@ export const workPlanItemRepo = {
         for (let attempt = 0; attempt < MAX_ID_ATTEMPTS && !done; attempt += 1) {
           const row = parseItem({ ...draft, routine, id: nextId([...rows, ...created], draft.date, attempt), ownerUserId, createdBy: actor.userId, createdAt: now, updatedAt: now });
           try {
-            await backend.insert(encodeRow(row));
+            await withRateLimitRetry(() => backend.insert(encodeRow(row)));
             created.push(row);
             done = true;
           } catch (error) {
@@ -146,7 +147,8 @@ export const workPlanItemRepo = {
         if (!done) throw new WorkPlanItemError('CONFLICT', '항목 번호를 발급하지 못했습니다. 잠시 후 다시 시도하세요.');
       }
     } catch (error) {
-      await Promise.allSettled(created.map((row) => backend.remove(row.id)));
+      // 만든 것을 되돌린다 — 되돌리기도 요청 한도에 걸릴 수 있어 한 건씩 다시 시도하며
+      await runEachWithRetry(created, (row) => backend.remove(row.id)).catch(() => undefined);
       throw error;
     }
     return created.map((row) => ({ ...row }));
@@ -161,7 +163,8 @@ export const workPlanItemRepo = {
     const targets = followingOf(rows, current).map((row) =>
       parseItem({ ...row, ...draft, date: row.date, id: row.id, ownerUserId: row.ownerUserId, createdBy: row.createdBy, createdAt: row.createdAt, routine: row.routine, updatedAt }),
     );
-    for (const row of targets) await backend.save(encodeRow(row));
+    // 한 건씩, 요청 한도면 기다렸다 다시 — 끝내 멈추면 몇 건까지 됐는지 알린다(다시 누르면 같은 내용으로 덮어써 마저 한다)
+    await runEachWithRetry(targets, (row) => backend.save(encodeRow(row)));
     return targets.map((row) => ({ ...row }));
   },
 
@@ -171,7 +174,8 @@ export const workPlanItemRepo = {
     const rows = await loadAll();
     const current = findOwned(rows, actor, id);
     const targets = followingOf(rows, current);
-    for (const row of targets) await backend.remove(row.id);
+    // 한 건씩, 요청 한도면 기다렸다 다시 — 끝내 멈추면 몇 건까지 됐는지 알린다(다시 누르면 남은 것만 지운다)
+    await runEachWithRetry(targets, (row) => backend.remove(row.id));
     return targets.map((row) => ({ ...row }));
   },
 

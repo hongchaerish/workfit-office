@@ -4,7 +4,7 @@ import {
   ROUTINE_FREQ_LABEL,
   addDays,
   ROUTINE_MAX_DAYS,
-  routineDates,
+  routinePlan,
   routineLabel,
   validateRoutineRule,
   type Routine,
@@ -22,9 +22,21 @@ const pill = (active: boolean) =>
   }`;
 
 /** 새 일반 업무의 반복 규칙 — 매일·평일·매주(요일)·매월, 끝 날짜, 만들어질 횟수 */
-export function RoutineFields({ start, rule, onChange }: { start: string; rule: RoutineRule; onChange: (rule: RoutineRule) => void }) {
+export function RoutineFields({
+  start,
+  rule,
+  holidays,
+  onChange,
+}: {
+  start: string;
+  rule: RoutineRule;
+  /** 빼는 쉬는 날(공휴일·회사 휴일) */
+  holidays?: ReadonlySet<string>;
+  onChange: (rule: RoutineRule) => void;
+}) {
   const invalid = validateRoutineRule(start, rule);
-  const count = invalid ? 0 : routineDates(start, rule).length;
+  const plan = invalid ? { dates: [], skipped: [] } : routinePlan(start, rule, holidays);
+  const count = plan.dates.length;
   return (
     <div className="space-y-2 border-b border-border bg-blue-soft/20 px-5 py-2.5">
       <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="반복">
@@ -68,7 +80,12 @@ export function RoutineFields({ start, rule, onChange }: { start: string; rule: 
         {invalid ? (
           <span role="alert" className="font-semibold text-danger">{invalid}</span>
         ) : (
-          <span className="text-ink3">{routineLabel(start, rule)} · 총 {count}회</span>
+          <span className="text-ink3">
+            {routineLabel(start, rule)} · 총 {count}회
+            {plan.skipped.length > 0 && (
+              <span title={plan.skipped.join(', ')}> · 공휴일 {plan.skipped.length}일 빼고</span>
+            )}
+          </span>
         )}
       </div>
     </div>

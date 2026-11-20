@@ -189,7 +189,7 @@ export function WorkPlanEventModal({ target, actor, deptId, users, cellOf, onClo
 
         {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
         {form.routineRule && (
-          <RoutineFields start={state.date} rule={form.routineRule} onChange={form.setRoutineRule} />
+          <RoutineFields start={state.date} rule={form.routineRule} holidays={form.routineHolidays} onChange={form.setRoutineRule} />
         )}
         {state.kind === 'ITEM' && form.editingRoutine && (
           <RoutineScopeFields

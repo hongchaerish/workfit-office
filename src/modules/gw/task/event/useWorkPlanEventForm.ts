@@ -10,7 +10,9 @@ import type { CalendarEvent, CalendarVisibility } from '@/domain/calendarEvent/s
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import type { Resource } from '@/domain/resource/schema';
 import type { User } from '@/domain/user/schema';
-import { newRoutineId, routineDates, validateRoutineRule, type Routine, type RoutineRule } from '@/domain/workPlan/routine';
+import { addDays, newRoutineId, routineDates, ROUTINE_MAX_DAYS, validateRoutineRule, type Routine, type RoutineRule } from '@/domain/workPlan/routine';
+import { holidayDateSet, yearsBetween } from '@/domain/holiday/holidayDates';
+import { useHolidays } from '@/features/holiday/useHolidays';
 import { selectableGeneralTags } from '@/domain/workPlan/tag';
 import { toHHmm, type MinuteRange } from '@/domain/workPlan/timeGrid';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
@@ -113,6 +115,8 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   remove: (() => Promise<boolean>) | null;
   /** 새 일반 업무의 루틴 규칙(끄면 null) */
   routineRule: RoutineRule | null;
+  /** 루틴에서 빼는 쉬는 날(공휴일·회사 휴일) */
+  routineHolidays: ReadonlySet<string>;
   setRoutineRule: (rule: RoutineRule | null) => void;
   /** 고치는 일반 업무가 루틴으로 만든 것이면 그 루틴 */
   editingRoutine: Routine | null;
@@ -170,6 +174,12 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
   const updateFollowing = useUpdateFollowingWorkPlanItems();
   const removeFollowing = useRemoveFollowingWorkPlanItems();
   const [routineRule, setRoutineRule] = useState<RoutineRule | null>(null);
+  // 루틴은 공휴일을 빼고 만든다 — 휴일 관리(DB) 기준, 등록 없는 해는 기본 공휴일
+  const holidaysQuery = useHolidays();
+  const routineHolidays = useMemo(
+    () => holidayDateSet(holidaysQuery.data ?? [], yearsBetween(state.date, addDays(state.date, ROUTINE_MAX_DAYS))),
+    [holidaysQuery.data, state.date],
+  );
   const editingRoutine = item?.routine ?? null;
   const [routineScope, setRoutineScope] = useState<RoutineScope>('one');
   const following = Boolean(editingRoutine) && routineScope === 'following';
@@ -390,7 +400,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     } else if (routineRule) {
       const invalidRule = validateRoutineRule(draft.date, routineRule);
       if (invalidRule) return fail(invalidRule);
-      const drafts = routineDates(draft.date, routineRule).map((date) => ({ ...draft, date }));
+      const drafts = routineDates(draft.date, routineRule, routineHolidays).map((date) => ({ ...draft, date }));
       await createRoutine.mutateAsync({ actor: itemActor, ownerUserId: ownerId, drafts, routine: { ...routineRule, id: newRoutineId() } });
     } else {
       await createItem.mutateAsync({ actor: itemActor, ownerUserId: ownerId, draft });
@@ -499,6 +509,7 @@ export function useWorkPlanEventForm(target: EventTarget, actor: User, deptId: s
     save,
     remove: target.mode === 'edit' ? removeEntry : null,
     routineRule: state.kind === 'ITEM' && target.mode === 'create' ? routineRule : null,
+    routineHolidays,
     setRoutineRule,
     editingRoutine,
     routineScope,

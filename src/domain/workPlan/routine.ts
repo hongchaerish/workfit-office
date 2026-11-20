@@ -68,12 +68,14 @@ export function validateRoutineRule(start: string, rule: RoutineRule): string | 
 }
 
 /**
- * 규칙에 맞는 날짜(시작 ~ 끝, 오름차순, 최대 ROUTINE_MAX_COUNT). 시작 날짜가 규칙에 안 맞아도
- * 첫 번째로 넣는다(누른 칸에는 항상 만든다). 매월은 그 날짜가 없는 달(31일 등)을 건너뛴다.
+ * 규칙에 맞는 날짜(시작 ~ 끝, 오름차순, 최대 ROUTINE_MAX_COUNT)와 공휴일이라 뺀 날짜. 시작 날짜는 규칙에 안 맞거나
+ * 공휴일이어도 첫 번째로 넣는다(누른 칸에는 항상 만든다). 매월은 그 날짜가 없는 달(31일 등)을 건너뛴다.
+ * 공휴일로 뺀 날은 최대 횟수에 세지 않는다.
  */
-export function routineDates(start: string, rule: RoutineRule): string[] {
-  if (validateRoutineRule(start, rule)) return [start];
+export function routinePlan(start: string, rule: RoutineRule, holidays: ReadonlySet<string> = new Set()): { dates: string[]; skipped: string[] } {
+  if (validateRoutineRule(start, rule)) return { dates: [start], skipped: [] };
   const dates = [start];
+  const skipped: string[] = [];
   const startDay = Number(start.slice(8));
   for (let date = addDays(start, 1); date <= rule.until && dates.length < ROUTINE_MAX_COUNT; date = addDays(date, 1)) {
     const dow = weekdayOf(date);
@@ -82,9 +84,16 @@ export function routineDates(start: string, rule: RoutineRule): string[] {
       (rule.freq === 'WEEKDAYS' && dow >= 1 && dow <= 5) ||
       (rule.freq === 'WEEKLY' && rule.days.includes(dow)) ||
       (rule.freq === 'MONTHLY' && Number(date.slice(8)) === startDay);
-    if (hit) dates.push(date);
+    if (!hit) continue;
+    if (holidays.has(date)) skipped.push(date);
+    else dates.push(date);
   }
-  return dates;
+  return { dates, skipped };
+}
+
+/** 규칙에 맞는 날짜 — 공휴일은 뺀다([[routinePlan]]) */
+export function routineDates(start: string, rule: RoutineRule, holidays?: ReadonlySet<string>): string[] {
+  return routinePlan(start, rule, holidays).dates;
 }
 
 /** '매주 월·수 · 1/31까지' */
