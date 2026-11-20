@@ -258,6 +258,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             </button>
             <button
               type="button"
+              // 누를 때 입력창의 커서를 뺏지 않는다 — 휴대폰에서 보낸 뒤에도 키보드가 내려가지 않고 이어서 쓸 수 있다
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => void submit()}
               disabled={sendRich.isPending}
               title={sendLabel}
