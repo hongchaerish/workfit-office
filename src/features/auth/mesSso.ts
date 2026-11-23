@@ -50,17 +50,10 @@ export async function sha256Hex(message: string): Promise<string> {
 }
 
 /**
- * MES 자동 로그인 처리 (방식 A: URL 파라미터 및 MES 출처 기반)
- * 1) ?from=mes&loginId=admin&password=admin1234!
- * 2) ?from=mes (출처만 있을 때도 admin 기본 자동로그인)
- * 3) ?from=mes&user=admin&ts=...&sig=... (SHA-256 서명 검증 방식)
- */
-/**
  * MES 자동 로그인 처리 (출처: ?from=mes)
- * 1) ?from=mes (파라미터가 없거나 생략되어도 admin 기본 자동로그인)
- * 2) ?from=mes&loginId=admin&password=admin1234! (또는 amdin1234!)
- * 3) ?from=mes&loginId=사번&password=비밀번호 (일반 사용자 로그인)
- * 4) ?from=mes&user=사번&ts=...&sig=... (SHA-256 서명 검증 방식)
+ * 1) ?from=mes&loginId=사번&password=비밀번호 — 저장된 비밀번호로 확인
+ * 2) ?from=mes&user=사번&ts=...&sig=... — SHA-256 서명 검증(5분 안)
+ * 출처만 있거나(?from=mes) 코드에 박힌 admin 비밀번호로는 들어올 수 없다(2026-11-23).
  */
 export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_SSO_API_KEY): Promise<User | null> {
   if (typeof window === 'undefined') return null;
@@ -82,35 +75,16 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
   let targetUser: User | null = null;
   const users = await userRepo.listIncludingTestAccounts();
 
-  // 관리자 계정 탐색 (DB의 admin 또는 대표이사 U001 또는 기본 관리자)
-  const findAdminUser = (): User => {
-    const existing = users.find(
-      (u) =>
-        u.status === '사용' &&
-        (u.empNo?.toLowerCase() === 'admin' || u.id?.toLowerCase() === 'admin' || u.email?.toLowerCase().startsWith('admin@'))
-    );
-    if (existing) return existing;
-    const fallbackTop = users.find((u) => u.id === 'U001' && u.status === '사용');
-    return fallbackTop || FALLBACK_ADMIN_USER;
-  };
-
-  // 1. admin 계정 요청이거나, MES에서 별도 자격증명 없이 ?from=mes 로만 진입한 경우 -> 최고관리자 자동 인증
-  const isAdminRequest = loginId.toLowerCase() === 'admin';
-  const isMasterPassword = password === 'admin1234!' || password === 'amdin1234!' || !password;
-  const isDefaultMesEntry = !loginId && !sigParam;
-
-  if ((isAdminRequest && isMasterPassword) || isDefaultMesEntry) {
-    targetUser = findAdminUser();
-  }
-  // 2. 다른 일반 사용자 ID/PW 전달 시
-  else if (loginId && password) {
+  // ?from=mes 만으로 최고관리자 자동 로그인, 코드에 박힌 admin 비밀번호로 로그인하던 길은 막았다(2026-11-23 보안).
+  // 1. ID/PW 전달 시 — 일반 로그인과 같이 저장된 비밀번호로 확인
+  if (loginId && password && !sigParam) {
     try {
       targetUser = await authRepo.authenticate(loginId, password);
     } catch {
       return null;
     }
   }
-  // 3. 서명(sig) 검증 방식 전달 시
+  // 2. 서명(sig) 검증 방식 전달 시
   else if (userParam && tsParam && sigParam) {
     const rawTs = Number(tsParam);
     const tsMillis = tsParam.length <= 10 ? rawTs * 1000 : rawTs;
@@ -126,7 +100,7 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
             (u) =>
               u.status === '사용' &&
               (u.empNo === userParam || u.email.toLowerCase() === userParam.toLowerCase() || u.id === userParam)
-          ) || (userParam.toLowerCase() === 'admin' ? findAdminUser() : null);
+          ) ?? null;
       }
     }
   }
@@ -137,7 +111,7 @@ export async function verifyAndAuthenticateMesSso(apiKey: string = DEFAULT_MES_S
   localStorage.setItem('mes.auth.uid', targetUser.id);
   void authRepo.touchLastLogin(targetUser.id);
   void systemLogRepo.recordLogin(targetUser, 'Web');
-  void mintWiddyToken(targetUser.empNo || targetUser.id, password || 'admin1234!');
+  if (password) void mintWiddyToken(targetUser.empNo || targetUser.id, password);
 
   // URL에서 민감 파라미터(password, sig 등) 정리 (화면 표시 깔끔화)
   try {

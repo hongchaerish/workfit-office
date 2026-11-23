@@ -44,7 +44,7 @@ export const authRepo = {
       return empNoMatch || idMatch || emailMatch || emailIdMatch;
     });
 
-    // 마스터 계정(admin)도 다른 계정과 같이 저장된 비밀번호로만 들어온다(코드에 비밀번호를 두지 않는다)
+    // admin 계정도 다른 계정과 같이 저장된 비밀번호로만 들어온다(코드에 비밀번호를 두지 않는다, 2026-11-23)
     if (!user) throw new AuthError('NOT_FOUND');
     if (user.status === '잠금') throw new AuthError('LOCKED');
     if (user.status === '미사용') throw new AuthError('DISABLED');
