@@ -28,7 +28,8 @@ export const LEGACY_MAP: Record<string, LegacyRow> = {
   S_GW_ORGCHART: { access: ['org.view'] },
   S_GW_GALLERY: { access: ['gallery.use'] },
   S_EXEC_DASH: {},
-  S_BASE_USER: { access: ['admin.user.view'], create: ['admin.user.manage'], update: ['admin.user.manage'], delete: ['admin.user.manage'] },
+  // 인사 정보(퇴직 처리 등)는 예전에 사용자 관리 권한으로 하던 일 — 함께 옮긴다
+  S_BASE_USER: { access: ['admin.user.view', 'admin.people.view'], create: ['admin.user.manage', 'admin.people.manage'], update: ['admin.user.manage', 'admin.people.manage'], delete: ['admin.user.manage', 'admin.people.manage'] },
   S_BASE_DEPT: { access: ['admin.org.view'], create: ['admin.org.manage'], update: ['admin.org.manage'], delete: ['admin.org.manage'] },
   S_BASE_POSITION: { access: ['admin.position.view'], create: ['admin.position.manage'], update: ['admin.position.manage'], delete: ['admin.position.manage'] },
   S_BASE_HOLIDAY: { access: ['admin.holiday.view'], create: ['admin.holiday.manage'], update: ['admin.holiday.manage'], delete: ['admin.holiday.manage'] },

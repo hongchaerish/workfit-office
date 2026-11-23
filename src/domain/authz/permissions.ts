@@ -90,7 +90,8 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'admin.console', name: '관리자 콘솔 접속', desc: '관리자 콘솔에 들어간다(안에서는 받은 관리자 권한의 메뉴만 보인다)', area: 'adminConsole', adminConsole: true }),
 
   // 관리자 · 구성원·조직
-  ...pair('admin.user', '사용자', 'adminPeople', '직원 목록과 계정 정보를 본다', '직원을 등록·수정하고 퇴사 처리한다', { adminConsole: true }),
+  ...pair('admin.user', '사용자', 'adminPeople', '로그인 계정 목록과 계정 정보를 본다', '로그인 계정을 등록·수정한다', { adminConsole: true }),
+  ...pair('admin.people', '인사 정보', 'adminPeople', '인사 기록과 개인 신상 정보를 본다', '발령·입사일·근태 관리 대상·개인 신상을 고치고 퇴직을 처리한다', { adminConsole: true }),
   ...pair('admin.org', '부서·조직', 'adminPeople', '부서 구조를 본다', '부서를 만들고 구조와 부서장을 바꾼다', { adminConsole: true }),
   ...pair('admin.position', '직급·직책', 'adminPeople', '직급과 직책을 본다', '직급·직책을 추가하고 순서를 바꾼다', { adminConsole: true }),
 

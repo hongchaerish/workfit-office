@@ -62,6 +62,7 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'G_ADM_MEMBER', name: '구성원·조직', icon: '◫', order: 10, use: true, children: [
           { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', icon: '◫', order: 10, use: true },
+          { id: 'S_ADM_HR', name: '인사 정보', url: '/base/hr', icon: '👥', order: 15, use: true },
           { id: 'S_BASE_DEPT', name: '부서·조직 관리', url: '/base/department', icon: '▤', order: 20, use: true },
           { id: 'S_BASE_POSITION', name: '직급·직책 관리', url: '/base/position', icon: '◫', order: 30, use: true },
           // 사업관리 > 도입기업 정보로 옮김(같은 vendors 데이터). 숨김.

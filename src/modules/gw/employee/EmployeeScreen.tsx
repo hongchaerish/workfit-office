@@ -33,10 +33,19 @@ import { appendSystemMessage } from '@/data/chatMessage/systemMessage';
 import { CHAT_ROOMS_KEY } from '@/features/chat/useChatRooms';
 import { DateInput } from '@/shared/ui/form/DateInput';
 
-export default function EmployeeScreen() {
+/**
+ * 인명관리 — 두 모드로 쓴다.
+ * - view(업무 화면 그룹웨어 › 인명관리): 연락처·소속 조회 전용. 개인 신상 정보는 보이지 않는다.
+ * - manage(관리자 콘솔 › 구성원·조직 › 인사 정보): 신규 발령·정보 수정·겸직·퇴직 처리, 개인 신상 정보.
+ * 인사 기록(employeeProfiles)을 다룬다 — 로그인 계정(users)은 콘솔 '사용자 관리'.
+ */
+export default function EmployeeScreen({ mode = 'view' }: { mode?: 'view' | 'manage' }) {
   const { canManage } = useAuthz();
   const lockoutOk = useUserLockoutGuard();
-  const isAdmin = canManage('admin.user.manage');
+  const manageMode = mode === 'manage';
+  const isAdmin = manageMode && canManage('admin.people.manage');
+  /** 개인 신상(주민등록번호·주소 등)은 콘솔 인사 정보에서만 */
+  const canSeePersonal = manageMode && canManage('admin.people.view');
   const { data: users = [], isLoading: isUsersLoading } = useUsers();
   const { data: employeeProfiles = [] } = useEmployeeProfiles();
   const { data: departments = [] } = useDepartments();
@@ -638,8 +647,8 @@ export default function EmployeeScreen() {
       {/* ── 상단 헤더 영역 ── */}
       <GwHead
         icon="👥"
-        name="인명관리"
-        desc="임직원의 직급, 직책, 연락처 및 재직 현황을 조회하고 관리합니다."
+        name={manageMode ? '인사 정보' : '인명관리'}
+        desc={manageMode ? '임직원 발령·인사 기록·개인 신상 정보를 관리하고 퇴직을 처리합니다.' : '임직원의 소속, 직급·직책, 연락처와 재직 현황을 조회합니다.'}
         right={
           isAdmin ? (
             <Button
@@ -978,6 +987,7 @@ export default function EmployeeScreen() {
                 >
                   💼 인사 및 소속 정보
                 </button>
+                {canSeePersonal && (
                 <button
                   type="button"
                   onClick={() => {
@@ -990,6 +1000,7 @@ export default function EmployeeScreen() {
                 >
                   🔒 개인 신상 정보 (인사팀용)
                 </button>
+                )}
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto p-6 text-[12px]">
@@ -1109,7 +1120,7 @@ export default function EmployeeScreen() {
                   </div>
                 )}
 
-                {detailTab === 'personal' && (
+                {canSeePersonal && detailTab === 'personal' && (
                   <div className="space-y-4">
                     <div className="rounded-xl border border-amber-500/10 bg-amber-500/5 p-3 text-[10.5px] font-bold leading-relaxed text-amber-800">
                       🔒 본 정보는 개인 신상정보를 포함하고 있으므로 열람 및 취급에 주의를 요합니다. (인사관리 전용)
