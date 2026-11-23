@@ -7,7 +7,7 @@ import { systemLogRepo } from '@/data/systemLog/systemLog.repo';
 import { mintWiddyToken, clearWiddyToken } from '@/data/widdyChat/widdyAuth';
 import { clearChatFiles } from '@/mobile/chatFileStore';
 import type { User } from '@/domain/user/schema';
-import { verifyAndAuthenticateMesSso, FALLBACK_ADMIN_USER } from '@/features/auth/mesSso';
+import { verifyAndAuthenticateMesSso } from '@/features/auth/mesSso';
 
 /**
  * 인증 컨텍스트 — 자체 로그인(users 컬렉션 대조) 세션.
@@ -87,11 +87,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 첫 번째 cleanup 이후 비동기가 끝났다고 세션을 지우면 정상 로그인 상태가 날아간다.
           if (!alive) return;
           let found = users.find((u) => u.id === uid && u.status === '사용');
-          // DB에 admin 계정이 직접 없더라도 admin 세션인 경우 fallback 최고관리자로 복원 유지
-          if (!found && (uid === 'admin' || uid.toLowerCase() === 'admin')) {
-            const topAdmin = users.find((u) => u.id === 'U001' && u.status === '사용');
-            found = topAdmin ? { ...topAdmin, name: '최고관리자 (admin)' } : FALLBACK_ADMIN_USER;
-          }
           if (found) {
             setUser(found);
           } else {
