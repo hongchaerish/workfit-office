@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertMasterAccountKept, isMasterAccount } from './masterAccount';
+import { assertMasterAccountKept, assertMasterAccountNoDept, isMasterAccount } from './masterAccount';
 import { resolveGrants } from '@/domain/authz/engine';
 import { SUPER_ADMIN_PERMISSIONS } from '@/domain/authz/permissions';
 
@@ -31,4 +31,10 @@ test('마스터 계정은 삭제·사용 중지·퇴직할 수 없다', () => {
   assert.throws(() => assertMasterAccountKept('admin', { status: '사용', resignedAt: '2026-11-23' }));
   assert.doesNotThrow(() => assertMasterAccountKept('admin', { status: '사용' }));
   assert.doesNotThrow(() => assertMasterAccountKept('U001', 'remove'));
+});
+
+test('마스터 계정은 어떤 부서에도 속할 수 없다', () => {
+  assert.throws(() => assertMasterAccountNoDept('admin'));
+  assert.doesNotThrow(() => assertMasterAccountNoDept('U001'));
+  assert.doesNotThrow(() => assertMasterAccountNoDept(null));
 });

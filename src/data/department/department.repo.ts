@@ -1,4 +1,5 @@
 import { departmentSchema, type Department } from '@/domain/department/schema';
+import { assertMasterAccountNoDept } from '@/domain/user/masterAccount';
 import { DEPARTMENT_SEED } from '@/data/seeds/department.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 
@@ -33,6 +34,7 @@ export const departmentRepo = {
 
   /** 등록/수정(upsert). 문서 ID = department.id. */
   async save(item: Department): Promise<void> {
+    if (item.headUserId) assertMasterAccountNoDept(item.headUserId);
     await backend.save(departmentSchema.parse(item));
   },
 

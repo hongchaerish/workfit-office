@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assertMasterAccountNoDept } from '@/domain/user/masterAccount';
 import { employeeProfileSchema, type EmployeeProfile } from '@/domain/employeeProfile/schema';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
@@ -142,6 +143,7 @@ export const employeeProfileRepo = {
 
   /** 프로필 등록 또는 수정 (upsert) */
   async save(item: EmployeeProfile, opts: { keepAttendanceTarget?: boolean } = {}): Promise<void> {
+    assertMasterAccountNoDept(item.userId || item.id);
     const now = new Date().toISOString();
     await birthdaySettingBackend.save({
       userId: item.userId,

@@ -1,4 +1,5 @@
 import { departmentMemberSchema, type DepartmentMember, type DepartmentMemberInput } from '@/domain/departmentMember/schema';
+import { assertMasterAccountNoDept } from '@/domain/user/masterAccount';
 import { DEPARTMENT_MEMBER_SEED } from '@/data/seeds/departmentMember.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 import { hideTestAccountRows } from '@/data/_backend/testAccountVisibility';
@@ -65,6 +66,7 @@ export const departmentMemberRepo = {
   /** 등록/수정 (upsert) */
   async save(item: DepartmentMemberInput): Promise<DepartmentMember> {
     const parsed = departmentMemberSchema.parse(item);
+    assertMasterAccountNoDept(parsed.userId);
     // 고른 직책 이름을 ID로(못 찾으면 기존 ID 유지), 이름 칸은 현재 이름 사본
     const masters = await loadOrgMasters();
     const jobTitleId = parsed.jobTitle ? (masters.jobTitles.find((j) => j.name === parsed.jobTitle)?.id ?? parsed.jobTitleId) : null;
