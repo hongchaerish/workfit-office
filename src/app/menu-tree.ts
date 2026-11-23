@@ -30,7 +30,6 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', icon: '⊞', order: 10, use: true },
           { id: 'S_BIZ_PO', name: '발주 현황', url: '/biz/po', icon: '▦', order: 20, use: true },
           { id: 'S_BIZ_PURCHASE', name: '매입 결제 관리', url: '/biz/purchase', icon: '₩', order: 25, use: true },
-          { id: 'S_BIZ_CATEGORY', name: '사업구분', url: '/biz/category', icon: '⌗', order: 30, use: true },
         ]
       },
     ]
@@ -98,6 +97,7 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'S_ADM_RESOURCE', name: '자원 관리', url: '/base/resource', icon: '📦', order: 25, use: true },
           { id: 'S_BASE_CODE', name: '공통코드', url: '/base/code', icon: '⌗', order: 30, use: true },
           { id: 'S_ADM_COMPANY_CLASS', name: '기업분류', url: '/base/company-class', icon: '◫', order: 40, use: true },
+          { id: 'S_ADM_BIZ_CATEGORY', name: '사업구분', url: '/base/biz-category', icon: '⌗', order: 45, use: true },
         ]
       },
       {

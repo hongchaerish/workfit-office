@@ -26,8 +26,8 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   /** 관리자 콘솔 › 근태·휴가 — 연차 관리·근무 정책 */
   S_ADM_LEAVE: { url: '/base/leave', row: pairRow('admin.leave') },
   S_ADM_COMMUTE_POLICY: { url: '/base/commute-policy', row: pairRow('admin.leave') },
-  /** 사업구분 — 업무 기준정보, 사업 현황과 같은 권한 */
-  S_BIZ_CATEGORY: { url: '/biz/category', row: pairRow('biz.project') },
+  /** 관리자 콘솔 › 회사·운영 › 사업구분 — 기업분류와 같은 기준정보 권한 */
+  S_ADM_BIZ_CATEGORY: { url: '/base/biz-category', row: pairRow('admin.code') },
 };
 
 /** 옛 권한표 화면의 URL (SYSTEM_SCREENS 와 같음) */
