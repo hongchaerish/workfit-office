@@ -172,10 +172,9 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
   const [listError, setListError] = useState('');
   const deleteResource = useDeleteResource();
-  const { can: canAuthz } = useAuthz();
-  const canManage = canAuthz('resource.manage');
-
-  if (!canManage) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
+  // 관리자 콘솔 › 자원 관리 — 보기 권한이면 목록만, 관리 권한이면 추가·수정·삭제
+  const { canManage: canAuthz } = useAuthz();
+  const canManage = canAuthz('admin.resource.manage');
 
   return (
     <div className="space-y-4">
@@ -184,7 +183,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
           <div className="text-[13px] font-bold text-ink">자원 기준정보</div>
           <div className="mt-1 text-[10px] text-ink3">회의실, 차량, 공용장비 마스터 정보를 등록, 수정 또는 삭제합니다.</div>
         </div>
-        <Button onClick={() => setEditing('new')} variant="primary">+ 자원 추가</Button>
+        {canManage && <Button onClick={() => setEditing('new')} variant="primary">+ 자원 추가</Button>}
       </div>
       {listError && <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-500">{listError}</div>}
       <div className="overflow-x-auto rounded-xl border border-border bg-panel shadow-sm">
@@ -197,7 +196,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
               <th className="px-4 py-3">방식</th>
               <th className="px-4 py-3">담당자</th>
               <th className="px-4 py-3">상태</th>
-              <th className="px-4 py-3 text-right">관리</th>
+              {canManage && <th className="px-4 py-3 text-right">관리</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -219,7 +218,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
                 </td>
                 <td className="px-4 py-3 text-ink2">{users.find((user) => user.id === resource.managerUserId)?.name ?? '미지정'}</td>
                 <td className="px-4 py-3"><ResourceStatusBadge status={resource.status} /></td>
-                <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                {canManage && <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
                   <Button onClick={() => setEditing(resource)} size="sm">수정</Button>
                   <Button
                     onClick={async () => {
@@ -236,7 +235,7 @@ export default function ResourceAdmin({ actor, resources, users, departments }: 
                   >
                     삭제
                   </Button>
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>

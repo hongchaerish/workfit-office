@@ -21,6 +21,8 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   S_ADM_COMPANY_CLASS: { url: '/base/company-class', row: pairRow('admin.code') },
   /** 관리자 콘솔 › 구성원·조직 › 인사 정보(인사 기록·개인 신상·퇴직) */
   S_ADM_HR: { url: '/base/hr', row: pairRow('admin.people') },
+  /** 관리자 콘솔 › 회사·운영 › 자원 관리(회의실·차량·비품 기준정보) */
+  S_ADM_RESOURCE: { url: '/base/resource', row: pairRow('admin.resource') },
   /** 관리자 콘솔 › 근태·휴가 — 연차 관리·근무 정책 */
   S_ADM_LEAVE: { url: '/base/leave', row: pairRow('admin.leave') },
   S_ADM_COMMUTE_POLICY: { url: '/base/commute-policy', row: pairRow('admin.leave') },

@@ -95,6 +95,7 @@ export const MENU_TREE: MenuNode[] = [
         id: 'G_ADM_COMPANY', name: '회사·운영', icon: '◎', order: 40, use: true, children: [
           { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 10, use: true },
           { id: 'S_BASE_HOLIDAY', name: '공휴일 관리', url: '/base/holiday', icon: '📅', order: 20, use: true },
+          { id: 'S_ADM_RESOURCE', name: '자원 관리', url: '/base/resource', icon: '📦', order: 25, use: true },
           { id: 'S_BASE_CODE', name: '공통코드', url: '/base/code', icon: '⌗', order: 30, use: true },
           { id: 'S_ADM_COMPANY_CLASS', name: '기업분류', url: '/base/company-class', icon: '◫', order: 40, use: true },
         ]

@@ -74,7 +74,7 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'calendar.use', name: '캘린더', desc: '개인·부서 일정을 쓰고 본다', area: 'schedule' }),
   P({ key: 'calendar.company', name: '전사 일정 관리', desc: '전사 일정을 등록·수정·삭제한다', area: 'schedule', implies: ['calendar.use'] }),
   P({ key: 'resource.use', name: '자원 예약', desc: '회의실·차량·비품을 예약한다', area: 'schedule' }),
-  P({ key: 'resource.manage', name: '자원 등록·관리', desc: '예약할 자원을 등록하고 다른 사람 예약을 정리한다', area: 'schedule', implies: ['resource.use'] }),
+  P({ key: 'resource.manage', name: '예약 관리', desc: '모든 자원의 예약을 승인·반려·취소한다(자원 등록은 관리자 콘솔 자원 관리)', area: 'schedule', implies: ['resource.use'] }),
 
   // 조직
   P({ key: 'org.view', name: '조직도·인명', desc: '조직도와 직원 연락처를 본다', area: 'org' }),
@@ -107,6 +107,7 @@ export const PERMISSIONS: PermissionDef[] = [
   // 관리자 · 회사·운영
   ...pair('admin.company', '회사 정보', 'adminCompany', '법인·사업장 정보를 본다', '회사 정보·로고·직인을 고친다', { adminConsole: true }),
   ...pair('admin.holiday', '공휴일', 'adminCompany', '공휴일 목록을 본다', '공휴일과 회사 지정 휴일을 등록한다', { adminConsole: true }),
+  ...pair('admin.resource', '자원', 'adminCompany', '예약 자원 목록을 본다', '회의실·차량·비품을 등록·수정·삭제한다', { adminConsole: true }),
   ...pair('admin.code', '공통코드', 'adminCompany', '공통코드를 본다', '공통코드를 추가하고 고친다', { adminConsole: true }),
 
   // 관리자 · 시스템

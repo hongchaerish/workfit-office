@@ -15,21 +15,19 @@ import ResourceCalendar from './ResourceCalendar';
 import ReservationForm from './ReservationForm';
 import MyReservations from './MyReservations';
 import ReservationApprovals from './ReservationApprovals';
-import ResourceAdmin from './ResourceAdmin';
 import ReservationDetailModal from './ReservationDetailModal';
 import ReservationReasonDialog from './ReservationReasonDialog';
 import ReservationRescheduleDialog from './ReservationRescheduleDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
 
-type TabId = 'overview' | 'request' | 'my' | 'approvals' | 'admin';
+type TabId = 'overview' | 'request' | 'my' | 'approvals';
 
 const TAB_LABELS: Record<TabId, string> = {
   overview: '예약 현황',
   request: '예약 신청',
   my: '내 예약',
   approvals: '승인 관리',
-  admin: '자원 관리',
 };
 
 const TAB_ICONS: Record<TabId, string> = {
@@ -37,7 +35,6 @@ const TAB_ICONS: Record<TabId, string> = {
   request: '🖊️',
   my: '🧾',
   approvals: '☑️',
-  admin: '🛠️',
 };
 
 const OVERVIEW_DETAIL_STATUSES = new Set<Reservation['status']>(['PENDING', 'CONFIRMED', 'COMPLETED']);
@@ -74,10 +71,8 @@ function LocalResourceScreen() {
   const requestedTab = searchParams.get('tab') as TabId | null;
   const tab: TabId = requestedTab && requestedTab in TAB_LABELS ? requestedTab : 'overview';
 
-  const { can: canAuthz } = useAuthz();
-  const canManage = canAuthz('resource.manage');
   const canApprove = useMemo(() => isAdmin || (actor ? resources.some((resource) => canApproveResource(actor, resource)) : false), [isAdmin, actor, resources]);
-  const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove).filter((item) => item !== 'admin' || canManage);
+  const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove);
   const loading = resourcesQuery.isLoading || reservationsQuery.isLoading || usersQuery.isLoading || departmentsQuery.isLoading;
   const queryError = resourcesQuery.error ?? reservationsQuery.error ?? usersQuery.error ?? departmentsQuery.error;
   const activeTab = tabs.includes(tab) ? tab : 'overview';
@@ -187,7 +182,6 @@ function LocalResourceScreen() {
         {activeTab === 'request' && <div className="mx-auto max-w-2xl rounded-xl border border-border bg-panel p-5 shadow-sm"><div className="mb-4"><div className="text-[13px] font-bold text-ink">새 예약 신청</div><div className="mt-1 text-[10px] text-ink3">시간과 수량은 저장 시 다시 검증합니다.</div></div><ReservationForm actor={actor} resources={resources} departments={departments} onSuccess={reservationCreated} /></div>}
         {activeTab === 'my' && <MyReservations actor={actor} reservations={reservations} resources={resources} selectedReservationId={selectedReservationId} onSelectReservation={(row) => openReservation(row, 'my')} />}
         {activeTab === 'approvals' && <ReservationApprovals actor={actor} reservations={reservations} resources={resources} users={users} onSelectReservation={(row) => openReservation(row, 'approvals')} />}
-        {activeTab === 'admin' && <ResourceAdmin actor={actor} resources={resources} users={users} departments={departments} />}
       </main>
       </GwSplit>
 
