@@ -38,23 +38,20 @@ export function createTarget(
 
 /**
  * 칩·항목 누르기 — 고칠 수 있는 것(내 일반 항목, 내가 주최한 회의, 내가 등록한 외근·출장)은 수정, 그 외는 보기.
- * 보기: 일반 업무는 열지 않고, 회의는 그날 일정 보기, 외근·출장(남의 것·결재 건·동행)은 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창. 결재 휴가는 상세가 없다(null).
+ * 결재 건·동행 외근은 기존 외근 상세, 회의 외 캘린더 일정은 캘린더 일정 창. 결재 휴가는 상세가 없다(null).
  */
 export function routeEntry(entry: DayEntry, actor: User, actorActive: boolean): EntryRoute {
   const mode = (canEdit: boolean): 'edit' | 'view' => (canEdit && actorActive ? 'edit' : 'view');
   switch (entry.source) {
     case 'ITEM':
-      // 고칠 수 없는 일반 업무는 열지 않는다 — 상세는 특수한 일정(회의·외근·출장·결재·캘린더)만
-      return mode(entry.item?.ownerUserId === actor.id) === 'edit' ? { sheet: { mode: 'edit', entry } } : null;
+      return { sheet: { mode: mode(entry.item?.ownerUserId === actor.id), entry } };
     case 'MEETING':
       return { sheet: { mode: mode(entry.event?.ownerUserId === actor.id), entry } };
     case 'CALENDAR':
       return entry.event ? { calendar: entry.event } : null;
     case 'OUTSIDE':
       if (entry.companionOf) return entry.outside ? { outside: { view: entry.outside, entry } } : null;
-      // 고칠 수 있으면 일정 창(수정), 아니면 외근·출장 상세 — 그날 일정 보기가 아니라 그 외근 한 건을 본다
-      if (mode(entry.outside?.self?.ownerUserId === actor.id) === 'edit') return { sheet: { mode: 'edit', entry } };
-      return entry.outside ? { outside: { view: entry.outside, entry } } : { sheet: { mode: 'view', entry } };
+      return { sheet: { mode: mode(entry.outside?.self?.ownerUserId === actor.id), entry } };
     case 'APPROVAL':
       // 휴가는 사유 비공개라 상세가 없다
       return entry.outside ? { outside: { view: entry.outside, entry } } : null;

@@ -1,5 +1,3 @@
-import type { MinuteRange } from '@/domain/workPlan/timeGrid';
-import { isCopyGesture, COPY_BADGE_CLASS } from './dragCopy';
 import { useState, useMemo, useRef, useEffect, Fragment, type ReactNode } from 'react';
 import type { User } from '@/domain/user/schema';
 import type { WorkPlan } from '@/domain/workPlan/schema';
@@ -11,16 +9,20 @@ import {
 import type { OutsideScheduleView } from '@/domain/outsideWork/view';
 import { layoutWeekBars, type WeekBar } from '@/domain/outsideWork/weekBars';
 import { canMoveEntry, hasPlannedDay, type DayCell, type DayEntry, type MemoPlanRef } from '@/domain/workPlan/dayEntries';
-import { chipLook } from './entryChipLook';
-import { EntryLine, LINE_TONE_CLASS } from './EntryLine';
-import { CellMemo } from './CellMemo';
-import { lineToneOf } from './entryKind';
+import { WORK_PLAN_MEMO_MAX, toggleMemoTask } from '@/domain/workPlan/memo';
+import { WorkPlanMemoEditor } from './memo/WorkPlanMemoEditor';
+import { WorkPlanMemoView } from './memo/WorkPlanMemoView';
+import { chipLook, timeOf, timeRangeOf } from './entryChipLook';
 import {
   ChevronLeft,
   ChevronRight,
   Plus,
   Check,
+  Calendar as CalendarIcon,
+  Settings,
   LocateFixed,
+  StickyNote,
+  Repeat,
   PanelRightOpen,
 } from 'lucide-react';
 
@@ -71,13 +73,10 @@ interface WorkPlanTeamMonthlyMatrixProps {
   members: User[];
   /** 칸 더블클릭·[+] → 그 날짜·그 사람으로 새 일정. 없으면(사용 중이 아닌 계정) 진입점도 없다. */
   onCreate?: (date: string, member: User) => void;
-  /** 복사한 업무가 있으면 — 내 칸을 누르면 그날에 붙여넣는다 */
-  onPaste?: (date: string) => void;
   /** 칩·여러 날 막대 클릭 */
   onOpenEntry: (entry: DayEntry) => void;
   /** 내 일반 업무를 끌어서 다른 날로 옮긴다. 없으면(사용 중이 아닌 계정) 끌 수 없다 */
-  /** 끌어 놓기 — copy 면 같은 내용으로 새로 만들고(Ctrl), 아니면 옮긴다 */
-  onMoveItem?: (item: WorkPlanItem, date: string, range?: MinuteRange, copy?: boolean) => void;
+  onMoveItem?: (item: WorkPlanItem, date: string) => void;
   /** 내 칸 메모 저장. 없으면(사용 중이 아닌 계정) 메모는 보기만. 실패하면 이유를 담아 throw */
   onSaveMemo?: (date: string, memoPlan: MemoPlanRef | null, text: string) => Promise<void>;
   /** 보고 있는 달(YYYY-MM) — 화면이 들고 칸 조립 범위로도 쓴다 */
@@ -88,6 +87,7 @@ interface WorkPlanTeamMonthlyMatrixProps {
   /** 예전 글 원본 — 전사 공통 일정 줄에 쓴다 */
   workPlans: WorkPlan[];
   onOpenCompanySchedule?: (date: string, existingText?: string, planId?: string) => void;
+  onOpenConfig?: () => void;
   /** 상단 고정 바 우측에 놓일 부서 필터·검색 */
   filters?: ReactNode;
   /** 날짜 머리 누르기 → 하루 상세 팝업 */
@@ -123,11 +123,11 @@ export function WorkPlanTeamMonthlyMatrix({
   cellOf,
   workPlans: monthlyPlans,
   onCreate,
-  onPaste,
   onOpenEntry,
   onMoveItem,
   onSaveMemo,
   onOpenCompanySchedule,
+  onOpenConfig,
   filters,
   onOpenDay,
   selectedDate,
@@ -139,7 +139,6 @@ export function WorkPlanTeamMonthlyMatrix({
   /** 끌고 있는 내 업무와, 놓으려는 내 칸의 날짜 */
   const [draggedItem, setDraggedItem] = useState<WorkPlanItem | null>(null);
   const [dropDate, setDropDate] = useState<string | null>(null);
-  const [dropCopy, setDropCopy] = useState(false);
   const endDrag = () => {
     setDraggedItem(null);
     setDropDate(null);
@@ -396,19 +395,18 @@ export function WorkPlanTeamMonthlyMatrix({
       {/* ── 월간 상단 툴바 (스크롤해도 상단 고정) ── */}
       <div ref={stickyBarRef} className="sticky top-[var(--shell-top)] z-40">
       <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-panel px-2 py-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-panel px-2.5 py-1.5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           {viewSwitch}
-          <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
           {weekStart && onWeekChange ? (
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, -7))} aria-label="지난주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer">
                 <ChevronLeft size={16} />
               </button>
-              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink">
+              <button type="button" onClick={() => onWeekChange(mondayOfDate(todayStr))} className="rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer">
                 이번 주
               </button>
-              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink">
+              <button type="button" onClick={() => onWeekChange(plusDays(weekStart, 7))} aria-label="다음 주" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer">
                 <ChevronRight size={16} />
               </button>
             </div>
@@ -418,14 +416,14 @@ export function WorkPlanTeamMonthlyMatrix({
               type="button"
               onClick={handlePrevMonth}
               aria-label="이전 달"
-              className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
             >
               <ChevronLeft size={16} />
             </button>
             <button
               type="button"
               onClick={handleThisMonth}
-              className="h-7 rounded-md px-2 text-[11.5px] font-semibold text-ink2 transition-colors hover:bg-panel-alt hover:text-ink"
+              className="rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
             >
               이번 달
             </button>
@@ -433,18 +431,19 @@ export function WorkPlanTeamMonthlyMatrix({
               type="button"
               onClick={handleNextMonth}
               aria-label="다음 달"
-              className="grid h-7 w-7 place-items-center rounded-md text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-ink2 hover:bg-panel-alt transition-colors cursor-pointer"
             >
               <ChevronRight size={16} />
             </button>
           </div>
           )}
 
-          <h2 className="ml-1 text-[14px] font-bold text-ink flex items-center gap-1.5">
+          <h2 className="ml-1 text-[14px] font-extrabold text-ink flex items-center gap-1.5">
+            <CalendarIcon size={16} className="text-teal" />
             {weekStart && weeks[0] ? (
               <span>
                 {weeks[0].days[0].monthNum}월 {weeks[0].weekNum}주차
-                <span className="ml-1.5 text-[12px] font-medium text-ink3">
+                <span className="ml-1.5 text-[12px] font-semibold text-ink3">
                   {weeks[0].days[0].monthNum}/{weeks[0].days[0].dayNum} ~ {weeks[0].days[6].monthNum}/{weeks[0].days[6].dayNum}
                 </span>
               </span>
@@ -457,10 +456,10 @@ export function WorkPlanTeamMonthlyMatrix({
             <button
               type="button"
               onClick={scrollToCurrentWeek}
-              title="이번 주로" className="flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] font-semibold text-ink3 transition-colors hover:bg-panel-alt hover:text-ink"
+              className="ml-2 flex items-center gap-1 rounded-lg border border-teal/40 bg-teal-soft/20 px-2.5 py-1 text-[11px] font-bold text-teal hover:bg-teal-soft/40 transition-colors shadow-2xs cursor-pointer"
             >
               <LocateFixed size={12} />
-              <span>이번 주</span>
+              <span>이번 주차로 이동</span>
             </button>
           )}
         </div>
@@ -468,6 +467,16 @@ export function WorkPlanTeamMonthlyMatrix({
         {/* 필터·검색 및 액션 버튼 */}
         <div className="flex flex-wrap items-center gap-1.5">
           {filters}
+          {onOpenConfig && (
+            <button
+              type="button"
+              onClick={onOpenConfig}
+              className="flex items-center gap-1 rounded-xl border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs cursor-pointer"
+            >
+              <Settings size={12} className="text-ink3" />
+              <span>태그 관리</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -644,7 +653,7 @@ export function WorkPlanTeamMonthlyMatrix({
                             const cellBorderClass = dayColBorderClass(d.isToday);
                             // 내 칸을 누르면 새 일정, 남의 칸을 누르면 그날 상세(팝업)
                             const onCellClick = isMe
-                              ? onPaste ? () => onPaste(dayStr) : onCreate ? () => onCreate(dayStr, member) : undefined
+                              ? onCreate ? () => onCreate(dayStr, member) : undefined
                               : onOpenDay ? () => onOpenDay(dayStr) : undefined;
                             // 끌고 있는 업무는 내 칸에만 놓을 수 있다
                             const droppable = isMe && draggedItem !== null;
@@ -654,15 +663,12 @@ export function WorkPlanTeamMonthlyMatrix({
                                 key={dayStr}
                                 onDragOver={droppable ? (e) => {
                                   e.preventDefault();
-                                  const copy = isCopyGesture(e);
-                                  e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
+                                  e.dataTransfer.dropEffect = 'move';
                                   if (dropDate !== dayStr) setDropDate(dayStr);
-                                  if (dropCopy !== copy) setDropCopy(copy);
                                 } : undefined}
                                 onDrop={droppable ? (e) => {
                                   e.preventDefault();
-                                  const copy = isCopyGesture(e);
-                                  if (copy || draggedItem.date !== dayStr) onMoveItem?.(draggedItem, dayStr, undefined, copy);
+                                  if (draggedItem.date !== dayStr) onMoveItem?.(draggedItem, dayStr);
                                   endDrag();
                                 } : undefined}
                                 // 위(일정) 칸 누르기 — 내 칸은 일정 창, 남의 칸은 하루 상세. 아래 메모 칸은 CellMemo 가 받는다
@@ -672,7 +678,6 @@ export function WorkPlanTeamMonthlyMatrix({
                                   onCellClick ? 'cursor-pointer' : ''
                                 } ${!d.inCurrentMonth ? 'opacity-50' : ''} ${droppable && dropDate === dayStr ? 'ring-2 ring-inset ring-teal' : ''}`}
                               >
-                                {droppable && dropDate === dayStr && dropCopy && <span className={COPY_BADGE_CLASS}>+ 복사</span>}
                                 {onCreate && (
                                   <button
                                     type="button"
@@ -702,7 +707,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                   {barLanes > 0 && <div className="shrink-0" style={{ height: barLanes * SPAN_LANE_HEIGHT }} aria-hidden />}
                                   <div className="min-h-[36px] flex-1 space-y-1">
                                     {entries.map((entry) => {
-                                      const chip = <EntryLine entry={entry} onOpen={onOpenEntry} />;
+                                      const chip = <EntryChip entry={entry} onOpen={onOpenEntry} look={look} />;
                                       const item = entry.item;
                                       if (!onMoveItem || !item || !canMoveEntry(entry, actor.id)) return <Fragment key={entry.key}>{chip}</Fragment>;
                                       return (
@@ -710,7 +715,7 @@ export function WorkPlanTeamMonthlyMatrix({
                                           key={entry.key}
                                           draggable
                                           onDragStart={(e) => {
-                                            e.dataTransfer.effectAllowed = 'copyMove';
+                                            e.dataTransfer.effectAllowed = 'move';
                                             e.dataTransfer.setData('text/plain', item.title);
                                             setDraggedItem(item);
                                           }}
@@ -754,9 +759,181 @@ const SPAN_LANE_HEIGHT = 20;
 /** 칸 안쪽 여백(p-2)과 같은 값 */
 const CELL_PADDING = 8;
 
+/** 칸 항목 칩 — `종일`/`HH:mm` + `[태그]` + 제목. 누르면 일정 창(또는 결재 상세). 결재 휴가는 상세가 없어 누르지 않는다. */
+function EntryChip({ entry, onOpen, look }: { entry: DayEntry; onOpen: (entry: DayEntry) => void; look: DensityLook }) {
+  const { label, badgeClass, dotClass, hint } = chipLook(entry);
+  const openable = !(entry.source === 'APPROVAL' && !entry.outside);
+  const body = (
+    <>
+      {/* 시각 칸 폭·숫자 폭 고정 — 11:00 처럼 좁은 숫자도 점·제목 열이 맞게 */}
+      <span className={`w-[2.8em] shrink-0 ${look.time} font-normal tabular-nums opacity-80`}>{timeOf(entry)}</span>
+      {/* 작은 원은 확대 배율에서 픽셀 반올림으로 찌그러진다 — 크게 그려 축소(변형은 반올림하지 않는다) */}
+      {dotClass && <span className={`-mx-0.5 h-2 w-2 shrink-0 scale-50 rounded-full ${dotClass}`} aria-hidden />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {entry.roomStatus === 'PENDING' && (
+        <span className="shrink-0 rounded bg-amber-soft px-1 text-[8px] font-bold text-amber">대기</span>
+      )}
+      {entry.roomStatus === 'REJECTED' && (
+        <span className="shrink-0 rounded bg-danger/10 px-1 text-[8px] font-bold text-danger">회의실 반려</span>
+      )}
+      {entry.outside?.source === 'APPROVAL' && (
+        <Check size={look.mark} strokeWidth={3} className="shrink-0 opacity-40" aria-label="결재 완료" />
+      )}
+      {entry.item?.routine && <Repeat size={look.mark} strokeWidth={3} className="shrink-0 opacity-40" aria-label="반복" />}
+    </>
+  );
+  const chipClass = `flex w-full items-center gap-1 rounded border px-1.5 text-left ${look.chip} font-bold shadow-2xs ${badgeClass}`;
+  if (!openable) {
+    return (
+      // 누를 상세가 없는 칩 — 칸 누르기(새 일정 창)로 넘기지 않는다
+      <div title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint} className={chipClass} onClick={(e) => e.stopPropagation()}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(entry);
+      }}
+      title={timeRangeOf(entry) ? `${hint} (${timeRangeOf(entry)})` : hint}
+      className={`${chipClass} cursor-pointer hover:brightness-95`}
+    >
+      {body}
+    </button>
+  );
+}
+
+/**
+ * 칸 아래쪽 메모 칸 — 서식 없는 글. 기본 높이는 같고, 글이 길면 그만큼 늘어난다(칸·행도 같이). 점선 위는 일정, 아래는 메모.
+ * `onSave`가 있으면(내 칸) 메모 칸을 눌러 그 자리에서 고친다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소.
+ */
+function CellMemo({
+  text,
+  label,
+  onSave,
+  look,
+}: {
+  text: string | null;
+  label: string;
+  onSave?: (text: string) => Promise<void>;
+  look: DensityLook;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const startEdit = () => {
+    if (!onSave || draft !== null) return;
+    setError('');
+    setDraft(text ?? '');
+  };
+
+  const finish = async () => {
+    if (draft === null || saving || !onSave) return;
+    if (draft.trim() === (text ?? '').trim()) {
+      setDraft(null);
+      return;
+    }
+    if (draft.length > WORK_PLAN_MEMO_MAX) {
+      setError(`메모는 ${WORK_PLAN_MEMO_MAX.toLocaleString()}자까지 쓸 수 있습니다(서식 포함).`);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 칸에서 체크박스 누르기 — 고치기 창을 열지 않고 바로 저장
+  const toggleTask = async (taskIndex: number) => {
+    if (!onSave || !text || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(toggleMemoTask(text, taskIndex));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '메모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      role={onSave && draft === null ? 'button' : undefined}
+      tabIndex={onSave && draft === null ? 0 : undefined}
+      aria-label={onSave && draft === null ? `${label} ${text ? '고치기' : '쓰기'}` : undefined}
+      title={onSave && draft === null ? '눌러서 메모 쓰기' : undefined}
+      // 내 칸 메모 칸 누르기는 메모 고치기 — 칸 누르기(새 일정 창)로 넘기지 않는다
+      onClick={
+        onSave
+          ? (e) => {
+              e.stopPropagation();
+              startEdit();
+            }
+          : undefined
+      }
+      onKeyDown={
+        onSave && draft === null
+          ? (e) => {
+              if (e.key === 'Enter') startEdit();
+            }
+          : undefined
+      }
+      // 기본 높이(두 줄)는 늘 같고 글이 길면 늘어난다 — 옆 칸 때문에 행이 늘 때는 위 일정 칸이 늘어난다(shrink-0)
+      // 옅은 바탕으로 위 일정 칸과 구분한다
+      className={`-mx-1 mt-1.5 min-h-[2.5rem] shrink-0 rounded border-t border-dashed border-border bg-panel-alt/50 px-1 pt-1 ${
+        onSave && draft === null ? 'cursor-text hover:bg-panel-alt' : ''
+      }`}
+    >
+      {draft !== null ? (
+        <>
+          {/* 서식 메모 편집기 — 위에 서식 버튼이 뜬다. 칸 밖을 누르거나 Ctrl+Enter = 저장, Esc = 취소 */}
+          <WorkPlanMemoEditor
+            label={label}
+            value={draft}
+            disabled={saving}
+            onChange={setDraft}
+            onBlur={() => void finish()}
+            onSave={() => void finish()}
+            onCancel={() => {
+              setError('');
+              setDraft(null);
+            }}
+            className={`min-h-[3.5rem] rounded border border-sky-300 bg-panel px-1.5 py-1 ${look.memo} leading-relaxed text-ink focus-within:border-sky-400 dark:border-sky-700`}
+          />
+          {error && <div role="alert" className="mt-0.5 text-[9px] font-semibold text-danger">{error}</div>}
+        </>
+      ) : text ? (
+        <WorkPlanMemoView
+          memo={text}
+          onToggle={onSave ? (i) => void toggleTask(i) : undefined}
+          className={`${look.memo} leading-relaxed text-ink2 ${saving ? 'opacity-60' : ''}`}
+        />
+      ) : (
+        onSave && (
+          // 비어 있는 내 메모 칸 — 흐린 '메모' 글자를 늘 보인다
+          <span className={`flex items-center gap-1 ${look.memo} text-ink3/60`}>
+            <StickyNote size={look.mark + 1} />
+            메모
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
 /** 여러 날 외근·출장 막대 — 결재 완료 건은 끝에 옅은 체크, 누르면 상세. */
 function OutsideSpanBar({ bar, entry, onOpen, look }: { bar: WeekBar; entry: DayEntry; onOpen: (entry: DayEntry) => void; look: DensityLook }) {
-  const { label } = chipLook(entry);
+  const { label, badgeClass } = chipLook(entry);
   const view = entry.outside;
   const range = view ? `${view.startDate.slice(5).replace('-', '/')}~${view.endDate.slice(5).replace('-', '/')}` : '';
   const time = !entry.allDay && entry.startTime && entry.endTime ? `${entry.startTime}~${entry.endTime}` : '';
@@ -768,9 +945,9 @@ function OutsideSpanBar({ bar, entry, onOpen, look }: { bar: WeekBar; entry: Day
         onOpen(entry);
       }}
       title={`${label} (${range}${time ? ` · ${time}` : ''})`}
-      className={`absolute z-10 flex items-center justify-between gap-1 bg-panel/90 pl-1.5 pr-1 ${look.bar} font-normal cursor-pointer hover:bg-panel-alt ${LINE_TONE_CLASS[lineToneOf(entry)]} ${
-        bar.continuesBefore ? 'border-l-0' : 'border-l-2'
-      }`}
+      className={`absolute z-10 flex items-center justify-between gap-1 border px-1.5 ${look.bar} font-bold shadow-2xs cursor-pointer hover:brightness-95 ${badgeClass} ${
+        bar.continuesBefore ? 'rounded-l-none border-l-0' : 'rounded-l'
+      } ${bar.continuesAfter ? 'rounded-r-none border-r-0' : 'rounded-r'}`}
       style={{
         top: CELL_PADDING + bar.lane * SPAN_LANE_HEIGHT,
         left: bar.continuesBefore ? 0 : CELL_PADDING / 2,

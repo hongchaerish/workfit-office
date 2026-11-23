@@ -28,11 +28,11 @@ const entry = (patch: Partial<DayEntry>) => ({ ...base, ...patch }) as DayEntry;
 
 // ── routeEntry ────────────────────────────────
 
-test('내 일반 항목은 수정, 남의 일반 항목은 열지 않는다', () => {
+test('내 일반 항목은 수정, 남의 일반 항목은 보기', () => {
   const mine = entry({ source: 'ITEM', item: item(ME.id) });
   assert.deepEqual(routeEntry(mine, ME, true), { sheet: { mode: 'edit', entry: mine } });
   const theirs = entry({ source: 'ITEM', item: item(OTHER.id) });
-  assert.equal(routeEntry(theirs, ME, true), null);
+  assert.deepEqual(routeEntry(theirs, ME, true), { sheet: { mode: 'view', entry: theirs } });
 });
 
 test('내가 주최한 회의는 수정, 참석자로 든 회의는 보기', () => {
@@ -42,12 +42,11 @@ test('내가 주최한 회의는 수정, 참석자로 든 회의는 보기', () 
   assert.deepEqual(routeEntry(attending, ME, true), { sheet: { mode: 'view', entry: attending } });
 });
 
-test('내가 등록한 외근은 수정, 남이 등록한 외근은 외근 상세', () => {
+test('내가 등록한 외근은 수정, 남이 등록한 외근은 보기', () => {
   const mine = entry({ source: 'OUTSIDE', outside: outsideView(ME.id, true) });
   assert.deepEqual(routeEntry(mine, ME, true), { sheet: { mode: 'edit', entry: mine } });
-  const view = outsideView(OTHER.id, true);
-  const theirs = entry({ source: 'OUTSIDE', outside: view });
-  assert.deepEqual(routeEntry(theirs, ME, true), { outside: { view, entry: theirs } });
+  const theirs = entry({ source: 'OUTSIDE', outside: outsideView(OTHER.id, true) });
+  assert.deepEqual(routeEntry(theirs, ME, true), { sheet: { mode: 'view', entry: theirs } });
 });
 
 test('동행 외근 칸은 외근 상세로', () => {
@@ -69,13 +68,14 @@ test('회의 외 캘린더 일정은 캘린더 일정 창으로, 원본이 없�
   assert.equal(routeEntry(entry({ source: 'CALENDAR' }), ME, true), null);
 });
 
-test('사용 중이 아닌 계정은 내 것도 보기로만 연다 — 일반 업무는 열지 않고, 외근은 외근 상세', () => {
-  assert.equal(routeEntry(entry({ source: 'ITEM', item: item(ME.id) }), ME, false), null);
-  const organized = entry({ source: 'MEETING', event: meeting(ME.id) });
-  assert.deepEqual(routeEntry(organized, ME, false), { sheet: { mode: 'view', entry: organized } });
-  const view = outsideView(ME.id, true);
-  const outside = entry({ source: 'OUTSIDE', outside: view });
-  assert.deepEqual(routeEntry(outside, ME, false), { outside: { view, entry: outside } });
+test('사용 중이 아닌 계정은 내 것도 보기로만 연다', () => {
+  for (const e of [
+    entry({ source: 'ITEM', item: item(ME.id) }),
+    entry({ source: 'MEETING', event: meeting(ME.id) }),
+    entry({ source: 'OUTSIDE', outside: outsideView(ME.id, true) }),
+  ]) {
+    assert.deepEqual(routeEntry(e, ME, false), { sheet: { mode: 'view', entry: e } });
+  }
 });
 
 // ── createTarget ──────────────────────────────

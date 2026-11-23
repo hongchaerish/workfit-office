@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, Check, ChevronDown, ChevronUp, MoreHorizontal, Repeat, X } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
+import { OUTSIDE_WORK_SUBTYPES } from '@/domain/outsideWork/schema';
 import type { User } from '@/domain/user/schema';
 import type { DayCell } from '@/domain/workPlan/dayEntries';
 import { selectableGeneralTags, ETC_TAG_ID } from '@/domain/workPlan/tag';
@@ -114,7 +115,7 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
 
           {/* 루틴(반복) — 새 일반 업무는 규칙, 루틴으로 만든 업무를 고칠 때는 범위 */}
           {form.routineRule && (
-            <RoutineFields start={state.date} rule={form.routineRule} holidays={form.routineHolidays} onChange={form.setRoutineRule} />
+            <RoutineFields start={state.date} rule={form.routineRule} onChange={form.setRoutineRule} />
           )}
           {state.kind === 'ITEM' && form.editingRoutine && (
             <RoutineScopeFields
@@ -126,6 +127,29 @@ export function MobileWorkPlanEventSheet({ target, actor, deptId, users, cellOf,
             />
           )}
 
+          {/* 세부 구분은 출장(국내·해외)만 — 외근은 고르지 않는다 */}
+          {state.kind === 'TRIP' && (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2" role="radiogroup" aria-label="세부 구분">
+              {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
+                const active = state.subType === subType;
+                return (
+                  <button
+                    key={subType}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={readOnly}
+                    onClick={() => form.setSubType(subType)}
+                    className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed ${
+                      active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 active:bg-panel-alt'
+                    }`}
+                  >
+                    {subType}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <fieldset disabled={readOnly} className="min-w-0 px-4 py-3">
             <EventFields {...fieldProps} part="main" />

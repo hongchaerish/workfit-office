@@ -21,8 +21,7 @@ export type EventKind = 'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP';
 
 export type EventTarget =
   // 남의 칸이면 allowed = ['MEETING']. initialRange = 처음 시간 구간(주면 종일 아님으로 시작)
-  // initialKind·initialAttendeeIds = 상세 창 '회의 잡기'처럼 처음 종류·참석자를 정해 열 때
-  | { mode: 'create'; date: string; owner: User; allowed: EventKind[]; initialRange?: MinuteRange; initialKind?: EventKind; initialAttendeeIds?: string[] }
+  | { mode: 'create'; date: string; owner: User; allowed: EventKind[]; initialRange?: MinuteRange }
   | { mode: 'edit'; entry: DayEntry } // ITEM·MEETING·OUTSIDE(본인 등록)
   | { mode: 'view'; entry: DayEntry };
 
@@ -94,10 +93,7 @@ export function initialCreateState(
   actorId: string,
   firstTagId: string,
 ): EventFormState {
-  const kind: EventKind =
-    target.initialKind && target.allowed.includes(target.initialKind)
-      ? target.initialKind
-      : target.allowed.includes('ITEM') ? 'ITEM' : target.allowed[0] ?? 'ITEM';
+  const kind: EventKind = target.allowed.includes('ITEM') ? 'ITEM' : target.allowed[0] ?? 'ITEM';
   const base = blankState(target.date);
   const start: EventFormState = {
     ...base,
@@ -105,7 +101,7 @@ export function initialCreateState(
     tagId: firstTagId,
     allDay: isOutsideKind(kind),
     subType: isOutsideKind(kind) ? OUTSIDE_WORK_SUBTYPES[kind][0] : '',
-    attendeeIds: target.initialAttendeeIds ? [...target.initialAttendeeIds] : target.owner.id !== actorId ? [target.owner.id] : [],
+    attendeeIds: target.owner.id !== actorId ? [target.owner.id] : [],
   };
   return target.initialRange ? applyRangeChange(start, { ...target.initialRange }) : start;
 }
@@ -219,9 +215,7 @@ export function applyRangeChange(state: EventFormState, range: MinuteRange): Eve
 /** 날짜 바꾸기 — 여러 날 외근·출장은 종료일이 시작일보다 앞서지 않게. 빈 값이면 그대로. */
 export function applyDateChange(state: EventFormState, date: string): EventFormState {
   if (!date) return state;
-  // 여러 날 일정은 기간(박 수)을 지킨 채 옮긴다
-  const nights = tripNightsOf(state.date, state.endDate);
-  return { ...state, date, endDate: nights > 0 && isValidCalendarDate(date) ? tripEndDate(date, nights) : state.endDate < date ? date : state.endDate };
+  return { ...state, date, endDate: state.endDate < date ? date : state.endDate };
 }
 
 /** 종일 켜고 끄기 — 외근은 '종일 외근' ↔ '시간 외근'(세부 구분 시간 규칙), 회의는 종일이 없다. */
@@ -407,30 +401,4 @@ export function recentDestinations(schedules: Array<{ startDate: string; destina
     if (list.length >= limit) break;
   }
   return list;
-}
-
-/** 시작일~끝날짜 사이 박 수(하루짜리·뒤집힌 기간은 0) */
-export function tripNightsOf(startDate: string, endDate: string): number {
-  if (!isValidCalendarDate(startDate) || !isValidCalendarDate(endDate)) return 0;
-  return Math.max(0, Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / DAY_MS));
-}
-
-/** 시작일에서 nights 박 뒤의 날짜 */
-export function tripEndDate(startDate: string, nights: number): string {
-  return new Date(Date.parse(`${startDate}T00:00:00Z`) + nights * DAY_MS).toISOString().slice(0, 10);
-}
-
-const KIND_WORD: Record<'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP', string> = { ITEM: '업무', MEETING: '회의', OUTSIDE: '외근', TRIP: '출장' };
-
-/** 저장 알림 — '11월 16일 외근을 저장했어요', 여러 날은 '11월 17~18일', 달이 넘으면 '11월 30일~12월 1일' */
-export function savedNotice(kind: 'ITEM' | 'MEETING' | 'OUTSIDE' | 'TRIP', startDate: string, endDate: string): string {
-  const [, sm, sd] = startDate.split('-').map(Number);
-  let when = `${sm}월 ${sd}일`;
-  if (isValidCalendarDate(endDate) && endDate > startDate) {
-    const [, em, ed] = endDate.split('-').map(Number);
-    when = em === sm ? `${sm}월 ${sd}~${ed}일` : `${when}~${em}월 ${ed}일`;
-  }
-  const word = KIND_WORD[kind];
-  const last = word.charCodeAt(word.length - 1) - 0xac00;
-  return `${when} ${word}${last % 28 ? '을' : '를'} 저장했어요`;
 }

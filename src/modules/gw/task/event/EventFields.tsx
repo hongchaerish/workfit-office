@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlignLeft, ArrowRight, Car, ChevronDown, Clock, Eye, Flag, MapPin, Phone, Plane, UserPlus, Users, X } from 'lucide-react';
+import { AlignLeft, ArrowRight, Car, Clock, Eye, MapPin, Phone, UserPlus, Users, X } from 'lucide-react';
 import { canJoinMeeting } from '@/domain/calendarEvent/meeting';
 import { CALENDAR_VISIBILITY_LABELS, type CalendarEvent, type CalendarVisibility } from '@/domain/calendarEvent/schema';
 import type { User } from '@/domain/user/schema';
-import { OUTSIDE_WORK_SUBTYPES, outsideKindLabel } from '@/domain/outsideWork/schema';
+import { outsideKindLabel } from '@/domain/outsideWork/schema';
 import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
-import { DAY_END, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
+import { DAY_END, durationLabel, endTimeOptions, quickDefaultRange, startTimeOptions, toHHmm, toMinutes } from '@/domain/workPlan/timeGrid';
 import { useCanDesignate } from '@/features/auth/useCanDesignate';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { useOutsideSchedulesOf } from '@/features/outsideWork/useOutsideWorks';
@@ -13,7 +13,7 @@ import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Button } from '@/shared/ui/Button';
 import { SelectField } from '@/shared/ui/form/SelectField';
 import { TextField } from '@/shared/ui/form/TextField';
-import { outsideLengthLabel, recentDestinations, tripEndDate, tripNightsOf } from './eventFormMapping';
+import { outsideLengthLabel, recentDestinations } from './eventFormMapping';
 import { RoomPicker } from './RoomPicker';
 import { TimeCombo } from './TimeCombo';
 import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
@@ -21,6 +21,8 @@ import type { useWorkPlanEventForm } from './useWorkPlanEventForm';
 export type EventForm = ReturnType<typeof useWorkPlanEventForm>;
 
 const DEFAULT_LENGTH = 60;
+/** 길이 버튼(분) */
+const LENGTH_PRESETS = [10, 20, 30, 60, 90, 120] as const;
 /** 종료 목록의 '미정' 값 */
 const OPEN_END = -1;
 
@@ -56,17 +58,11 @@ interface EventFieldsProps {
   part?: 'all' | 'main' | 'more';
   /** 제목(행선지) 칸에 처음 포커스 — 기본 켬(PC). 모바일은 새 일정일 때만(키보드가 바로 뜨므로) */
   autoFocusTitle?: boolean;
-  /** 최근 적은 업무 제목 — 새 업무 제목 아래 버튼 */
-  recentTitles?: string[];
-  /** 고른 시간에 바쁜 사람 — 참석자 검색에 '이 시간 바쁨' */
-  busyAt?: (userId: string) => boolean;
 }
 
 /** 일정 창 왼쪽 입력 — 종류(일반·회의·외근·출장)마다 칸이 다르다. */
-export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true, recentTitles = [], busyAt }: EventFieldsProps) {
+export function EventFields({ form, actor, users, ownerId, ownerName, outsideSelfId, onJoin, part = 'all', autoFocusTitle = true }: EventFieldsProps) {
   const { state, set, readOnly } = form;
-  // 빈 제목으로 저장하려 했으면 제목 칸 자체를 빨갛게 — 창 아래 오류 줄만으로는 놓치기 쉽다
-  const titleMissing = !!form.error && !readOnly && !state.title.trim() && (state.kind === 'ITEM' || state.kind === 'MEETING');
   const isOutside = state.kind === 'OUTSIDE' || state.kind === 'TRIP';
   const isMeeting = state.kind === 'MEETING';
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
@@ -96,8 +92,7 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
         <Row label="제목">
           <input
             aria-label="제목"
-            aria-invalid={titleMissing || undefined}
-            className={`${titleClass} ${titleMissing ? '!border-danger' : ''}`}
+            className={titleClass}
             value={state.title}
             maxLength={100}
             placeholder={isMeeting ? '회의 제목' : '제목'}
@@ -105,28 +100,12 @@ export function EventFields({ form, actor, users, ownerId, ownerName, outsideSel
             autoFocus={autoFocusTitle && !readOnly}
             onChange={(e) => set('title', e.target.value)}
           />
-          {titleMissing && <p role="alert" className="mt-1 text-[11px] font-semibold text-danger">제목을 입력하세요</p>}
-          {state.kind === 'ITEM' && !readOnly && recentTitles.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[11px] text-ink3">최근</span>
-              {recentTitles.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set('title', t)}
-                  className="max-w-[12rem] truncate rounded-full border border-border px-2 py-0.5 text-[11px] text-ink2 hover:bg-panel-alt"
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
         </Row>
       )}
 
       {main && isMeeting && (
         <Row icon={<Users size={15} />} label="참석자">
-          <AttendeeField form={form} actor={actor} users={users} busyAt={busyAt} />
+          <AttendeeField form={form} actor={actor} users={users} />
         </Row>
       )}
 
@@ -206,8 +185,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * 외근·출장 입력 — 장소 → 목적(비워도 됨, 표에 보이는 글) → 기간 → 세부 정보(교통수단, 출장 구분, 더보기: 동행자·연락처, 메모).
- * 나눠 그릴 때(모바일) 'main' = 장소·목적·기간, 'more' = 종료일과 세부 정보.
+ * 외근·출장 입력 — 제목(저장은 목적 칸) → 출장지·외근지(행선지·기간) → 세부 정보(동행자·교통·연락처·메모).
+ * 나눠 그릴 때(모바일) 'main' = 제목·장소·기간, 'more' = 종료일과 세부 정보.
  */
 function OutsideFields({
   form,
@@ -228,37 +207,37 @@ function OutsideFields({
   const endDate = state.endDate < state.date ? state.date : state.endDate;
   const length = outsideLengthLabel(kind, state.date, endDate);
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
-  // 동행자·연락처 — 비어 있으면 접어 둔다(적힌 게 있거나 읽기 전용·모바일이면 펼침). 메모는 늘 보인다
-  const hasExtra = state.companionIds.some((id) => id !== outsideSelfId && id !== actor.id) || !!state.contact.trim();
-  const [extraOpen, setExtraOpen] = useState(false);
-  const showExtra = extraOpen || hasExtra || readOnly || split;
 
   return (
     <div className="flex flex-col gap-4">
       {main && (
-        <div className="flex flex-col gap-3">
+        <Row label="제목">
+          <input
+            aria-label="제목"
+            className={titleClass}
+            value={state.purpose}
+            maxLength={500}
+            placeholder="제목"
+            disabled={readOnly}
+            autoFocus={autoFocusTitle && !readOnly}
+            onChange={(e) => set('purpose', e.target.value)}
+          />
+        </Row>
+      )}
+
+      {main && (
+        <Section title={placeLabel}>
           <Row icon={<MapPin size={15} />} label={placeLabel}>
-            <DestinationField form={form} ownerId={ownerId} ownerName={ownerName} placeholder={placeLabel} autoFocus={autoFocusTitle && !readOnly} />
-          </Row>
-          <Row icon={<Flag size={15} />} label="목적">
-            <TextField
-              aria-label="목적"
-              value={state.purpose}
-              maxLength={500}
-              placeholder="목적 (예: 고객사 미팅)"
-              disabled={readOnly}
-              className="w-full"
-              onChange={(e) => set('purpose', e.target.value)}
-            />
+            <DestinationField form={form} ownerId={ownerId} ownerName={ownerName} placeholder={placeLabel} />
           </Row>
           <Row icon={<Clock size={15} />} label="날짜·시간">
             <TimeFields form={form} stacked={split} showEndDate={!split} />
-            {length && !split && kind === 'OUTSIDE' && <LengthBadge length={length} />}
+            {length && !split && <LengthBadge length={length} />}
           </Row>
           {!readOnly && (
             <OutsideOverlapWarning ownerId={ownerId} ownerName={ownerName} selfId={outsideSelfId} startDate={state.date} endDate={endDate} />
           )}
-        </div>
+        </Section>
       )}
 
       {more && (
@@ -271,25 +250,6 @@ function OutsideFields({
               </div>
             </Row>
           )}
-          <Row icon={<Car size={15} />} label="교통수단">
-            <TransportField form={form} />
-          </Row>
-          {kind === 'TRIP' && (
-            <Row icon={<Plane size={15} />} label="구분">
-              <SubTypeField form={form} />
-            </Row>
-          )}
-          {!showExtra && (
-            <button
-              type="button"
-              onClick={() => setExtraOpen(true)}
-              className="inline-flex w-fit items-center gap-1 pl-7 text-[11.5px] font-semibold text-ink3 hover:text-ink"
-            >
-              동행자·연락처
-              <ChevronDown size={13} />
-            </button>
-          )}
-          {showExtra && (
           <Row icon={<Users size={15} />} label="동행자">
             <CompanionField
               form={form}
@@ -301,8 +261,9 @@ function OutsideFields({
               endDate={endDate}
             />
           </Row>
-          )}
-          {showExtra && (
+          <Row icon={<Car size={15} />} label="교통수단">
+            <TransportField form={form} />
+          </Row>
           <Row icon={<Phone size={15} />} label="연락처">
             <TextField
               aria-label="연락처"
@@ -314,7 +275,6 @@ function OutsideFields({
               onChange={(e) => set('contact', e.target.value)}
             />
           </Row>
-          )}
           <Row icon={<AlignLeft size={15} />} label="메모">
             <textarea
               aria-label="메모"
@@ -338,19 +298,7 @@ function LengthBadge({ length }: { length: string }) {
 }
 
 /** 행선지 — 비어 있으면 일정 주인의 지난 행선지를 눌러 채운다 */
-function DestinationField({
-  form,
-  ownerId,
-  ownerName,
-  placeholder,
-  autoFocus = false,
-}: {
-  form: EventForm;
-  ownerId: string;
-  ownerName: string;
-  placeholder: string;
-  autoFocus?: boolean;
-}) {
+function DestinationField({ form, ownerId, ownerName, placeholder }: { form: EventForm; ownerId: string; ownerName: string; placeholder: string }) {
   const { state, set, readOnly } = form;
   const schedules = useOutsideSchedulesOf(ownerId, ownerName);
   const recent = useMemo(() => recentDestinations(schedules, RECENT_DESTINATION_LIMIT), [schedules]);
@@ -364,7 +312,6 @@ function DestinationField({
         maxLength={200}
         placeholder={placeholder}
         disabled={readOnly}
-        autoFocus={autoFocus}
         className="w-full"
         onChange={(e) => set('destination', e.target.value)}
       />
@@ -387,146 +334,42 @@ function DestinationField({
   );
 }
 
-/** 교통수단 — 자주 쓰는 것은 눌러 고르고(다시 누르면 해제), 그 밖은 '직접'을 눌러 적는다 */
+/** 교통수단 — 자주 쓰는 것은 눌러 고르고(다시 누르면 해제), 그 밖은 직접 입력 */
 function TransportField({ form }: { form: EventForm }) {
   const { state, set, readOnly } = form;
-  const value = state.transportation;
-  const isPreset = (TRANSPORT_PRESETS as readonly string[]).includes(value);
-  const [typing, setTyping] = useState(false);
-  const custom = typing || (!!value.trim() && !isPreset);
-  if (readOnly) return <span className="pt-1 text-[13px] text-ink">{value || '—'}</span>;
-  const chip = (active: boolean) =>
-    `rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-      active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-    }`;
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="교통수단 고르기">
-        {TRANSPORT_PRESETS.map((preset) => {
-          const active = !custom && value === preset;
-          return (
-            <button
-              key={preset}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => {
-                setTyping(false);
-                set('transportation', active ? '' : preset);
-              }}
-              className={chip(active)}
-            >
-              {preset}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={custom}
-          onClick={() => {
-            if (custom) {
-              setTyping(false);
-              set('transportation', '');
-            } else {
-              setTyping(true);
-              if (isPreset) set('transportation', '');
-            }
-          }}
-          className={chip(custom)}
-        >
-          직접
-        </button>
-      </div>
-      {custom && (
-        <TextField
-          aria-label="교통수단"
-          value={value}
-          maxLength={50}
-          placeholder="교통수단"
-          autoFocus={typing}
-          className="w-full max-w-[240px]"
-          onChange={(e) => set('transportation', e.target.value)}
-        />
+      {!readOnly && (
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="교통수단 고르기">
+          {TRANSPORT_PRESETS.map((preset) => {
+            const active = state.transportation === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set('transportation', active ? '' : preset)}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+                }`}
+              >
+                {preset}
+              </button>
+            );
+          })}
+        </div>
       )}
+      <TextField
+        aria-label="교통수단"
+        value={state.transportation}
+        maxLength={50}
+        placeholder={readOnly ? '' : '직접 입력'}
+        disabled={readOnly}
+        className="w-full max-w-[240px]"
+        onChange={(e) => set('transportation', e.target.value)}
+      />
     </div>
-  );
-}
-
-/** 출장 세부 구분(국내·해외) — 대부분 국내라 세부 정보 쪽에 둔다 */
-function SubTypeField({ form }: { form: EventForm }) {
-  const { state, readOnly } = form;
-  return (
-    <div className="flex flex-wrap items-center gap-1 pt-0.5" role="radiogroup" aria-label="세부 구분">
-      {OUTSIDE_WORK_SUBTYPES.TRIP.map((subType) => {
-        const active = state.subType === subType;
-        return (
-          <button
-            key={subType}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            disabled={readOnly}
-            onClick={() => form.setSubType(subType)}
-            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:cursor-default ${
-              active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
-            }`}
-          >
-            {subType}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 출장 기간 — [당일 | 1박 2일 | 2박 3일 | 직접]. 직접일 때만 끝날짜 칸 */
-const TRIP_NIGHTS = [0, 1, 2] as const;
-function TripLength({ form }: { form: EventForm }) {
-  const { state, set, readOnly } = form;
-  const nights = tripNightsOf(state.date, state.endDate);
-  const [typing, setTyping] = useState(false);
-  const custom = typing || nights > 2;
-  const length = outsideLengthLabel('TRIP', state.date, state.endDate < state.date ? state.date : state.endDate);
-  const options: { id: string; label: string; active: boolean; pick: () => void }[] = [
-    ...TRIP_NIGHTS.map((n) => ({
-      id: String(n),
-      label: n === 0 ? '당일' : `${n}박 ${n + 1}일`,
-      active: !custom && nights === n,
-      pick: () => {
-        setTyping(false);
-        set('endDate', tripEndDate(state.date, n));
-      },
-    })),
-    { id: 'custom', label: '직접', active: custom, pick: () => setTyping(true) },
-  ];
-  return (
-    <>
-      <div className="inline-flex rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="기간">
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            role="radio"
-            aria-checked={o.active}
-            disabled={readOnly}
-            onClick={o.pick}
-            className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors disabled:cursor-default ${
-              o.active ? 'bg-panel text-ink shadow-sm' : 'text-ink3 hover:text-ink'
-            }`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      {custom && (
-        <>
-          <span className="text-ink3">~</span>
-          <EndDateField form={form} />
-          {length && <span className="text-[11.5px] font-semibold text-teal">{length}</span>}
-        </>
-      )}
-    </>
   );
 }
 
@@ -561,9 +404,6 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   const showTimes = isMeeting || !state.allDay;
   // 업무만 — 종료 미정(시작만)
   const openEnd = isItem && state.openEnd;
-  // 시간 정하기 상태 — 업무 종일은 근무시간 전체를 차지하는 일(시각이 출근~퇴근과 같으면)
-  const workDay = isItem && !state.allDay && !openEnd && range?.start === work.start && range?.end === work.end;
-  const timeMode: 'time' | 'work' | 'none' = state.allDay ? (isItem ? 'none' : 'work') : workDay ? 'work' : 'time';
 
   // 시각 = 입력 + 10분 간격 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
   const onStart = (start: number) => {
@@ -581,9 +421,13 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
     if (!range || end <= range.start) return;
     form.setRange({ start: range.start, end });
   };
+  const onLength = (length: number) => {
+    if (!range) return;
+    form.setRange({ start: range.start, end: Math.min(range.start + length, DAY_END) });
+  };
   const startOptions = startTimeOptions(range?.start ?? null).map((minute) => ({ minute, label: toHHmm(minute) }));
   const endOptions = range
-    ? [...(isItem ? [{ minute: OPEN_END, label: '끝 미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
+    ? [...(isItem ? [{ minute: OPEN_END, label: '미정' }] : []), ...endTimeOptions(range.start, openEnd ? null : range.end)]
     : [];
   const dates = (
     <>
@@ -595,8 +439,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         className="w-[140px]"
         onChange={(e) => form.setDate(e.target.value)}
       />
-      {state.kind === 'TRIP' && showEndDate && <TripLength form={form} />}
-      {state.kind === 'OUTSIDE' && showEndDate && (
+      {isOutside && showEndDate && (
         <>
           <span className="text-ink3">~</span>
           <TextField
@@ -612,7 +455,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       )}
     </>
   );
-  const times = showTimes && timeMode === 'time' && (
+  const times = showTimes && (
     <>
       <TimeCombo
         aria-label="시작 시각"
@@ -639,55 +482,71 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
         touch={stacked}
         onChange={onEnd}
       />
+      {range && range.end > range.start && !openEnd && (
+        <span className="text-[11px] font-semibold text-ink3">{durationLabel(range)}</span>
+      )}
     </>
   );
-  // 시간 정하기 — 한 줄 선택(상단 보기 전환과 같은 모양). 셋은 동시에 고를 수 없다
-  //  업무: 시간 지정 / 종일(근무시간 전체, 근태 정책 출근~퇴근) / 미정(날짜만)
-  //  외근·출장: 시간 지정 / 종일(근태와 이어지는 종일). 회의는 시간이 꼭 있어 없음
-  const chooseMode = (mode: 'time' | 'work' | 'none') => {
-    if (readOnly || mode === timeMode) return;
-    if (mode === 'none' || (!isItem && mode === 'work')) {
-      form.setAllDay(true);
-      return;
-    }
-    if (state.allDay) form.setAllDay(false);
-    if (mode === 'work') {
-      form.setRange({ start: work.start, end: work.end });
-      return;
-    }
-    // 시간 지정으로 — 남아 있던 시각이 쓸 만하면 그대로, 아니면(없거나 근무시간 전체) 09:00부터 기본 길이
-    const keep = range && !(range.start === work.start && range.end === work.end) && range.end > range.start;
-    form.setRange(keep ? range : { start: 9 * 60, end: Math.min(9 * 60 + DEFAULT_LENGTH, DAY_END) });
-  };
-  const modeOptions: { id: 'time' | 'work' | 'none'; label: string }[] = isMeeting
-    ? []
-    : isItem
-      ? [{ id: 'time', label: '시간 지정' }, ...(work.end > work.start ? [{ id: 'work' as const, label: '종일' }] : []), { id: 'none', label: '미정' }]
-      : [{ id: 'time', label: '시간 지정' }, { id: 'work', label: '종일' }];
-  const modeSwitch = modeOptions.length > 0 && (
-    <div className="inline-flex rounded-lg bg-panel-alt p-0.5" role="radiogroup" aria-label="시간">
-      {modeOptions.map((o) => (
+  // 자주 쓰는 길이 — 누르면 시작 기준으로 끝을 정한다
+  const lengths = showTimes && range && !readOnly && (
+    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="길이">
+      {LENGTH_PRESETS.map((length) => {
+        const active = !openEnd && range.end - range.start === length;
+        return (
+          <button
+            key={length}
+            type="button"
+            aria-pressed={active}
+            disabled={range.start + length > DAY_END}
+            onClick={() => onLength(length)}
+            className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors disabled:opacity-40 ${
+              active ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+            }`}
+          >
+            {durationLabel({ start: 0, end: length })}
+          </button>
+        );
+      })}
+      {isItem && (
         <button
-          key={o.id}
           type="button"
-          role="radio"
-          aria-checked={timeMode === o.id}
-          disabled={readOnly}
-          onClick={() => chooseMode(o.id)}
-          className={`rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors disabled:cursor-default ${
-            timeMode === o.id ? 'bg-panel text-ink shadow-sm' : 'text-ink3 hover:text-ink'
+          aria-pressed={openEnd}
+          onClick={() => set('openEnd', true)}
+          className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+            openEnd ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
           }`}
         >
-          {o.label}
+          미정
         </button>
-      ))}
+      )}
     </div>
   );
-  // 업무 종일 — 시각 칸 대신 근무시간만 옅게
-  const workLabel = isItem && timeMode === 'work' && (
-    <span className="text-[12px] font-medium tabular-nums text-ink3">
-      {policy.workStartTime}~{policy.workEndTime}
-    </span>
+  const allDayToggle = !isMeeting && (
+    <label className="ml-1 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-ink2">
+      <input
+        type="checkbox"
+        className="accent-teal"
+        checked={state.allDay}
+        disabled={readOnly}
+        onChange={(e) => form.setAllDay(e.target.checked)}
+      />
+      {/* 업무는 시각 없음 = 시간을 모르는 일(날짜만) — 외근·출장의 종일은 근태와 이어져 그대로 */}
+      {isItem ? '시간 미정' : '종일'}
+    </label>
+  );
+  // 업무만 — 종일 = 회사 업무시간(근태 정책 출근~퇴근) 전체를 차지하는 일
+  const workDay = !state.allDay && !openEnd && range?.start === work.start && range?.end === work.end;
+  const workDayChip = isItem && !readOnly && work.end > work.start && (
+    <button
+      type="button"
+      aria-pressed={workDay}
+      onClick={() => form.setRange({ start: work.start, end: work.end })}
+      className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+        workDay ? 'border-blue/40 bg-blue-soft text-blue' : 'border-border text-ink2 hover:bg-panel-alt'
+      }`}
+    >
+      종일 {policy.workStartTime}~{policy.workEndTime}
+    </button>
   );
 
   if (stacked) {
@@ -695,9 +554,11 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           {dates}
-          {modeSwitch}
+          {workDayChip}
+          {allDayToggle}
         </div>
-        {(times || workLabel) && <div className="flex flex-wrap items-center gap-1.5">{times}{workLabel}</div>}
+        {times && <div className="flex flex-wrap items-center gap-1.5">{times}</div>}
+        {lengths}
       </div>
     );
   }
@@ -705,16 +566,17 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         {dates}
-        {modeSwitch}
         {times}
-        {workLabel}
+        {workDayChip}
+        {allDayToggle}
       </div>
+      {lengths}
     </div>
   );
 }
 
 /** 회의 참석자 — 이름·부서 검색 칩(캘린더 회의 창과 같은 후보 규칙) */
-function AttendeeField({ form, actor, users, busyAt }: { form: EventForm; actor: User; users: User[]; busyAt?: (userId: string) => boolean }) {
+function AttendeeField({ form, actor, users }: { form: EventForm; actor: User; users: User[] }) {
   const { state, set, readOnly } = form;
   const { canDesignate } = useCanDesignate();
   const [keyword, setKeyword] = useState('');
@@ -804,7 +666,6 @@ function AttendeeField({ form, actor, users, busyAt }: { form: EventForm; actor:
               >
                 <span className="font-bold text-ink">{u.name}</span>
                 <span className="text-[10.5px] text-ink3">{u.position}</span>
-                {busyAt?.(u.id) && <span className="text-[10px] text-amber-600">이 시간 바쁨</span>}
                 <span className="ml-auto rounded bg-panel-alt px-1.5 text-[10px] text-ink3">{u.dept}</span>
               </button>
             ))

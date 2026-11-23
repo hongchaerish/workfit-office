@@ -8,16 +8,28 @@ import { resolveTag, selectableGeneralTags, type WorkPlanTag, ETC_TAG_ID } from 
 import { weekOfMonth } from '@/domain/workPlan/weekOfMonth';
 import { TAG_COLOR_PRESETS } from '@/features/workPlan/useWorkPlanConfig';
 import type { EventForm } from './EventFields';
-import { savedNotice } from './eventFormMapping';
-import { dateLabel } from './eventView';
 import { entriesToBlocks, type TimeGridBlock } from './TimeGrid';
 import type { EventKind, EventTarget } from './useWorkPlanEventForm';
 
 /* 일정 창(PC 창·모바일 시트) 공용 — 주인 찾기, 시간표 블록, 저장·삭제·합류 버튼 동작. */
 
+export const SAVED_MESSAGE: Record<EventKind, string> = {
+  ITEM: '업무를 저장했습니다.',
+  MEETING: '회의를 저장했습니다.',
+  OUTSIDE: '외근·출장을 저장했습니다.',
+  TRIP: '외근·출장을 저장했습니다.',
+};
+
 export const isOutsideKind = (kind: EventKind) => kind === 'OUTSIDE' || kind === 'TRIP';
 
-export { dateLabel } from './eventView';
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 'YYYY-MM-DD' → 'M월 D일 (요일)' */
+export function dateLabel(date: string): string {
+  if (!isValidCalendarDate(date)) return '';
+  const [y, m, d] = date.split('-').map(Number);
+  return `${m}월 ${d}일 (${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
+}
 
 /** 도구 막대의 고정 종류 버튼(일반 ▾ 앞) */
 export const FIXED_KINDS: Array<{ kind: Exclude<EventKind, 'ITEM'>; label: string; Icon: LucideIcon }> = [
@@ -101,12 +113,11 @@ export function useEventBlocks(
 export function useEventActions(form: EventForm, onSaved: (message: string) => void, onClose: () => void) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  /** after 를 주면(저장하고 이어서 적기) 닫는 대신 그것을 부른다 */
-  const save = async (after?: () => void) => {
-    const { kind, date, endDate } = form.state;
+  const save = async () => {
+    const kind = form.state.kind;
     if (await form.save()) {
-      onSaved(savedNotice(kind, date, isOutsideKind(kind) ? endDate : ''));
-      (after ?? onClose)();
+      onSaved(SAVED_MESSAGE[kind]);
+      onClose();
     }
   };
 

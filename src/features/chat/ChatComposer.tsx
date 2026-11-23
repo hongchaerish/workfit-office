@@ -4,7 +4,7 @@ import { Paperclip, Type, X } from 'lucide-react';
 import { useOutboxSender } from '@/features/chat/useOutboxSender';
 import { ChatRichEditor, type ChatRichEditorHandle, type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { isEmptyRich, isPlainOnlyRich, isRichBodyTooLong, plainTextOfRich, type RichNode } from '@/domain/chatMessage/richBody';
-import { CHAT_DRAFT_FILL_EVENT, clearChatDraft, readChatDraft, saveChatDraft } from '@/features/chat/chatDrafts';
+import { clearChatDraft, readChatDraft, saveChatDraft } from '@/features/chat/chatDrafts';
 import { MAX_ATTACHMENT_BYTES, type ReplyPreview } from '@/domain/chatMessage/schema';
 
 export interface ChatComposerHandle {
@@ -71,21 +71,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
       flushRef.current(); // 다른 방으로 옮기거나 메신저를 닫을 때
     };
   }, []);
-  // 이 방 입력창이 열려 있는데 다른 화면(업무계획 '이 일정 묻기')이 임시 글을 채우면 바로 입력창에 넣는다
-  useEffect(() => {
-    const onFill = (e: Event) => {
-      const d = (e as CustomEvent<{ me: string; roomId: string }>).detail;
-      if (d?.me !== senderId || d.roomId !== roomId) return;
-      const doc = readChatDraft(senderId, roomId)?.doc;
-      if (!doc) return;
-      window.clearTimeout(saveTimerRef.current);
-      latestDocRef.current = doc;
-      composerRef.current?.setDoc(doc);
-      composerRef.current?.focus();
-    };
-    window.addEventListener(CHAT_DRAFT_FILL_EVENT, onFill);
-    return () => window.removeEventListener(CHAT_DRAFT_FILL_EVENT, onFill);
-  }, [senderId, roomId]);
   /** 확장 모드의 서식 도구 막대 자리 — 입력창 위 한 줄 전체 */
   const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<StagedFile[]>([]);

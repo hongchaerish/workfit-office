@@ -21,8 +21,7 @@ function useItemMutation<T, R>(mutationFn: (input: T) => Promise<R>) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    // 실패해도 다시 읽는다 — 루틴을 여러 건 처리하다 중간에 멈추면 그때까지 된 것이 화면에 보이게
-    onSettled: () => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ITEM_KEY] });
     },
   });
