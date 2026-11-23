@@ -226,6 +226,19 @@ export function evaluateAdvanceLeaveOffset(
   totalUsedDays: number,
 ): AdvanceOffsetResult {
   const statutory = calculateStatutoryEntitlement(hireDateStr, asOfDateStr);
+  // 선사용은 1년 미만 월별 발생분을 앞당겨 쓴 경우만이다. 1년이 지나면 월별 발생분이 0이 되므로
+  // 같은 식으로 견주면 휴가를 쓴 모든 사람이 선사용으로 잡힌다(정기 연차를 넘겨 쓴 것은 '마이너스 연차'로 따로 본다).
+  if (!statutory.isUnderOneYear) {
+    return {
+      totalUsed: totalUsedDays,
+      currentAccrued: statutory.totalStatutoryGranted,
+      balance: statutory.totalStatutoryGranted - totalUsedDays,
+      isAdvanceUsed: false,
+      offsetCompletedDays: Math.min(statutory.totalStatutoryGranted, totalUsedDays),
+      offsetRemainingDays: 0,
+      estimatedFullOffsetDate: null,
+    };
+  }
   const currentAccrued = statutory.monthlyAccruedTotal;
   const balance = currentAccrued - totalUsedDays;
   const isAdvanceUsed = totalUsedDays > currentAccrued;
@@ -248,6 +261,42 @@ export function evaluateAdvanceLeaveOffset(
     offsetCompletedDays,
     offsetRemainingDays,
     estimatedFullOffsetDate,
+  };
+}
+
+export interface LeaveYearWindow {
+  start: string; // 연차 기간 첫날 "YYYY-MM-DD"
+  end: string; // 연차 기간 마지막 날(포함)
+}
+
+/** 하루 앞 날짜 */
+function previousDay(dateStr: string): string {
+  const d = new Date(dateStr.slice(0, 10) + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 기준일이 속한 연차 기간 — 이 기간에 생긴 연차에서 이 기간의 사용만 뺀다(근로기준법 제60조).
+ * - 입사일 기준: 1년 미만은 입사일부터 만 1년 전날까지(월별 발생분), 그 뒤로는 입사 기념일부터 1년.
+ *   첫해 월별 연차와 1년 뒤 15일은 따로라(2020년 개정법) 첫해 사용분은 2년차 15일에서 빼지 않는다.
+ * - 회계연도 기준: 그해 1월 1일 ~ 12월 31일.
+ */
+export function currentLeaveYear(
+  hireDateStr: string,
+  asOfDateStr: string,
+  mode: 'HIRE_DATE' | 'FISCAL_YEAR',
+): LeaveYearWindow {
+  if (mode === 'FISCAL_YEAR') {
+    const year = asOfDateStr.slice(0, 4);
+    return { start: `${year}-01-01`, end: `${year}-12-31` };
+  }
+  let { fullYears } = calculateEmploymentPeriod(hireDateStr, asOfDateStr);
+  // 2월 29일 입사자는 평년 기념일이 2월 28일로 당겨진다 — 그날이 어느 기간에도 안 들어가는 일이 없게
+  if (addMonths(hireDateStr, (fullYears + 1) * 12) <= asOfDateStr.slice(0, 10)) fullYears += 1;
+  return {
+    start: addMonths(hireDateStr, fullYears * 12),
+    end: previousDay(addMonths(hireDateStr, (fullYears + 1) * 12)),
   };
 }
 

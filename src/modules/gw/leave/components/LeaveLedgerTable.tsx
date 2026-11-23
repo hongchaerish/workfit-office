@@ -256,6 +256,9 @@ export function LeaveLedgerTable({
                             ? `1년 미만 (${e.serviceMonths}개월)`
                             : `${e.serviceYears}년 ${e.serviceMonths % 12}개월`}
                         </div>
+                        <div className="text-[9.5px] text-ink3/80">
+                          연차 기간 {e.leaveYear.start.slice(2).replace(/-/g, '.')}~{e.leaveYear.end.slice(2).replace(/-/g, '.')}
+                        </div>
                       </td>
 
                       {/* 법정 발생 */}

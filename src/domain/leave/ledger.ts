@@ -24,7 +24,8 @@ export interface LeaveLedgerEntry {
   serviceMonths: number;
   isUnderOneYear: boolean;
 
-  // 연차 일수 계산 (SSOT)
+  // 연차 일수 계산 (SSOT) — 사용·조정은 이 연차 기간 것만
+  leaveYear: import('./accrualEngine').LeaveYearWindow;
   entitledDays: number; // 법정 발생 연차
   adjustedDays: number; // 수동 가감 (+/-)
   totalGrantedDays: number; // 총 부여 (발생 + 조정)
@@ -148,6 +149,7 @@ export function buildLeaveLedger(
       serviceYears: balance.serviceYears,
       serviceMonths: balance.serviceMonths,
       isUnderOneYear: balance.isUnderOneYear,
+      leaveYear: balance.leaveYear,
       entitledDays: balance.entitledDays,
       adjustedDays: balance.adjustedDays,
       totalGrantedDays: balance.totalGrantedDays,
