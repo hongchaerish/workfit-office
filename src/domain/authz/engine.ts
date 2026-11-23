@@ -1,5 +1,6 @@
 import { ADMIN_CONSOLE_KEY, PERMISSION_BY_KEY, SUPER_ADMIN_PERMISSIONS, expandPermissions } from './permissions';
 import { SCOPE_TYPE_LABEL, type AuthAssignment, type AuthRole } from './types';
+import { MASTER_ACCOUNT_NAME, isMasterAccount } from '@/domain/user/masterAccount';
 
 /**
  * 권한 판정 엔진(순수 함수) — 사람 하나가 받은 역할·지정을 모아 권한별 결과와 범위를 낸다.
@@ -128,6 +129,8 @@ function scopeOf(a: AuthAssignment | null, user: AuthzUser, org: AuthzOrg): { al
 export function resolveGrants(user: AuthzUser | null | undefined, roles: AuthRole[], assignments: AuthAssignment[], org: AuthzOrg): AuthzResult {
   const grants = new Map<string, Grant>();
   const matched: MatchedRole[] = [];
+  // 마스터 계정(admin) — 역할 지정·상태와 상관없이 언제나 모든 권한, 전사 범위
+  if (isMasterAccount(user)) return masterGrants();
   if (!user || user.status === '미사용') return { grants, roles: matched, isSuperAdmin: false };
 
   const add = (role: AuthRole, reason: string, a: AuthAssignment | null) => {
@@ -160,6 +163,15 @@ export function resolveGrants(user: AuthzUser | null | undefined, roles: AuthRol
     if (reasons.length) matched.push({ role, reasons });
   }
   return { grants, roles: matched, isSuperAdmin: matched.some((m) => m.role.kind === 'super') };
+}
+
+/** 마스터 계정 권한 — 모든 권한 키를 전사 범위로 */
+export function masterGrants(): AuthzResult {
+  const grants = new Map<string, Grant>();
+  for (const key of expandPermissions(SUPER_ADMIN_PERMISSIONS)) {
+    grants.set(key, { all: true, deptIds: new Set<string>(), via: [{ roleId: '', roleName: MASTER_ACCOUNT_NAME, reason: '마스터 계정', scope: '' }] });
+  }
+  return { grants, roles: [], isSuperAdmin: true };
 }
 
 export const can = (r: AuthzResult, key: string) => r.grants.has(key);

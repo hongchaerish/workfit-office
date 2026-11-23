@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from 'react';
+import { isMasterAccount } from '@/domain/user/masterAccount';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
@@ -34,6 +35,7 @@ export function useSecurityContext(): SecurityContext {
   // 2. 최고 관리자 판정
   const isSuperAdmin = useMemo(() => {
     if (!user) return false;
+    if (isMasterAccount(user)) return true;
     if (authz.active) return authz.isSuperAdmin;
     return (
       myGroups.some((g) => (g.code === 'ADMIN' || g.code === 'ROLE_ADMIN') && g.use) ||
@@ -51,6 +53,8 @@ export function useSecurityContext(): SecurityContext {
   // ⚠️ 최고관리자(isSuperAdmin)라도 비임원인 개발팀은 임원으로 판정하지 않음 (전사 관제 자동 노출 방지)
   const isExecutive = useMemo(() => {
     if (!user) return false;
+    // 마스터 계정은 임원과 같이 전사 현황을 본다
+    if (isMasterAccount(user)) return true;
     if (authz.active) return authz.can('approval.secure');
 
     // A. 역할 그룹에 EXEC/OPERATOR 가 포함된 경우
@@ -148,6 +152,7 @@ export function useSecurityContext(): SecurityContext {
 
   const canMenuAccess = useCallback(
     (urlOrId: string): boolean => {
+      if (isMasterAccount(user)) return true;
       if (!user || user.status === '미사용') return false;
       if (authz.active) return authz.canScreen(urlOrId, 'access');
 
@@ -168,6 +173,7 @@ export function useSecurityContext(): SecurityContext {
 
   const canMenuAction = useCallback(
     (urlOrId: string, action: keyof ActionPermission): boolean => {
+      if (isMasterAccount(user)) return true;
       if (!user || user.status === '미사용') return false;
       if (authz.active) return authz.canScreen(urlOrId, action);
 

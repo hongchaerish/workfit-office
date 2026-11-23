@@ -1,4 +1,6 @@
 import type { RoleGroup } from '@/domain/roleGroup/schema';
+import { isMasterAccount } from '@/domain/user/masterAccount';
+import { masterGrants } from './engine';
 import { resolveUserRoles } from '@/domain/roleGroup/roleResolver';
 import { isExecutiveUser, isLeaderUser } from './legacyRules';
 import type { User } from '@/domain/user/schema';
@@ -72,6 +74,8 @@ export function legacyFlags(user: LegacyUser, groups: RoleGroup[], org: LegacyOr
 export function legacyGrants(user: LegacyUser | null | undefined, groups: RoleGroup[], org: LegacyOrg): AuthzResult & { flags: LegacyFlags } {
   const grants = new Map<string, Grant>();
   const empty: LegacyFlags = { superAdmin: false, exec: false, execCommute: false, leader: false, operator: false, operatorExplicit: false };
+  // 마스터 계정(admin) — 옛 권한표에서도 모든 권한, 전사 현황까지
+  if (isMasterAccount(user)) return { ...masterGrants(), flags: { ...empty, superAdmin: true, exec: true, execCommute: true } };
   if (!user || user.status === '미사용') return { grants, roles: [], isSuperAdmin: false, flags: empty };
   const { flags, myGroups } = legacyFlags(user, groups, org);
 

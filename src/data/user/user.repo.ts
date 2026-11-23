@@ -1,4 +1,5 @@
 import { userSchema, DEFAULT_USER_PASSWORD, type User, type UserFormValues } from '@/domain/user/schema';
+import { assertMasterAccountKept, isMasterAccount } from '@/domain/user/masterAccount';
 import { parseNotificationPrefs, type NotificationPrefs } from '@/domain/notificationPrefs/schema';
 import { USER_SEED } from '@/data/seeds/user.seed';
 import { withRetry } from '@/shared/lib/retry';
@@ -104,7 +105,8 @@ export const userRepo = {
    */
   async list(filter?: UserFilter): Promise<User[]> {
     const all = await this.listIncludingTestAccounts(filter);
-    return hideTestAccountRows(all, (u) => [u.id]);
+    // 마스터 계정(admin)은 조직도·명단·결재선 등 화면 목록에 나오지 않는다
+    return (await hideTestAccountRows(all, (u) => [u.id])).filter((u) => !isMasterAccount(u));
   },
 
   /**
@@ -167,6 +169,7 @@ export const userRepo = {
     if (isDuplicateEmpNo(all, values.empNo, id)) throw new Error(`이미 등록된 사번입니다: ${values.empNo.trim()}`);
     // 미사용(퇴직)은 인명관리 퇴직 처리로만 — 사용자 관리 저장으로 들어가거나 빠져나오지 못하게
     assertAccountStatusEdit(existing?.status, values.status);
+    assertMasterAccountKept(id, values);
     // 비밀번호를 비워두면 기존 비밀번호 보존, 입력하면 해당 값으로 변경.
     let password = existing?.password || '';
     if (values.password?.trim()) {
@@ -203,6 +206,7 @@ export const userRepo = {
 
   async save(user: User): Promise<void> {
     const raw = userSchema.parse(user);
+    assertMasterAccountKept(raw.id, raw);
     // 계정의 소속 이름 칸은 읽지 않는 옛 사본이다. 읽을 때 채운 화면용 값(인명관리 기준)을 다시 쓰지 않고 DB 값을 그대로 둔다.
     const stored = (await backend.loadAll()).find((u) => u.id === raw.id);
     await backend.save(stored ? { ...raw, dept: stored.dept, position: stored.position, jobTitle: stored.jobTitle } : raw);
@@ -217,6 +221,7 @@ export const userRepo = {
    * @returns 재연결된 부하직원 수.
    */
   async resign(userId: string): Promise<{ reconnectedReports: number }> {
+    assertMasterAccountKept(userId, 'remove');
     const all = await this.listIncludingTestAccounts();
     const target = all.find((u) => u.id === userId);
     if (!target) throw new Error('사용자를 찾을 수 없습니다.');
@@ -288,6 +293,7 @@ export const userRepo = {
 
   async removeMany(ids: Array<string | number>): Promise<void> {
     const set = new Set(ids.map(String));
+    for (const id of set) assertMasterAccountKept(id, 'remove');
     await Promise.all([...set].map((id) => backend.remove(id)));
   },
 };
