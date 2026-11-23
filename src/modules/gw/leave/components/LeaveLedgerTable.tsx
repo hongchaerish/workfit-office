@@ -15,7 +15,8 @@ interface LeaveLedgerTableProps {
   entries: LeaveLedgerEntry[];
   calculationMode: 'HIRE_DATE' | 'FISCAL_YEAR';
   onToggleCalculationMode: (mode: 'HIRE_DATE' | 'FISCAL_YEAR') => void;
-  onOpenAdjustment: (entry: LeaveLedgerEntry) => void;
+  /** 없으면 보기 전용(조정 칸 없음) */
+  onOpenAdjustment?: (entry: LeaveLedgerEntry) => void;
   onOpenBatchSubstitute?: () => void;
   onSelectPerson?: (entry: LeaveLedgerEntry) => void;
   isAdmin: boolean;
@@ -364,7 +365,7 @@ export function LeaveLedgerTable({
                         <td className="p-3 text-center" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
-                            onClick={() => onOpenAdjustment(e)}
+                            onClick={() => onOpenAdjustment?.(e)}
                             className="inline-flex items-center gap-1 rounded-md border border-border bg-panel px-2 py-1 text-[10.5px] font-bold text-ink2 hover:bg-panel-alt hover:border-border-strong transition-colors"
                           >
                             <SlidersHorizontal size={11} />

@@ -20,9 +20,7 @@ import { useCommuteRoster, normName } from '@/features/commute/useCommuteRoster'
 import { useLeaveLedger, type LeaveLedgerMode } from '@/features/commute/useLeaveLedger';
 import { GwHead } from '@/modules/gw/_gw';
 import { Button } from '@/shared/ui/Button';
-import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
-import { CommutePolicyModal } from './components/CommutePolicyModal';
 import { EmployeeDetailDrawer } from './components/EmployeeDetailDrawer';
 import { CommuteMatrixView } from './components/CommuteMatrixView';
 import { CommuteDeptView } from './components/CommuteDeptView';
@@ -30,12 +28,10 @@ import { CommuteAnomalyView } from './components/CommuteAnomalyView';
 import { CommuteLeaveView } from './components/CommuteLeaveView';
 import { MyCommuteLeaveTab } from './components/MyCommuteLeaveTab';
 import { LeaveLedgerTable } from '../leave/components/LeaveLedgerTable';
-import { LeaveAdjustmentModal } from '../leave/components/LeaveAdjustmentModal';
-import type { LeaveLedgerEntry } from '@/domain/leave/ledger';
+import { LeaveLedgerSummary } from '../leave/components/LeaveLedgerSummary';
+import { LeavePersonDetailModal } from '../leave/components/LeavePersonDetailModal';
 import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
 import {
-  Settings,
-  Clock,
   Building2,
   AlertTriangle,
   Users,
@@ -102,17 +98,13 @@ const toggleShell = 'flex items-center gap-0.5 self-center rounded-lg border bor
 
 export default function CommuteScreen() {
   const { user } = useAuth();
-  const { canManage: canManageKey } = useAuthz();
-  const { savePolicy } = useCommutePolicy();
   const { policy, holidays, holidayMap, approvals = [], approvalDaysOf, evaluate } = useCommuteEvaluation();
-  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
 
   const { commuteScope: authzCommuteScope, commuteDeptNames } = useAuthz();
   const commuteScope = authzCommuteScope();
   // 보안 지침 준수: 비임원/비팀장 사원은 ADMIN 권한이 있더라도 전사 근태 관제 센터에 접근할 수 없으며, 오직 ALL 스코프 보유자만 canAll 부여
   const canAll = commuteScope === 'ALL';
-  const canManagePolicy = canAll || canManageKey('commute.manage');
 
   // 조회 월 — 화면을 열 때 한 번에 받는 요청(useCommuteBootstrap)이 써서 여기서 정한다
   const [month, setMonth] = useState(thisMonth());
@@ -180,9 +172,9 @@ export default function CommuteScreen() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  // 연차 원장 산정 모드 & 수동 가감 상태
+  // 연차 원장 산정 모드 & 직원 상세(보기 전용 — 연차 조정은 관리자 콘솔 › 연차 관리)
   const [ledgerMode, setLedgerMode] = useState<LeaveLedgerMode>('HIRE_DATE');
-  const [adjustmentTarget, setAdjustmentTarget] = useState<LeaveLedgerEntry | null>(null);
+  const [ledgerDetailKey, setLedgerDetailKey] = useState<string | null>(null);
   // 필터 상태
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -234,7 +226,6 @@ export default function CommuteScreen() {
   const {
     entries: leaveLedgerEntries,
     summary: leaveLedgerSummary,
-    refreshAdjustments,
   } = useLeaveLedger({ enabled: canLedger, mode: ledgerMode, roster, approvals, holidays });
 
   // 내 근태 한 달치 레코드
@@ -842,62 +833,27 @@ export default function CommuteScreen() {
 
           {adminTab === 'leave_ledger' && canLedger && (
             <div className="space-y-3">
-              {/* 전사 연차 KPI 통계 바 */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-                <StatCard
-                  label="관리 인원"
-                  value={`${leaveLedgerSummary.totalEmployees}명`}
-                  sub="전사 임직원"
-                />
-                <StatCard
-                  label="총 부여 연차"
-                  value={`${leaveLedgerSummary.totalGranted}일`}
-                  sub={`법정 ${leaveLedgerSummary.totalEntitled}일 + 조정`}
-                  tone="border-teal/25 bg-teal/8"
-                />
-                <StatCard
-                  label="총 사용 연차"
-                  value={`${leaveLedgerSummary.totalUsed}일`}
-                  sub="승인 완료 누적"
-                  tone="border-emerald-500/25 bg-emerald-500/8"
-                />
-                <StatCard
-                  label="평균 소진율"
-                  value={`${leaveLedgerSummary.avgUsageRate}%`}
-                  sub="부여 대비 사용"
-                  tone="border-teal/25 bg-teal/8"
-                />
-                <StatCard
-                  label="잔여 연차 합계"
-                  value={`${leaveLedgerSummary.totalRemaining}일`}
-                  sub={`신청중 ${leaveLedgerSummary.totalPending}일 제외`}
-                />
-              </div>
+              {/* 전사 연차 요약 */}
+              <LeaveLedgerSummary summary={leaveLedgerSummary} />
 
               {/* 전사 연차 원장 테이블 */}
               <LeaveLedgerTable
                 entries={leaveLedgerEntries}
                 calculationMode={ledgerMode}
                 onToggleCalculationMode={setLedgerMode}
-                onOpenAdjustment={(entry) => setAdjustmentTarget(entry)}
-                isAdmin={canAll}
+                onSelectPerson={(entry) => setLedgerDetailKey(`${entry.empNo}-${entry.name}`)}
+                isAdmin={false}
               />
             </div>
           )}
         </>
       )}
 
-      {/* 4. 연차 수동 가감 모달 */}
-      {adjustmentTarget && (
-        <LeaveAdjustmentModal
-          entry={adjustmentTarget}
-          adminName={user?.name || '관리자'}
-          onClose={() => setAdjustmentTarget(null)}
-          onSuccess={() => {
-            refreshAdjustments();
-          }}
-        />
-      )}
+      {/* 4. 직원 연차 상세 (보기 전용) */}
+      <LeavePersonDetailModal
+        entry={ledgerDetailKey ? leaveLedgerEntries.find((e) => `${e.empNo}-${e.name}` === ledgerDetailKey) ?? null : null}
+        onClose={() => setLedgerDetailKey(null)}
+      />
 
       {/* 4. 직원 상세 슬라이드오버 (Drawer) */}
       <EmployeeDetailDrawer
@@ -917,18 +873,6 @@ export default function CommuteScreen() {
         desc="출퇴근 기록 및 개인 연차·휴가 잔여 조회와 신청 내역을 통합 관리합니다."
         right={
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-            {canManagePolicy && (
-              <button
-                type="button"
-                onClick={() => setIsPolicyModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-panel px-3 py-1.5 text-[11.5px] font-bold text-ink hover:bg-panel-alt transition-colors shadow-2xs"
-                title="출퇴근 시간 및 근무정책 설정"
-              >
-                <Clock size={13} className="text-amber-500" />
-                <span>{policy.workStartTime}~{policy.workEndTime}</span>
-                <Settings size={12} className="text-ink3" />
-              </button>
-            )}
             {tabToggle}
           </div>
         }
@@ -950,13 +894,6 @@ export default function CommuteScreen() {
           />
         )}
       </div>
-
-      <CommutePolicyModal
-        isOpen={isPolicyModalOpen}
-        onClose={() => setIsPolicyModalOpen(false)}
-        policy={policy}
-        onSave={savePolicy}
-      />
     </div>
   );
 }

@@ -296,3 +296,60 @@ export function calculateUserLeaveBalance(
     myDocs: matchedDocs,
   };
 }
+
+/** 지난 연차 기간 한 칸 — 그 기간 마지막 날 기준으로 다시 계산한 값 */
+export interface PastLeaveYear {
+  start: string;
+  end: string;
+  grantedDays: number; // 발생 + 조정
+  adjustedDays: number;
+  usedDays: number;
+  expiredDays: number; // 쓰지 않고 기간이 끝나 소멸한 일수(연차수당 정산 참고)
+  overUsedDays: number; // 그 기간에 발생분보다 더 쓴 일수
+  /** 휴가 기록이 시작되기 전부터의 기간 — 기록 밖 사용이 있을 수 있어 소멸 일수가 확정이 아니다 */
+  beforeRecords: boolean;
+}
+
+const dayBefore = (date: string) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * 지금 연차 기간 전의 기간들(최근 것부터) — 기간 마지막 날을 기준일로 calculateUserLeaveBalance 를 다시 돌린다.
+ * 휴가 기록(문서 중 가장 이른 시작일)이 생기기 전에 끝난 기간은 뺀다 — 기록이 없어 전부 소멸로 보이지 않게.
+ */
+export function calculatePastLeaveYears(options: CalculateUserLeaveBalanceOptions): PastLeaveYear[] {
+  const { approvalDocs = [], referenceDate = new Date(), mode = 'HIRE_DATE' } = options;
+  const hireDate = (options.user.hireDate || '2026-01-01').slice(0, 10);
+  const starts = approvalDocs
+    .filter((d) => d.docType === '휴가')
+    .map((d) => String((d.form as { startDate?: string } | null | undefined)?.startDate ?? '').slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  const since = starts[0];
+  if (!since) return [];
+
+  const out: PastLeaveYear[] = [];
+  let current = currentLeaveYear(hireDate, referenceDate.toISOString().slice(0, 10), mode);
+  // 한 사람당 기간 수는 근속 연수만큼이라 넉넉히 50 칸에서 멈춘다
+  for (let i = 0; i < 50; i++) {
+    const end = dayBefore(current.start);
+    if (end < hireDate || end < since) break;
+    const b = calculateUserLeaveBalance({ ...options, mode, referenceDate: new Date(`${end}T12:00:00Z`) });
+    const start = b.leaveYear.start < hireDate ? hireDate : b.leaveYear.start;
+    out.push({
+      start,
+      end,
+      grantedDays: b.totalGrantedDays,
+      adjustedDays: b.adjustedDays,
+      usedDays: b.usedDays,
+      expiredDays: Math.max(0, b.remainingDays),
+      overUsedDays: Math.max(0, Number((-b.remainingDays).toFixed(2))),
+      beforeRecords: start < since,
+    });
+    current = b.leaveYear;
+  }
+  return out;
+}

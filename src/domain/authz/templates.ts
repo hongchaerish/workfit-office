@@ -4,8 +4,8 @@ export const ROLE_TEMPLATES: { id: string; name: string; desc: string; permissio
   {
     id: 'people',
     name: '인사 관리자',
-    desc: '사용자·부서·직급 관리, 공휴일 보기',
-    permissions: ['admin.user.manage', 'admin.org.manage', 'admin.position.manage', 'admin.holiday.view'],
+    desc: '사용자·부서·직급 관리, 연차 가감·근무 정책 관리, 공휴일 보기',
+    permissions: ['admin.user.manage', 'admin.org.manage', 'admin.position.manage', 'admin.leave.manage', 'admin.holiday.view'],
   },
   {
     id: 'approval',

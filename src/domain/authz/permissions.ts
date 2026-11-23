@@ -15,6 +15,7 @@ export const AUTHZ_AREAS = [
   { id: 'adminConsole', name: '관리자 콘솔' },
   { id: 'adminPeople', name: '관리자 · 구성원·조직' },
   { id: 'adminApproval', name: '관리자 · 전자결재' },
+  { id: 'adminLeave', name: '관리자 · 근태·휴가' },
   { id: 'adminCompany', name: '관리자 · 회사·운영' },
   { id: 'adminSystem', name: '관리자 · 시스템' },
 ] as const;
@@ -98,6 +99,9 @@ export const PERMISSIONS: PermissionDef[] = [
   ...pair('admin.approval.rule', '결재선 규칙', 'adminApproval', '자동 결재선 규칙을 본다', '규칙을 만들고 고친다', { adminConsole: true }),
   ...pair('admin.approval.process', '결재 프로세스', 'adminApproval', '결재 프로세스 설정을 본다', '프로세스 옵션을 켜고 끈다', { adminConsole: true }),
   P({ key: 'admin.approval.monitor', name: '결재문서 모니터링', desc: '전사 결재문서 진행 상황을 본다', area: 'adminApproval', adminConsole: true }),
+
+  // 관리자 · 근태·휴가 — 현황 조회는 업무 화면(commute.view)에서, 콘솔은 조정·정책만
+  ...pair('admin.leave', '연차·근무 정책', 'adminLeave', '콘솔에서 전사 연차와 근무 정책을 본다', '연차를 가감하고 근무 정책(출퇴근·휴게·지각 기준)을 고친다', { adminConsole: true }),
 
   // 관리자 · 회사·운영
   ...pair('admin.company', '회사 정보', 'adminCompany', '법인·사업장 정보를 본다', '회사 정보·로고·직인을 고친다', { adminConsole: true }),

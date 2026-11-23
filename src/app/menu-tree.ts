@@ -85,6 +85,12 @@ export const MENU_TREE: MenuNode[] = [
         ]
       },
       {
+        id: 'G_ADM_LEAVE', name: '근태·휴가', icon: '⏱', order: 35, use: true, children: [
+          { id: 'S_ADM_LEAVE', name: '연차 관리', url: '/base/leave', icon: '📅', order: 10, use: true },
+          { id: 'S_ADM_COMMUTE_POLICY', name: '근무 정책', url: '/base/commute-policy', icon: '⏱', order: 20, use: true },
+        ]
+      },
+      {
         id: 'G_ADM_COMPANY', name: '회사·운영', icon: '◎', order: 40, use: true, children: [
           { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 10, use: true },
           { id: 'S_BASE_HOLIDAY', name: '공휴일 관리', url: '/base/holiday', icon: '📅', order: 20, use: true },

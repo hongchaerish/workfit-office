@@ -19,6 +19,9 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   S_SYS_BACKUP: { url: '/sys/backup', row: { access: ['admin.backup'], create: ['admin.backup'], update: ['admin.backup'], delete: ['admin.backup'] } },
   /** 기업분류 — 시스템 기준정보, 공통코드와 같은 권한 */
   S_ADM_COMPANY_CLASS: { url: '/base/company-class', row: pairRow('admin.code') },
+  /** 관리자 콘솔 › 근태·휴가 — 연차 관리·근무 정책 */
+  S_ADM_LEAVE: { url: '/base/leave', row: pairRow('admin.leave') },
+  S_ADM_COMMUTE_POLICY: { url: '/base/commute-policy', row: pairRow('admin.leave') },
   /** 사업구분 — 업무 기준정보, 사업 현황과 같은 권한 */
   S_BIZ_CATEGORY: { url: '/biz/category', row: pairRow('biz.project') },
 };

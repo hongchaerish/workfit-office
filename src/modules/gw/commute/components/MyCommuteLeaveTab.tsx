@@ -296,6 +296,12 @@ export function MyCommuteLeaveTab({
                 연차 기간 {bal.leaveYear.start} ~ {bal.leaveYear.end}
               </div>
             )}
+            {bal.pastYears?.[0] && (
+              <div className="mt-0.5 text-[10.5px] font-medium text-ink3 tabular-nums">
+                지난 기간({bal.pastYears[0].start} ~ {bal.pastYears[0].end}) 부여 {bal.pastYears[0].grantedDays}일 · 사용 {bal.pastYears[0].usedDays}일
+                {bal.pastYears[0].expiredDays > 0 && !bal.pastYears[0].beforeRecords && <> · 소멸 <span className="font-bold text-rose-500">{bal.pastYears[0].expiredDays}일</span></>}
+              </div>
+            )}
             <div className="w-full bg-border/70 rounded-full h-1.5 overflow-hidden my-2">
               <div
                 className="bg-teal h-1.5 rounded-full transition-all duration-500"

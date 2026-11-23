@@ -11,7 +11,7 @@ import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { EmployeeProfile } from '@/domain/employeeProfile/schema';
 import type { LeaveAdjustmentTransaction } from './adjustmentStore';
 import type { AdvanceOffsetResult } from './accrualEngine';
-import { calculateUserLeaveBalance, type UserLeaveBalance } from './userLeaveBalance';
+import { calculatePastLeaveYears, calculateUserLeaveBalance, type PastLeaveYear, type UserLeaveBalance } from './userLeaveBalance';
 
 export interface LeaveLedgerEntry {
   empId?: number | null;
@@ -26,6 +26,8 @@ export interface LeaveLedgerEntry {
 
   // 연차 일수 계산 (SSOT) — 사용·조정은 이 연차 기간 것만
   leaveYear: import('./accrualEngine').LeaveYearWindow;
+  /** 지난 연차 기간(최근 것부터) — 발생·사용·소멸 */
+  pastYears: PastLeaveYear[];
   entitledDays: number; // 법정 발생 연차
   adjustedDays: number; // 수동 가감 (+/-)
   totalGrantedDays: number; // 총 부여 (발생 + 조정)
@@ -120,7 +122,7 @@ export function buildLeaveLedger(
     const profile = profileMap.get(key) ?? (emp.empNo ? profileMap.get(String(emp.empNo)) : undefined);
     const hireDate = (emp.hireDate || profile?.hireDate || '2026-01-01').slice(0, 10);
 
-    const balance: UserLeaveBalance = calculateUserLeaveBalance({
+    const balanceInput = {
       user: {
         userId: profile?.userId,
         empId: emp.empId,
@@ -137,7 +139,8 @@ export function buildLeaveLedger(
       mode,
       holidays: options.holidays,
       substituteLedger: options.substituteLedger,
-    });
+    };
+    const balance: UserLeaveBalance = calculateUserLeaveBalance(balanceInput);
 
     entries.push({
       empId: balance.empId,
@@ -150,6 +153,7 @@ export function buildLeaveLedger(
       serviceMonths: balance.serviceMonths,
       isUnderOneYear: balance.isUnderOneYear,
       leaveYear: balance.leaveYear,
+      pastYears: calculatePastLeaveYears(balanceInput),
       entitledDays: balance.entitledDays,
       adjustedDays: balance.adjustedDays,
       totalGrantedDays: balance.totalGrantedDays,
