@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { applyTheme, loadUserTheme } from '@/shared/lib/theme';
 import { useCloseReadChatNotifications } from '@/features/chat/useCloseReadChatNotifications';
+import { useOutboxResume } from '@/features/chat/useOutboxSender';
 import { onForegroundMessage } from '@/shared/lib/messaging';
 import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 import MobileLogin from './MobileLogin';
@@ -52,6 +53,8 @@ export default function MobileApp() {
   }, [user?.id]);
   // 읽은 대화방의 푸시 알림 정리(아이폰은 회수 신호를 받지 않아 이걸로만 정리된다)
   useCloseReadChatNotifications(user?.id);
+  // 지난번에 다 못 보낸 메신저 메시지 — 이어 보내거나 '전송 실패'로 보여 준다
+  useOutboxResume(user?.id);
   const navigate = useNavigate();
   const [showGuide, setShowGuide] = useState(false);
 

@@ -24,6 +24,7 @@ import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
+import { OutboxBubbles } from '@/features/chat/OutboxBubbles';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { ChatFileStatusText } from './ChatFileStatusText';
 import { groupRoomFilesByDay, roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
@@ -515,6 +516,7 @@ export default function MobileChatThread() {
             </div>
           );
         })}
+        {!searchQuery && <OutboxBubbles roomId={roomId} me={me} />}
       </div>
       {/* 높이 0 기준점 — 입력창이 길어져도 버튼이 항상 입력창 바로 위에 뜬다 */}
       <div className="relative h-0 shrink-0">

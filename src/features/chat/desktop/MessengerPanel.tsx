@@ -17,6 +17,8 @@ import { useThreadNavigator } from '@/features/chat/useThreadNavigator';
 import { type MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { RichEditBox } from '@/features/chat/rich/RichEditBox';
 import { ChatComposer, type ChatComposerHandle } from '@/features/chat/ChatComposer';
+import { OutboxBubbles } from '@/features/chat/OutboxBubbles';
+import { useFailedOutboxRooms } from '@/features/chat/chatOutbox';
 import { RichMessageBody } from '@/features/chat/rich/RichMessageBody';
 import { canDeleteMessage, DELETED_MESSAGE_TEXT, isDeletedMessage } from '@/domain/chatMessage/deletion';
 import { useUsers } from '@/features/user/useUsers';
@@ -101,6 +103,7 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
   const [openRoomId, setOpenRoomId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const { data: rooms = [] } = useChatRooms(me);
+  const failedRooms = useFailedOutboxRooms(me);
   const { data: unreadMap = {} } = useUnreadCounts(me);
   // 방 위에 마우스를 올리면 메시지를 미리 받아 둔다 — 누르면 바로 보이게
   const prefetchThread = usePrefetchChatThread();
@@ -290,6 +293,7 @@ export function MessengerPanel({ isVisible = true }: { isVisible?: boolean }) {
                       {isDirect && otherPresence?.message ? (
                         <span className="text-teal font-semibold mr-1">[{otherPresence.message}]</span>
                       ) : null}
+                      {failedRooms.has(r.id) && <span className="mr-1 font-semibold text-[#e5484d]">[전송 실패]</span>}
                       {drafts[r.id] ? (
                         <>
                           <span className="mr-1 font-semibold text-amber">[작성 중]</span>
@@ -1075,6 +1079,7 @@ function MessengerThread({
             </div>
           );
         })}
+        {!searchQuery && <OutboxBubbles roomId={room.id} me={me} />}
         {filteredMessages.length === 0 && searchQuery && (
           <div className="py-12 text-center text-[11.5px] text-ink3">검색된 메시지가 없습니다</div>
         )}

@@ -64,65 +64,43 @@ interface SendVars {
   senderName: string;
   /** 답글(인용) 원문 요약. 없으면 일반 메시지. */
   replyTo?: ReplyPreview | null;
+  /** 메시지 id 를 미리 정해 둘 때 — 같은 id 로 다시 보내면 새로 생기지 않고 덮어쓴다(이어 보내기·재전송이 두 번 가지 않게) */
+  messageId?: string;
 }
 
-/** 메시지 전송(낙관적) — 캐시에 즉시 추가 → 실패 시 롤백. 성공 시 방 목록 lastMessage 갱신. */
-export function useSendMessage(roomId: string) {
-  const qc = useQueryClient();
-  const key = [CHAT_THREAD_KEY, roomId];
+/**
+ * 방 목록 미리보기 갱신 — 메시지는 이미 저장된 뒤라, 이게 실패해도 전송 실패로 치지 않는다.
+ * (실패로 치면 '전송 실패' 말풍선이 떠서, 재전송하면 같은 메시지가 두 번 간다)
+ */
+async function touchRoom(roomId: string, last: { text: string; at: string; senderId: string }) {
+  try {
+    await chatRoomRepo.updateLastMessage(roomId, last);
+  } catch (e) {
+    console.warn('[chat] 방 미리보기 갱신 실패', e);
+  }
+}
 
-  return useMutation({
-    mutationFn: async ({ text, senderId, senderName, replyTo }: SendVars) => {
-      const at = nowLocalIso();
-      const message: ChatMessage = {
-        id: `${roomId}-${Date.now()}`,
-        roomId,
-        senderId,
-        senderName,
-        text,
-        type: 'text',
-        attachment: null,
-        replyTo: replyTo ?? null,
-        approvalPayload: null,
-        at,
-        readBy: [senderId],
-        isEdited: false,
-        reactions: {},
-      };
-      await chatMessageRepo.append(message);
-      await chatRoomRepo.updateLastMessage(roomId, { text, at, senderId });
-      return message;
-    },
-    onMutate: async ({ text, senderId, senderName, replyTo }) => {
-      await qc.cancelQueries({ queryKey: key });
-      const prev = qc.getQueryData<ChatMessage[]>(key);
-      const optimistic: ChatMessage = {
-        id: `${roomId}-optimistic-${Date.now()}`,
-        roomId,
-        senderId,
-        senderName,
-        text,
-        type: 'text',
-        attachment: null,
-        replyTo: replyTo ?? null,
-        approvalPayload: null,
-        at: nowLocalIso(),
-        readBy: [senderId],
-        isEdited: false,
-        reactions: {},
-      };
-      qc.setQueryData<ChatMessage[]>(key, [...(prev ?? []), optimistic]);
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(key, ctx.prev);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: key });
-      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
-      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
-    },
-  });
+/** 글 메시지 1건 저장 — 보낼 메시지 보관함(outboxRunner)이 부른다 */
+export async function sendTextMessage(roomId: string, { text, senderId, senderName, replyTo, messageId }: SendVars): Promise<ChatMessage> {
+  const at = nowLocalIso();
+  const message: ChatMessage = {
+    id: messageId ?? `${roomId}-${Date.now()}`,
+    roomId,
+    senderId,
+    senderName,
+    text,
+    type: 'text',
+    attachment: null,
+    replyTo: replyTo ?? null,
+    approvalPayload: null,
+    at,
+    readBy: [senderId],
+    isEdited: false,
+    reactions: {},
+  };
+  await chatMessageRepo.append(message);
+  await touchRoom(roomId, { text, at, senderId });
+  return message;
 }
 
 /** 메시지 수정 */
@@ -301,46 +279,45 @@ async function notifyMentions(roomId: string, mentions: string[], senderId: stri
   }
 }
 
+export interface SendRichVars {
+  draft: RichDraft;
+  senderId: string;
+  senderName: string;
+  replyTo?: ReplyPreview | null;
+  /** SendVars.messageId 와 같다 */
+  messageId?: string;
+}
+
 /**
- * 서식 메시지 전송 (Teams 방식) — 글·서식·본문 속 사진·파일을 **메시지 1건**으로 저장한다.
- * 수정·삭제·답장·전달·반응이 모두 이 1건 단위로 동작한다.
+ * 서식 메시지 1건 저장 (Teams 방식) — 글·서식·본문 속 사진·파일을 **메시지 1건**으로 저장한다.
+ * 수정·삭제·답장·전달·반응이 모두 이 1건 단위로 동작한다. 보낼 메시지 보관함(outboxRunner)이 부른다.
  */
-export function useSendRich(roomId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ draft, senderId, senderName, replyTo = null }: { draft: RichDraft; senderId: string; senderName: string; replyTo?: ReplyPreview | null }) => {
-      const prepared = await prepareRich(roomId, draft);
-      const at = nowLocalIso();
-      const message: ChatMessage = {
-        id: `${roomId}-${Date.now()}`,
-        roomId,
-        senderId,
-        senderName,
-        text: prepared.text,
-        type: 'text',
-        attachment: null,
-        replyTo,
-        approvalPayload: null,
-        at,
-        readBy: [senderId],
-        isEdited: false,
-        reactions: {},
-        format: 'rich',
-        body: prepared.body,
-        attachments: prepared.attachments,
-        mentions: prepared.mentions,
-      };
-      await chatMessageRepo.append(message);
-      await chatRoomRepo.updateLastMessage(roomId, { text: richPreview(prepared.text, prepared.attachments), at, senderId });
-      await notifyMentions(roomId, prepared.mentions, senderId, senderName, prepared.text);
-      return message;
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: [CHAT_THREAD_KEY, roomId] });
-      qc.invalidateQueries({ queryKey: [CHAT_ROOMS_KEY] });
-      qc.invalidateQueries({ queryKey: [CHAT_UNREAD_KEY] });
-    },
-  });
+export async function sendRichMessage(roomId: string, { draft, senderId, senderName, replyTo = null, messageId }: SendRichVars): Promise<ChatMessage> {
+  const prepared = await prepareRich(roomId, draft);
+  const at = nowLocalIso();
+  const message: ChatMessage = {
+    id: messageId ?? `${roomId}-${Date.now()}`,
+    roomId,
+    senderId,
+    senderName,
+    text: prepared.text,
+    type: 'text',
+    attachment: null,
+    replyTo,
+    approvalPayload: null,
+    at,
+    readBy: [senderId],
+    isEdited: false,
+    reactions: {},
+    format: 'rich',
+    body: prepared.body,
+    attachments: prepared.attachments,
+    mentions: prepared.mentions,
+  };
+  await chatMessageRepo.append(message);
+  await touchRoom(roomId, { text: richPreview(prepared.text, prepared.attachments), at, senderId });
+  void notifyMentions(roomId, prepared.mentions, senderId, senderName, prepared.text); // 알림을 기다리지 않는다 — 메시지는 이미 저장됐다
+  return message;
 }
 
 /** 서식 메시지 수정 — 새로 멘션된 사람에게만 알린다 */

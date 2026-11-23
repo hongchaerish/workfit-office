@@ -291,6 +291,11 @@ export function MyCommuteLeaveTab({
               <span className="text-[26px] font-extrabold tabular-nums text-teal">{bal.remaining}</span>
               <span className="text-[12px] font-bold text-ink3">/ {bal.grant}일 잔여</span>
             </div>
+            {bal.leaveYear && (
+              <div className="mt-0.5 text-[10.5px] font-medium text-ink3 tabular-nums">
+                연차 기간 {bal.leaveYear.start} ~ {bal.leaveYear.end}
+              </div>
+            )}
             <div className="w-full bg-border/70 rounded-full h-1.5 overflow-hidden my-2">
               <div
                 className="bg-teal h-1.5 rounded-full transition-all duration-500"
@@ -656,10 +661,10 @@ export function MyCommuteLeaveTab({
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     <tr className="hover:bg-panel-alt/20">
-                      <td className="p-2 text-ink3">2026-01-01</td>
-                      <td className="p-2"><span className="rounded bg-teal/15 px-1.5 py-0.5 font-bold text-teal">정기부여</span></td>
+                      <td className="p-2 text-ink3">{bal.leaveYear?.start ?? '—'}</td>
+                      <td className="p-2"><span className="rounded bg-teal/15 px-1.5 py-0.5 font-bold text-teal">{bal.isUnderOneYear ? '월별 발생' : '정기부여'}</span></td>
                       <td className="p-2 text-teal font-extrabold">+{bal.grant}일</td>
-                      <td className="p-2 text-ink2">신년도 기본 연차 일수 자동 부여</td>
+                      <td className="p-2 text-ink2">{bal.isUnderOneYear ? '입사 1년 미만 — 1개월 개근마다 1일' : '연차 기간 시작 — 정기 연차 부여'}</td>
                       <td className="p-2 text-right text-ink3">—</td>
                     </tr>
                     {/* 휴일근로로 지급된 대체휴무(원장) */}
@@ -693,13 +698,19 @@ export function MyCommuteLeaveTab({
                           title: d.title,
                           holidays: holidayMap,
                         });
+                        // 지난 연차 기간 사용 — 그 기간 연차에서 쓴 것이라 지금 잔여에서는 빼지 않는다
+                        const start = (d.form?.startDate ?? '').slice(0, 10);
+                        const pastYear = Boolean(bal.leaveYear && start && (start < bal.leaveYear.start || start > bal.leaveYear.end));
                         return (
-                        <tr key={d.id} className="hover:bg-panel-alt/30 transition-colors">
+                        <tr key={d.id} className={`hover:bg-panel-alt/30 transition-colors ${pastYear ? 'opacity-55' : ''}`}>
                           <td className="p-2 text-ink2 font-medium">{d.form?.startDate} ~ {d.form?.endDate}</td>
                           <td className="p-2">
-                            <StatusBadge chip={leaveChip(d.form?.leaveType, d.title)} />
+                            <span className="inline-flex items-center gap-1">
+                              <StatusBadge chip={leaveChip(d.form?.leaveType, d.title)} />
+                              {pastYear && <span className="rounded border border-border px-1 py-0.5 text-[9.5px] font-bold text-ink3">다른 연차 기간</span>}
+                            </span>
                           </td>
-                          <td className="p-2 text-rose-500 font-extrabold">-{usedDays}일</td>
+                          <td className={`p-2 font-extrabold ${pastYear ? 'text-ink3' : 'text-rose-500'}`}>-{usedDays}일</td>
                           <td className="p-2 text-ink truncate max-w-[240px]">{d.body || d.title}</td>
                           <td className="p-2 text-right">
                             <button

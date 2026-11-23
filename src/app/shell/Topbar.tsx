@@ -17,6 +17,7 @@ import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead 
 import { NOTIFICATION_TYPE_META } from '@/domain/liveNotification/schema';
 import { enablePushForUser, isPushConfigured, notificationPermission } from '@/shared/lib/messaging';
 import { useChatRooms, useUnreadCounts } from '@/features/chat/useChatRooms';
+import { useOutboxResume } from '@/features/chat/useOutboxSender';
 import { requestOpenChatRoom } from './QuickDock';
 import { useMyPresence } from '@/features/userPresence/useUserPresence';
 import { setShowTestAccounts, useShowTestAccounts } from '@/features/auth/testAccountToggle';
@@ -117,6 +118,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
 
   // 메신저 방별 미읽음 메시지 수 조회 및 합산 (참여 중인 방의 메시지만 집계)
   const { data: rooms = [] } = useChatRooms(user?.id);
+  // 지난번에 다 못 보낸 메신저 메시지 — 이어 보내거나 '전송 실패'로 보여 준다
+  useOutboxResume(user?.id);
   const { data: unreadMap = {} } = useUnreadCounts(user?.id);
   const chatUnreadCount = useMemo(() => {
     const joinedRoomIds = new Set(rooms.map((r) => r.id));

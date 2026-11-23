@@ -15,6 +15,8 @@ import {
   calculateStatutoryEntitlement,
   calculateFiscalYearEntitlement,
   evaluateAdvanceLeaveOffset,
+  currentLeaveYear,
+  type LeaveYearWindow,
   type StatutoryLeaveResult,
   type AdvanceOffsetResult,
 } from './accrualEngine';
@@ -49,7 +51,8 @@ export interface UserLeaveBalance {
   serviceMonths: number;
   isUnderOneYear: boolean;
 
-  // 연차 일수 계산 (SSOT)
+  // 연차 일수 계산 (SSOT) — 사용·신청중·조정은 지금 연차 기간(leaveYear) 안의 것만 센다
+  leaveYear: LeaveYearWindow;
   entitledDays: number;       // 법정/회계연도 발생 연차
   adjustedDays: number;       // 수동 가감 일수 (+/-)
   totalGrantedDays: number;   // 총 부여 일수 (발생 + 조정)
@@ -144,9 +147,19 @@ export function calculateUserLeaveBalance(
     entitledDays = statutory.totalStatutoryGranted;
   }
 
-  // 2. 수동 조정 일수 합산 (사원명 일치)
+  // 지금 연차 기간 — 이 기간에 생긴 연차에서 이 기간의 사용·조정만 뺀다/더한다(지난 기간 사용분은 내역에만 남는다)
+  const leaveYear = currentLeaveYear(hireDate, refDateStr, mode);
+  const inLeaveYear = (date?: string | null) => {
+    const d = (date ?? '').slice(0, 10);
+    // 날짜를 알 수 없는 기록은 예전처럼 센다(빠뜨려서 잔여가 늘어나는 쪽보다 낫다)
+    return !d || (d >= leaveYear.start && d <= leaveYear.end);
+  };
+
+  // 2. 수동 조정 일수 합산 (사원명 일치) — 부여일이 이 연차 기간인 것만
   const empAdjustments = adjustments.filter((tx) => norm(tx.empName) === targetNormName);
-  const adjustedDays = empAdjustments.reduce((sum, tx) => sum + tx.deltaDays, 0);
+  const adjustedDays = empAdjustments
+    .filter((tx) => inLeaveYear(tx.grantedAt || tx.createdAt))
+    .reduce((sum, tx) => sum + tx.deltaDays, 0);
   const totalGrantedDays = Math.max(0, entitledDays + adjustedDays);
 
   // 3. 해당 사원의 결재 문서 필터링 및 단일 정규화 (SSOT 보장)
@@ -192,9 +205,11 @@ export function calculateUserLeaveBalance(
     const isSub = record.leaveType === '대체휴무';
 
     if (isDeductible) {
-      if (record.status === '완료') {
+      // 다른 연차 기간의 사용은 이번 기간 잔여에서 빼지 않고 내역에만 남긴다(첫해 월별 연차 ↔ 2년차 15일은 따로)
+      const counts = inLeaveYear(record.startDate);
+      if (counts && record.status === '완료') {
         usedDays += record.days;
-      } else if (record.status === '진행중') {
+      } else if (counts && record.status === '진행중') {
         pendingDays += record.days;
       }
     } else if (isSub) {
@@ -260,6 +275,7 @@ export function calculateUserLeaveBalance(
     serviceMonths: period.fullMonths,
     isUnderOneYear: !period.isOverOneYear,
 
+    leaveYear,
     entitledDays,
     adjustedDays,
     totalGrantedDays,

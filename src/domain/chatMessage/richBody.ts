@@ -192,6 +192,11 @@ export function plainTextOfRich(doc: RichNode): string {
   return lines.map((l) => l.trimEnd()).join('\n').trim().slice(0, RICH_SUMMARY_MAX_CHARS);
 }
 
+/** 저장할 수 없을 만큼 긴 본문인지 — 보내기 전에 입력창에서, 저장 직전에 한 번 더 본다 */
+export function isRichBodyTooLong(doc: RichNode): boolean {
+  return JSON.stringify(sanitizeRichDoc(doc)).length > RICH_BODY_MAX_CHARS;
+}
+
 /** 본문이 가리키는 사진 첨부 id 들(본문 순서) */
 export function imageIdsOfRich(doc: RichNode): string[] {
   const ids: string[] = [];
