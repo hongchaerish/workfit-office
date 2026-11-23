@@ -55,11 +55,11 @@ export const PERMISSIONS: PermissionDef[] = [
   // 근태·휴가
   P({ key: 'commute.self', name: '내 근태·휴가', desc: '내 출퇴근 기록을 보고 휴가를 신청한다', area: 'commute' }),
   P({ key: 'commute.view', name: '다른 사람 근태·휴가 열람', desc: '범위 안 직원의 출퇴근·휴가 현황을 본다', area: 'commute', scoped: true }),
-  P({ key: 'commute.manage', name: '근태 수정·연차 대장 관리', desc: '범위 안 직원의 근태를 고치고 연차 대장을 관리한다', area: 'commute', implies: ['commute.view'] }),
+  P({ key: 'commute.manage', name: '근태 기록 정정', desc: '다른 직원의 외근 기록을 고치거나 지우고, 결재로 잡힌 외근·출장 일정을 대신 바꾼다(연차 가감은 관리자 콘솔 연차 관리)', area: 'commute', implies: ['commute.view'] }),
 
   // 업무계획·프로젝트
   P({ key: 'workplan.use', name: '업무계획·프로젝트', desc: '내 업무계획을 쓰고 프로젝트에 참여한다', area: 'workplan' }),
-  P({ key: 'workplan.manage', name: '명단 순서·태그 관리', desc: '업무계획 명단 순서와 공용 태그를 정한다', area: 'workplan' }),
+  P({ key: 'workplan.manage', name: '공용 태그 관리', desc: '업무계획에서 모두가 쓰는 공용 태그를 만들고 고친다(명단 순서는 관리자 콘솔 부서·조직 관리)', area: 'workplan' }),
   P({ key: 'project.create', name: '프로젝트 만들기', desc: '새 프로젝트를 만들고 담당자를 배정한다', area: 'workplan' }),
 
   // 게시판·소통
